@@ -126,18 +126,21 @@ export default function Liuyao() {
   return (
     <div className="container mx-auto px-4 py-8 lg:py-10">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:gap-8">
-        <div className="flex flex-col gap-2 text-center">
-          <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">六爻排盘</h1>
-          <p className="text-sm text-muted-foreground">本卦、变卦、纳甲、六亲、六神与旬空</p>
-        </div>
+        {!result ? (
+          <div className="flex flex-col gap-2 text-center">
+            <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">六爻排盘</h1>
+            <p className="text-sm text-muted-foreground">本卦、变卦、纳甲、六亲、六神与旬空</p>
+          </div>
+        ) : null}
 
-        {result ? (
-          <PaipanResult result={result} onStartOver={handleStartOver} />
-        ) : (
-          <form
-            onSubmit={handleSubmit}
-            className="mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 lg:gap-6"
-          >
+        <div className="liuyao-transition-content">
+          {result ? (
+            <PaipanResult result={result} onStartOver={handleStartOver} />
+          ) : (
+            <form
+              onSubmit={handleSubmit}
+              className="mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 lg:gap-6"
+            >
             <Field>
               <FieldLabel htmlFor="question">所问之事</FieldLabel>
               <Input
@@ -259,8 +262,9 @@ export default function Liuyao() {
                 开始排盘
               </Button>
             </div>
-          </form>
-        )}
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -144,17 +144,30 @@ body {
 }
 
 @supports (view-transition-name: none) {
+  .liuyao-transition-content {
+    view-transition-name: liuyao-content;
+  }
+
+  html[data-liuyao-transition="active"]::view-transition-group(root),
   html[data-liuyao-transition="active"]::view-transition-old(root) {
-    animation: liuyao-view-out 180ms ease both;
+    animation: none;
   }
 
   html[data-liuyao-transition="active"]::view-transition-new(root) {
+    animation: none;
+  }
+
+  html[data-liuyao-transition="active"]::view-transition-old(liuyao-content) {
+    animation: liuyao-view-out 180ms ease both;
+  }
+
+  html[data-liuyao-transition="active"]::view-transition-new(liuyao-content) {
     animation: liuyao-view-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    html[data-liuyao-transition="active"]::view-transition-old(root),
-    html[data-liuyao-transition="active"]::view-transition-new(root) {
+    html[data-liuyao-transition="active"]::view-transition-old(liuyao-content),
+    html[data-liuyao-transition="active"]::view-transition-new(liuyao-content) {
       animation-duration: 1ms;
     }
   }
