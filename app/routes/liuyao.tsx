@@ -136,7 +136,7 @@ export default function Liuyao() {
         ) : (
           <form
             onSubmit={handleSubmit}
-            className="mx-auto flex w-full max-w-xl flex-col gap-5 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 lg:max-w-2xl lg:gap-6"
+            className="mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 lg:gap-6"
           >
             <Field>
               <FieldLabel htmlFor="question">所问之事</FieldLabel>
@@ -207,14 +207,14 @@ export default function Liuyao() {
 
             <div className="flex flex-col gap-2">
               <FieldLabel className="block">所得之卦</FieldLabel>
-              <div className="flex flex-col gap-1.5 rounded-lg bg-muted/40 p-2 [--liuyao-yao-gap:clamp(0.35rem,1vw,0.75rem)] [--liuyao-yao-width:clamp(4rem,14vw,5.5rem)] lg:gap-2 lg:p-3">
+              <div className="flex flex-col gap-1.5 rounded-lg bg-muted/40 p-2 [--liuyao-yao-gap:clamp(0.35rem,1vw,0.75rem)] [--liuyao-yao-width:100%] lg:gap-2 lg:p-3">
                 {YAO_INDEXES_TOP_DOWN.map((index) => {
                   const yao = yaos[index];
 
                   return (
                   <div
                     key={index}
-                    className="grid grid-cols-[3rem_minmax(0,1fr)_3.25rem] items-center gap-2 lg:grid-cols-[3.5rem_minmax(5rem,6rem)_3.5rem] lg:justify-center lg:gap-3"
+                    className="grid grid-cols-[3rem_minmax(0,1fr)_3.25rem] items-center gap-10 lg:grid-cols-[3.5rem_9rem_3.5rem] lg:justify-center lg:gap-5"
                   >
                     <div className="text-right text-xs font-medium lg:text-sm">
                       {YAO_NAMES[index]}
@@ -223,7 +223,7 @@ export default function Liuyao() {
                     <button
                       type="button"
                       onClick={() => toggleYaoType(index)}
-                      className="relative flex h-9 cursor-pointer items-center justify-center rounded-md hover:bg-background/70 lg:h-10"
+                      className="relative flex h-9 w-full cursor-pointer items-center justify-center rounded-md hover:bg-background/70 lg:h-10"
                     >
                       <YaoGlyph type={yao.type} />
                     </button>
@@ -238,7 +238,9 @@ export default function Liuyao() {
                           : "border-border bg-background hover:bg-muted"
                       )}
                     >
-                      {yao.moving ? (yao.type === "阳" ? "老阳" : "老阴") : "静"}
+                      {yao.type === "阳"
+                        ? yao.moving ? "老阳" : "少阳"
+                        : yao.moving ? "老阴" : "少阴"}
                     </button>
                   </div>
                   );
