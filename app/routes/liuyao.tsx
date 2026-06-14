@@ -236,14 +236,7 @@ function PaipanResult({ result }: { result: LiuyaoPaipan }) {
           <PillarTimeSummary result={result} />
         </div>
 
-        <div className="grid gap-2 text-sm sm:grid-cols-2 lg:min-w-80">
-          <InfoCell label="公历" value={result.solar} />
-          <InfoCell label="农历" value={result.lunar} />
-          <InfoCell label="年柱" value={result.pillars.year} />
-          <InfoCell label="月柱" value={result.pillars.month} />
-          <InfoCell label="日柱" value={result.pillars.day} />
-          <InfoCell label="时柱" value={result.pillars.hour} />
-        </div>
+        <ShenshaPanel result={result} />
       </div>
 
       <Separator />
@@ -274,6 +267,30 @@ function PaipanResult({ result }: { result: LiuyaoPaipan }) {
         </table>
       </div>
     </section>
+  );
+}
+
+function ShenshaPanel({ result }: { result: LiuyaoPaipan }) {
+  const shenshaItems = result.shenshas.flatMap((shensha) =>
+    shensha.branches.map((branch) => ({ branch, name: shensha.name }))
+  );
+
+  return (
+    <aside className="flex w-full flex-col gap-3 rounded-lg bg-muted/35 p-4 lg:max-w-[22rem] lg:min-w-[20rem]">
+      <div className="text-sm font-semibold tracking-tight">神煞</div>
+
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+        {shenshaItems.map((item) => (
+          <div
+            key={`${item.branch}-${item.name}`}
+            className="grid grid-cols-[1.25rem_1fr] items-baseline gap-1"
+          >
+            <span className="font-medium text-foreground">{item.branch}</span>
+            <span className="truncate text-muted-foreground">{item.name}</span>
+          </div>
+        ))}
+      </div>
+    </aside>
   );
 }
 
@@ -407,15 +424,6 @@ function formatHexagramName(hexagram: Pick<LiuyaoPaipan["primary"], "name" | "pa
 
 function formatHexagramMeta(hexagram: Pick<LiuyaoPaipan["primary"], "palace" | "stage" | "pattern">) {
   return `${hexagram.palace}·${hexagram.stage}`;
-}
-
-function InfoCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md bg-muted/50 px-3 py-2">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="font-medium">{value}</div>
-    </div>
-  );
 }
 
 function YaoGlyph({ type, className }: { type: YaoType; className?: string }) {

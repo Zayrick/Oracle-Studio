@@ -60,6 +60,11 @@ export interface LiuyaoLineInfo {
   } | null;
 }
 
+export interface LiuyaoShenshaInfo {
+  name: string;
+  branches: string[];
+}
+
 export interface LiuyaoPaipan {
   question: string;
   solar: string;
@@ -79,6 +84,7 @@ export interface LiuyaoPaipan {
   primary: LiuyaoHexagramInfo;
   changed: LiuyaoHexagramInfo | null;
   lines: LiuyaoLineInfo[];
+  shenshas: LiuyaoShenshaInfo[];
 }
 
 export const YAO_NAMES = ["初爻", "二爻", "三爻", "四爻", "五爻", "上爻"];
@@ -326,6 +332,65 @@ const SIX_DEITY_START_BY_DAY_STEM: Record<string, number> = {
 
 const SIX_DEITIES = ["青龙", "朱雀", "勾陈", "螣蛇", "白虎", "玄武"];
 
+const TIAN_YI_GUI_REN_BY_DAY_STEM: Record<string, string[]> = {
+  甲: ["丑", "未"],
+  戊: ["丑", "未"],
+  乙: ["子", "申"],
+  己: ["子", "申"],
+  丙: ["亥", "酉"],
+  丁: ["亥", "酉"],
+  庚: ["午", "寅"],
+  辛: ["午", "寅"],
+  壬: ["卯", "巳"],
+  癸: ["卯", "巳"],
+};
+
+const WENCHANG_BY_DAY_STEM: Record<string, string> = {
+  甲: "巳",
+  乙: "午",
+  丙: "申",
+  戊: "申",
+  丁: "酉",
+  己: "酉",
+  庚: "亥",
+  辛: "子",
+  壬: "寅",
+  癸: "卯",
+};
+
+const DAY_LU_BY_STEM: Record<string, string> = {
+  甲: "寅",
+  乙: "卯",
+  丙: "巳",
+  戊: "巳",
+  丁: "午",
+  己: "午",
+  庚: "申",
+  辛: "酉",
+  壬: "亥",
+  癸: "子",
+};
+
+const YANG_REN_BY_STEM: Record<string, string> = {
+  甲: "卯",
+  乙: "寅",
+  丙: "午",
+  戊: "午",
+  丁: "巳",
+  己: "巳",
+  庚: "酉",
+  辛: "申",
+  壬: "子",
+  癸: "亥",
+};
+
+const DAY_BRANCH_SHENSHA_GROUPS = [
+  { branches: ["申", "子", "辰"], yima: "寅", taohua: "酉", huagai: "辰" },
+  { branches: ["寅", "午", "戌"], yima: "申", taohua: "卯", huagai: "戌" },
+  { branches: ["亥", "卯", "未"], yima: "巳", taohua: "子", huagai: "未" },
+  { branches: ["巳", "酉", "丑"], yima: "亥", taohua: "午", huagai: "丑" },
+];
+
 interface PalaceLookupItem {
   trigramKey: TrigramKey;
   stage: string;
@@ -384,6 +449,10 @@ export function buildLiuyaoPaipan(input: LiuyaoPaipanInput): LiuyaoPaipan {
     };
   });
   const hiddenGods = calculateHiddenGods(rawLines, primary);
+  const lines = rawLines.map((line) => ({
+    ...line,
+    hiddenGods: hiddenGods.get(line.position) ?? [],
+  }));
 
   return {
     question: input.question.trim(),
@@ -393,10 +462,8 @@ export function buildLiuyaoPaipan(input: LiuyaoPaipanInput): LiuyaoPaipan {
     pillarVoids: timeContext.pillarVoids,
     primary,
     changed,
-    lines: rawLines.map((line) => ({
-      ...line,
-      hiddenGods: hiddenGods.get(line.position) ?? [],
-    })),
+    lines,
+    shenshas: calculateShenshas(timeContext),
   };
 }
 
@@ -457,7 +524,32 @@ function buildTimeContext(date: Date, time: string) {
       hour: formatVoidBranches(hourPillar),
     },
     dayStem: dayPillar.getHeavenStem().getName(),
+    dayBranch: dayPillar.getName().slice(1, 2),
   };
+}
+
+function calculateShenshas(timeContext: ReturnType<typeof buildTimeContext>): LiuyaoShenshaInfo[] {
+  const branchGroup = getDayBranchShenshaGroup(timeContext.dayBranch);
+  const dayVoidBranches = splitBranches(timeContext.pillarVoids.day);
+
+  return [
+    { name: "天乙贵人", branches: TIAN_YI_GUI_REN_BY_DAY_STEM[timeContext.dayStem] ?? [] },
+    { name: "驿马", branches: branchGroup ? [branchGroup.yima] : [] },
+    { name: "桃花", branches: branchGroup ? [branchGroup.taohua] : [] },
+    { name: "华盖", branches: branchGroup ? [branchGroup.huagai] : [] },
+    { name: "文昌", branches: WENCHANG_BY_DAY_STEM[timeContext.dayStem] ? [WENCHANG_BY_DAY_STEM[timeContext.dayStem]] : [] },
+    { name: "日禄", branches: DAY_LU_BY_STEM[timeContext.dayStem] ? [DAY_LU_BY_STEM[timeContext.dayStem]] : [] },
+    { name: "羊刃", branches: YANG_REN_BY_STEM[timeContext.dayStem] ? [YANG_REN_BY_STEM[timeContext.dayStem]] : [] },
+    { name: "日空", branches: dayVoidBranches },
+  ].filter((shensha) => shensha.branches.length > 0);
+}
+
+function getDayBranchShenshaGroup(dayBranch: string) {
+  return DAY_BRANCH_SHENSHA_GROUPS.find((group) => group.branches.includes(dayBranch));
+}
+
+function splitBranches(branches: string) {
+  return branches.split("").filter(Boolean);
 }
 
 function formatVoidBranches(pillar: { getExtraEarthBranches(): Array<{ getName(): string }> }) {
