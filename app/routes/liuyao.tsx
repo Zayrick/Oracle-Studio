@@ -12,6 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { TimePicker } from "@/components/time-picker";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -131,15 +132,12 @@ export default function Liuyao() {
                     </PopoverContent>
                   </Popover>
                 </Field>
-                <Field className="w-40">
+                <Field>
                   <FieldLabel htmlFor="time-picker">时间</FieldLabel>
-                  <Input
-                    type="time"
+                  <TimePicker
                     id="time-picker"
-                    step="1"
                     value={time}
-                    onChange={(e) => setTime(e.target.value)}
-                    className="appearance-none bg-background [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                    onChange={setTime}
                   />
                 </Field>
               </FieldGroup>
