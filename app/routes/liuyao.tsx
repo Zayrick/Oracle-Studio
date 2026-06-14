@@ -223,6 +223,8 @@ export default function Liuyao() {
 }
 
 function PaipanResult({ result }: { result: LiuyaoPaipan }) {
+  const showChangedColumns = Boolean(result.changed);
+
   return (
     <section className="flex w-full flex-col gap-6 rounded-lg border bg-card p-6 text-card-foreground shadow-sm lg:mx-auto lg:w-fit lg:max-w-full">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:justify-between lg:gap-10">
@@ -247,7 +249,12 @@ function PaipanResult({ result }: { result: LiuyaoPaipan }) {
       <Separator />
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px] border-collapse text-base leading-tight lg:mx-auto lg:w-max lg:min-w-0">
+        <table
+          className={cn(
+            "w-full border-collapse text-base leading-tight lg:mx-auto lg:w-max lg:min-w-0",
+            showChangedColumns ? "min-w-[860px]" : "min-w-[520px]"
+          )}
+        >
           <thead className="text-muted-foreground">
             <tr>
               <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
@@ -256,17 +263,25 @@ function PaipanResult({ result }: { result: LiuyaoPaipan }) {
                 <HexagramTableHeading hexagram={result.primary} fallback="本卦" />
               </th>
               <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
-              <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
-              <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
-              <th className="px-2 py-1 text-center font-medium lg:w-[clamp(7rem,11vw,10rem)] lg:px-1.5" scope="col">
-                <HexagramTableHeading hexagram={result.changed} fallback="变卦" />
-              </th>
-              <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
+              {showChangedColumns ? (
+                <>
+                  <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
+                  <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
+                  <th className="px-2 py-1 text-center font-medium lg:w-[clamp(7rem,11vw,10rem)] lg:px-1.5" scope="col">
+                    <HexagramTableHeading hexagram={result.changed} fallback="变卦" />
+                  </th>
+                  <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
+                </>
+              ) : null}
             </tr>
           </thead>
           <tbody>
             {[...result.lines].reverse().map((line) => (
-              <PaipanLineRow key={line.position} line={line} />
+              <PaipanLineRow
+                key={line.position}
+                line={line}
+                showChangedColumns={showChangedColumns}
+              />
             ))}
           </tbody>
         </table>
@@ -330,7 +345,13 @@ function PillarTimeItem({
   );
 }
 
-function PaipanLineRow({ line }: { line: LiuyaoLineInfo }) {
+function PaipanLineRow({
+  line,
+  showChangedColumns,
+}: {
+  line: LiuyaoLineInfo;
+  showChangedColumns: boolean;
+}) {
   const hiddenGodsText = formatHiddenGods(line.hiddenGods);
 
   return (
@@ -346,16 +367,20 @@ function PaipanLineRow({ line }: { line: LiuyaoLineInfo }) {
           </div>
         </td>
         <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium lg:px-1.5">{line.role}</td>
-        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium lg:px-1.5">{line.movingSymbol}</td>
-        <td className="w-0 whitespace-nowrap px-2 pt-1 lg:px-1.5">
-          {line.changed ? <LineRelativeCell line={line.changed} /> : null}
-        </td>
-        <td className="px-2 pt-1 lg:w-[clamp(7rem,11vw,10rem)] lg:px-1.5">
-          {line.changed ? <YaoGlyph type={line.changed.type} /> : null}
-        </td>
-        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium lg:px-1.5">
-          {line.changed?.role ?? ""}
-        </td>
+        {showChangedColumns ? (
+          <>
+            <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium lg:px-1.5">{line.movingSymbol}</td>
+            <td className="w-0 whitespace-nowrap px-2 pt-1 lg:px-1.5">
+              {line.changed ? <LineRelativeCell line={line.changed} /> : null}
+            </td>
+            <td className="px-2 pt-1 lg:w-[clamp(7rem,11vw,10rem)] lg:px-1.5">
+              {line.changed ? <YaoGlyph type={line.changed.type} /> : null}
+            </td>
+            <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium lg:px-1.5">
+              {line.changed?.role ?? ""}
+            </td>
+          </>
+        ) : null}
       </tr>
       <tr className="bg-background text-sm leading-tight text-muted-foreground">
         <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
@@ -373,10 +398,14 @@ function PaipanLineRow({ line }: { line: LiuyaoLineInfo }) {
         </td>
         <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
         <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
-        <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
-        <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
-        <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
-        <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
+        {showChangedColumns ? (
+          <>
+            <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
+            <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
+            <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
+            <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
+          </>
+        ) : null}
       </tr>
     </>
   );
