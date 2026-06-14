@@ -227,17 +227,13 @@ function PaipanResult({ result }: { result: LiuyaoPaipan }) {
     <section className="flex flex-col gap-6 rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex flex-col gap-2">
+          <div className="text-xs text-muted-foreground">{result.solar}</div>
           <div className="text-sm text-muted-foreground">{result.question}</div>
           <h2 className="text-2xl font-semibold tracking-tight">
             {formatHexagramName(result.primary)}
             {result.changed ? ` 之 ${formatHexagramName(result.changed)}` : ""}
           </h2>
-          <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-            <span>{formatHexagramMeta(result.primary)}</span>
-            <span>月建 {result.monthBuild}</span>
-            <span>日辰 {result.dayBranch}</span>
-            <span>旬空 {result.dayVoid}</span>
-          </div>
+          <PillarTimeSummary result={result} />
         </div>
 
         <div className="grid gap-2 text-sm sm:grid-cols-2 lg:min-w-80">
@@ -278,6 +274,37 @@ function PaipanResult({ result }: { result: LiuyaoPaipan }) {
         </table>
       </div>
     </section>
+  );
+}
+
+function PillarTimeSummary({ result }: { result: LiuyaoPaipan }) {
+  return (
+    <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
+      <PillarTimeItem label="年" value={result.pillars.year} voidValue={result.pillarVoids.year} />
+      <PillarTimeItem label="月" value={result.pillars.month} voidValue={result.pillarVoids.month} />
+      <PillarTimeItem label="日" value={result.pillars.day} voidValue={result.pillarVoids.day} />
+      <PillarTimeItem label="时" value={result.pillars.hour} voidValue={result.pillarVoids.hour} />
+    </div>
+  );
+}
+
+function PillarTimeItem({
+  label,
+  value,
+  voidValue,
+}: {
+  label: string;
+  value: string;
+  voidValue: string;
+}) {
+  return (
+    <div className="flex min-w-14 flex-col gap-1 leading-none">
+      <div className="flex items-baseline gap-1">
+        <span className="text-xl font-semibold text-foreground">{value}</span>
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      </div>
+      <div className="text-[11px] text-muted-foreground">{voidValue}空</div>
+    </div>
   );
 }
 

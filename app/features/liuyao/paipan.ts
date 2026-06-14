@@ -70,9 +70,12 @@ export interface LiuyaoPaipan {
     day: string;
     hour: string;
   };
-  monthBuild: string;
-  dayBranch: string;
-  dayVoid: string;
+  pillarVoids: {
+    year: string;
+    month: string;
+    day: string;
+    hour: string;
+  };
   primary: LiuyaoHexagramInfo;
   changed: LiuyaoHexagramInfo | null;
   lines: LiuyaoLineInfo[];
@@ -387,9 +390,7 @@ export function buildLiuyaoPaipan(input: LiuyaoPaipanInput): LiuyaoPaipan {
     solar: timeContext.solar,
     lunar: timeContext.lunar,
     pillars: timeContext.pillars,
-    monthBuild: timeContext.monthBuild,
-    dayBranch: timeContext.dayBranch,
-    dayVoid: timeContext.dayVoid,
+    pillarVoids: timeContext.pillarVoids,
     primary,
     changed,
     lines: rawLines.map((line) => ({
@@ -449,14 +450,21 @@ function buildTimeContext(date: Date, time: string) {
       day: dayPillar.getName(),
       hour: hourPillar.getName(),
     },
-    monthBuild: monthPillar.getEarthBranch().getName(),
-    dayBranch: dayPillar.getEarthBranch().getName(),
+    pillarVoids: {
+      year: formatVoidBranches(yearPillar),
+      month: formatVoidBranches(monthPillar),
+      day: formatVoidBranches(dayPillar),
+      hour: formatVoidBranches(hourPillar),
+    },
     dayStem: dayPillar.getHeavenStem().getName(),
-    dayVoid: dayPillar
-      .getExtraEarthBranches()
-      .map((branch) => branch.getName())
-      .join(""),
   };
+}
+
+function formatVoidBranches(pillar: { getExtraEarthBranches(): Array<{ getName(): string }> }) {
+  return pillar
+    .getExtraEarthBranches()
+    .map((branch) => branch.getName())
+    .join("");
 }
 
 function parseTime(time: string) {
