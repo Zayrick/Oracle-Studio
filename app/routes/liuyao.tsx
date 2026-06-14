@@ -224,9 +224,9 @@ export default function Liuyao() {
 
 function PaipanResult({ result }: { result: LiuyaoPaipan }) {
   return (
-    <section className="flex flex-col gap-6 rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:justify-between">
-        <div className="flex flex-1 flex-col justify-between gap-4">
+    <section className="flex w-full flex-col gap-6 rounded-lg border bg-card p-6 text-card-foreground shadow-sm lg:mx-auto lg:w-fit lg:max-w-full">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:justify-between lg:gap-10">
+        <div className="flex flex-1 flex-col justify-between gap-4 lg:w-max lg:max-w-[36rem] lg:flex-none">
           <div className="flex flex-col gap-2">
             <div className="text-xs text-muted-foreground">{result.solar}</div>
             <div className="text-lg font-medium leading-relaxed text-foreground">{result.question}</div>
@@ -247,21 +247,21 @@ function PaipanResult({ result }: { result: LiuyaoPaipan }) {
       <Separator />
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px] border-collapse text-base leading-tight">
+        <table className="w-full min-w-[860px] border-collapse text-base leading-tight lg:mx-auto lg:w-max lg:min-w-0">
           <thead className="text-muted-foreground">
             <tr>
-              <td className="px-2 py-1" aria-hidden="true" />
-              <td className="px-2 py-1" aria-hidden="true" />
-              <th className="px-2 py-1 text-center font-medium" scope="col">
+              <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
+              <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
+              <th className="px-2 py-1 text-center font-medium lg:w-[clamp(7rem,11vw,10rem)] lg:px-1.5" scope="col">
                 <HexagramTableHeading hexagram={result.primary} fallback="本卦" />
               </th>
-              <td className="px-2 py-1" aria-hidden="true" />
-              <td className="px-2 py-1" aria-hidden="true" />
-              <td className="px-2 py-1" aria-hidden="true" />
-              <th className="px-2 py-1 text-center font-medium" scope="col">
+              <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
+              <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
+              <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
+              <th className="px-2 py-1 text-center font-medium lg:w-[clamp(7rem,11vw,10rem)] lg:px-1.5" scope="col">
                 <HexagramTableHeading hexagram={result.changed} fallback="变卦" />
               </th>
-              <td className="px-2 py-1" aria-hidden="true" />
+              <td className="px-2 py-1 lg:px-1.5" aria-hidden="true" />
             </tr>
           </thead>
           <tbody>
@@ -281,14 +281,14 @@ function ShenshaPanel({ result }: { result: LiuyaoPaipan }) {
   );
 
   return (
-    <aside className="flex w-full flex-col gap-3 rounded-lg bg-muted/35 p-4 lg:max-w-[22rem] lg:min-w-[20rem]">
+    <aside className="flex w-full flex-col gap-3 rounded-lg bg-muted/35 p-4 lg:w-max lg:min-w-0">
       <div className="text-sm font-semibold tracking-tight">神煞</div>
 
-      <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm lg:w-max lg:grid-cols-[max-content_max-content]">
         {shenshaItems.map((item) => (
           <div
             key={`${item.branch}-${item.name}`}
-            className="grid grid-cols-[1.25rem_1fr] items-baseline gap-1"
+            className="grid grid-cols-[1.25rem_1fr] items-baseline gap-1 lg:grid-cols-[1.25rem_max-content]"
           >
             <span className="font-medium text-foreground">{item.branch}</span>
             <span className="truncate text-muted-foreground">{item.name}</span>
@@ -336,30 +336,30 @@ function PaipanLineRow({ line }: { line: LiuyaoLineInfo }) {
   return (
     <>
       <tr className="bg-background">
-        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium">{line.deity}</td>
-        <td className="w-0 whitespace-nowrap px-2 pt-1">
+        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium lg:px-1.5">{line.deity}</td>
+        <td className="w-0 whitespace-nowrap px-2 pt-1 lg:px-1.5">
           <LineRelativeCell line={line} />
         </td>
-        <td className="px-2 pt-1">
-          <div className="flex items-center gap-3">
+        <td className="px-2 pt-1 lg:w-[clamp(7rem,11vw,10rem)] lg:px-1.5">
+          <div className="flex items-center lg:justify-center">
             <YaoGlyph type={line.type} />
           </div>
         </td>
-        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium">{line.role}</td>
-        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium">{line.movingSymbol}</td>
-        <td className="w-0 whitespace-nowrap px-2 pt-1">
+        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium lg:px-1.5">{line.role}</td>
+        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium lg:px-1.5">{line.movingSymbol}</td>
+        <td className="w-0 whitespace-nowrap px-2 pt-1 lg:px-1.5">
           {line.changed ? <LineRelativeCell line={line.changed} /> : null}
         </td>
-        <td className="px-2 pt-1">
+        <td className="px-2 pt-1 lg:w-[clamp(7rem,11vw,10rem)] lg:px-1.5">
           {line.changed ? <YaoGlyph type={line.changed.type} /> : null}
         </td>
-        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium">
+        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium lg:px-1.5">
           {line.changed?.role ?? ""}
         </td>
       </tr>
       <tr className="bg-background text-sm leading-tight text-muted-foreground">
-        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
-        <td className="h-4 px-2 pb-1 pt-0">
+        <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
+        <td className="h-4 px-2 pb-1 pt-0 lg:w-0 lg:whitespace-nowrap lg:px-1.5">
           <span
             className={cn(
               "inline-flex items-center",
@@ -371,12 +371,12 @@ function PaipanLineRow({ line }: { line: LiuyaoLineInfo }) {
             {hiddenGodsText || "占位"}
           </span>
         </td>
-        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
-        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
-        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
-        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
-        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
-        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
+        <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
+        <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
+        <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
+        <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
+        <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
+        <td className="px-2 pb-1 pt-0 lg:px-1.5" aria-hidden="true" />
       </tr>
     </>
   );
