@@ -143,6 +143,57 @@ body {
   }
 }
 
+  .liuyao-ai-motion {
+    transition:
+      transform 0.42s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.24s ease,
+      width 0.42s cubic-bezier(0.16, 1, 0.3, 1),
+      max-width 0.42s cubic-bezier(0.16, 1, 0.3, 1),
+      gap 0.42s cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 0.24s ease,
+      box-shadow 0.24s ease;
+  }
+
+  .liuyao-ai-sheet-open {
+    transform: translateY(0);
+  }
+
+  .liuyao-ai-sheet-closed {
+    transform: translateY(100%);
+  }
+
+  @media (min-width: 1024px) {
+    .liuyao-ai-layout-open {
+      gap: 1.5rem;
+    }
+
+    .liuyao-ai-layout-closed {
+      gap: 0;
+    }
+
+    .liuyao-ai-panel-open {
+      width: 23rem;
+      max-width: 23rem;
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    .liuyao-ai-panel-closed {
+      width: 0;
+      max-width: 0;
+      opacity: 0;
+      transform: translateX(1rem);
+      border-color: transparent;
+      box-shadow: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .liuyao-ai-motion {
+      transition-duration: 1ms;
+    }
+  }
+
 @supports (view-transition-name: none) {
   .liuyao-transition-content {
     view-transition-name: liuyao-content;

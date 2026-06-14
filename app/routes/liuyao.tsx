@@ -275,6 +275,7 @@ export default function Liuyao() {
     Array.from({ length: 6 }, () => ({ type: "阳", moving: false }))
   );
   const [result, setResult] = useState<LiuyaoPaipan | null>(null);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [error, setError] = useState("");
 
   const handleSetNow = () => {
@@ -310,9 +311,11 @@ export default function Liuyao() {
 
       runLiuyaoViewTransition(() => {
         setResult(nextResult);
+        setAiPanelOpen(false);
       });
     } catch (err) {
       setResult(null);
+      setAiPanelOpen(false);
       setError(err instanceof Error ? err.message : "排盘失败，请检查输入。");
     }
   };
@@ -320,6 +323,7 @@ export default function Liuyao() {
   const handleStartOver = () => {
     runLiuyaoViewTransition(() => {
       setResult(null);
+      setAiPanelOpen(false);
       setError("");
     });
   };
@@ -336,7 +340,23 @@ export default function Liuyao() {
 
         <div className="liuyao-transition-content">
           {result ? (
-            <PaipanResult result={result} onStartOver={handleStartOver} />
+            <div
+              className={cn(
+                "liuyao-ai-motion flex w-full flex-col lg:mx-auto lg:w-fit lg:flex-row lg:items-stretch lg:justify-center lg:gap-0",
+                aiPanelOpen ? "liuyao-ai-layout-open" : "liuyao-ai-layout-closed"
+              )}
+            >
+              <PaipanResult
+                result={result}
+                aiPanelOpen={aiPanelOpen}
+                onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
+                onStartOver={handleStartOver}
+              />
+              <AIDivinationPanel
+                open={aiPanelOpen}
+                onClose={() => setAiPanelOpen(false)}
+              />
+            </div>
           ) : (
             <form
               onSubmit={handleSubmit}
@@ -473,9 +493,13 @@ export default function Liuyao() {
 
 function PaipanResult({
   result,
+  aiPanelOpen,
+  onToggleAiPanel,
   onStartOver,
 }: {
   result: LiuyaoPaipan;
+  aiPanelOpen: boolean;
+  onToggleAiPanel: () => void;
   onStartOver: () => void;
 }) {
   const showChangedColumns = Boolean(result.changed);
@@ -493,7 +517,7 @@ function PaipanResult({
   };
 
   return (
-    <section className="flex w-full flex-col gap-4 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 sm:gap-6 lg:mx-auto lg:w-fit lg:max-w-full">
+    <section className="flex w-full flex-col gap-4 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 sm:gap-6 lg:w-fit lg:max-w-full lg:flex-none">
       <div className="flex items-center justify-between gap-3">
         <Button type="button" variant="outline" onClick={onStartOver}>
           <ArrowLeftIcon data-icon="inline-start" />
@@ -504,7 +528,7 @@ function PaipanResult({
             {copyStatus === "copied" ? <CheckIcon /> : <CopyIcon />}
           </Button>
           {copyStatus === "error" ? <span className="text-xs text-destructive">复制失败</span> : null}
-          <Button type="button">
+          <Button type="button" aria-expanded={aiPanelOpen} onClick={onToggleAiPanel}>
             <SparklesIcon data-icon="inline-start" />
             AI 解卦
           </Button>
@@ -571,6 +595,78 @@ function PaipanResult({
         </table>
       </div>
     </section>
+  );
+}
+
+function AIDivinationPanel({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose, open]);
+
+  useEffect(() => {
+    if (!open || !window.matchMedia("(max-width: 1023px)").matches) {
+      return;
+    }
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [open]);
+
+  return (
+    <>
+      <aside
+        aria-hidden={!open}
+        className={cn(
+          "liuyao-ai-motion pointer-events-none hidden min-h-full w-[23rem] shrink-0 overflow-hidden rounded-2xl border bg-card shadow-sm lg:block lg:self-stretch",
+          open ? "liuyao-ai-panel-open" : "liuyao-ai-panel-closed"
+        )}
+      />
+      <div
+        aria-hidden={!open}
+        className={cn("fixed inset-x-0 bottom-0 top-14 z-40 lg:hidden", open ? "pointer-events-auto" : "pointer-events-none")}
+      >
+        <button
+          type="button"
+          aria-label="关闭 AI 解卦"
+          tabIndex={open ? 0 : -1}
+          className="absolute inset-0 bg-transparent"
+          onClick={onClose}
+        />
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-label="AI 解卦"
+          className={cn(
+            "liuyao-ai-motion absolute inset-x-0 bottom-0 top-8 rounded-t-2xl border bg-card shadow-lg",
+            open ? "liuyao-ai-sheet-open" : "liuyao-ai-sheet-closed"
+          )}
+        />
+      </div>
+    </>
   );
 }
 
