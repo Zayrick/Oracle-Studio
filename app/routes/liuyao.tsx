@@ -225,15 +225,20 @@ export default function Liuyao() {
 function PaipanResult({ result }: { result: LiuyaoPaipan }) {
   return (
     <section className="flex flex-col gap-6 rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex flex-col gap-2">
-          <div className="text-xs text-muted-foreground">{result.solar}</div>
-          <div className="text-sm text-muted-foreground">{result.question}</div>
-          <h2 className="text-2xl font-semibold tracking-tight">
-            {formatHexagramName(result.primary)}
-            {result.changed ? ` 之 ${formatHexagramName(result.changed)}` : ""}
-          </h2>
-          <PillarTimeSummary result={result} />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:justify-between">
+        <div className="flex flex-1 flex-col justify-between gap-4">
+          <div className="flex flex-col gap-2">
+            <div className="text-xs text-muted-foreground">{result.solar}</div>
+            <div className="text-lg font-medium leading-relaxed text-foreground">{result.question}</div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <h2 className="text-2xl font-semibold tracking-tight">
+              {formatHexagramName(result.primary)}
+              {result.changed ? ` 之 ${formatHexagramName(result.changed)}` : ""}
+            </h2>
+            <PillarTimeSummary result={result} />
+          </div>
         </div>
 
         <ShenshaPanel result={result} />
@@ -242,7 +247,7 @@ function PaipanResult({ result }: { result: LiuyaoPaipan }) {
       <Separator />
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px] border-collapse text-sm leading-tight">
+        <table className="w-full min-w-[860px] border-collapse text-base leading-tight">
           <thead className="text-muted-foreground">
             <tr>
               <td className="px-2 py-1" aria-hidden="true" />
@@ -331,8 +336,8 @@ function PaipanLineRow({ line }: { line: LiuyaoLineInfo }) {
   return (
     <>
       <tr className="bg-background">
-        <td className="px-2 pt-1 font-medium">{line.deity}</td>
-        <td className="px-2 pt-1">
+        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium">{line.deity}</td>
+        <td className="w-0 whitespace-nowrap px-2 pt-1">
           <LineRelativeCell line={line} />
         </td>
         <td className="px-2 pt-1">
@@ -340,19 +345,19 @@ function PaipanLineRow({ line }: { line: LiuyaoLineInfo }) {
             <YaoGlyph type={line.type} />
           </div>
         </td>
-        <td className="px-2 pt-1 font-medium">{line.role}</td>
-        <td className="px-2 pt-1 font-medium">{line.movingSymbol}</td>
-        <td className="px-2 pt-1">
+        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium">{line.role}</td>
+        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium">{line.movingSymbol}</td>
+        <td className="w-0 whitespace-nowrap px-2 pt-1">
           {line.changed ? <LineRelativeCell line={line.changed} /> : null}
         </td>
         <td className="px-2 pt-1">
           {line.changed ? <YaoGlyph type={line.changed.type} /> : null}
         </td>
-        <td className="px-2 pt-1 font-medium">
+        <td className="w-0 whitespace-nowrap px-2 pt-1 text-center font-medium">
           {line.changed?.role ?? ""}
         </td>
       </tr>
-      <tr className="bg-background text-xs leading-tight text-muted-foreground">
+      <tr className="bg-background text-sm leading-tight text-muted-foreground">
         <td className="px-2 pb-1 pt-0" aria-hidden="true" />
         <td className="h-4 px-2 pb-1 pt-0">
           <span
@@ -391,7 +396,7 @@ function HexagramTableHeading({
   return (
     <div className="flex flex-col items-center gap-0.5 text-center leading-tight">
       <span className="text-foreground">{formatHexagramName(hexagram)}</span>
-      <span className="text-xs font-normal leading-tight text-muted-foreground">
+      <span className="text-sm font-normal leading-tight text-muted-foreground">
         {formatHexagramMeta(hexagram)}
       </span>
     </div>
