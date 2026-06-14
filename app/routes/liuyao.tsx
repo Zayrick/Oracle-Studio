@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 import { format } from "date-fns";
 import { ArrowLeftIcon, ChevronDownIcon, CornerLeftUpIcon } from "lucide-react";
@@ -33,6 +33,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 const YAO_INDEXES_TOP_DOWN = [5, 4, 3, 2, 1, 0];
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 type ViewTransitionDocument = Document & {
   startViewTransition?: (updateCallback: () => void) => ViewTransition;
@@ -289,14 +290,14 @@ function PaipanResult({
       </div>
 
       <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-stretch lg:justify-between lg:gap-10">
-        <div className="flex flex-1 flex-col justify-between gap-3 sm:gap-4 lg:w-max lg:max-w-[36rem] lg:flex-none">
+        <div className="flex min-w-0 flex-1 flex-col justify-between gap-3 sm:gap-4 lg:w-max lg:max-w-[36rem] lg:flex-none">
           <div className="flex flex-col gap-2">
             <div className="text-xs text-muted-foreground">{result.solar}</div>
-            <div className="text-lg font-medium leading-relaxed text-foreground">{result.question}</div>
+            <AutoFitQuestionText>{result.question}</AutoFitQuestionText>
           </div>
 
           <div className="flex flex-col gap-2">
-            <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">
+            <h2 className="text-lg font-semibold tracking-tight">
               {formatHexagramName(result.primary)}
               {result.changed ? ` 之 ${formatHexagramName(result.changed)}` : ""}
             </h2>
@@ -312,8 +313,8 @@ function PaipanResult({
       <div className="overflow-x-auto">
         <table
           className={cn(
-            "w-full border-collapse text-xs leading-tight [--liuyao-cell-x:0.125rem] [--liuyao-yao-gap:clamp(0.25rem,1.5vw,0.75rem)] [--liuyao-yao-width:clamp(2rem,calc((100vw_-_15.5rem)/2),4.5rem)] sm:text-base sm:[--liuyao-cell-x:0.5rem] sm:[--liuyao-yao-gap:0.75rem] sm:[--liuyao-yao-width:5rem] lg:mx-auto lg:w-max lg:min-w-0 lg:[--liuyao-cell-x:0.375rem]",
-            showChangedColumns ? "min-w-0 sm:min-w-[720px]" : "min-w-0 sm:min-w-[440px]"
+            "border-collapse text-xs leading-tight [--liuyao-cell-x:0.125rem] [--liuyao-yao-gap:clamp(0.25rem,1.5vw,0.75rem)] [--liuyao-yao-width:clamp(2rem,calc((100vw_-_15.5rem)/2),4.5rem)] sm:text-base sm:[--liuyao-cell-x:0.5rem] sm:[--liuyao-yao-gap:0.75rem] sm:[--liuyao-yao-width:5rem] lg:mx-auto lg:w-max lg:min-w-0 lg:[--liuyao-cell-x:0.375rem]",
+            showChangedColumns ? "w-full min-w-0 sm:min-w-[720px]" : "mx-auto w-max min-w-0 sm:min-w-[440px]"
           )}
         >
           <thead className="text-muted-foreground">
@@ -348,6 +349,64 @@ function PaipanResult({
         </table>
       </div>
     </section>
+  );
+}
+
+function AutoFitQuestionText({ children }: { children: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+
+  useIsomorphicLayoutEffect(() => {
+    const container = containerRef.current;
+    const textElement = textRef.current;
+
+    if (!container || !textElement) {
+      return;
+    }
+
+    let frameId = 0;
+    const fitText = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        const isDesktop = window.matchMedia("(min-width: 640px)").matches;
+        const maxFontSize = isDesktop ? 24 : 20;
+        const minFontSize = isDesktop ? 12 : 14;
+        const targetHeight = isDesktop ? 64 : 56;
+        let nextFontSize = maxFontSize;
+
+        container.style.height = `${targetHeight}px`;
+        container.style.overflow = "hidden";
+        textElement.style.fontSize = `${nextFontSize}px`;
+        textElement.style.lineHeight = "1.3";
+
+        while (nextFontSize > minFontSize && textElement.scrollHeight > container.clientHeight) {
+          nextFontSize -= 1;
+          textElement.style.fontSize = `${nextFontSize}px`;
+        }
+
+        if (!isDesktop && textElement.scrollHeight > container.clientHeight) {
+          container.style.height = "auto";
+          container.style.overflow = "visible";
+        }
+      });
+    };
+
+    fitText();
+
+    window.addEventListener("resize", fitText);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", fitText);
+    };
+  }, [children]);
+
+  return (
+    <div ref={containerRef} className="overflow-hidden">
+      <div ref={textRef} className="whitespace-normal break-words text-xl font-medium leading-tight text-foreground sm:text-2xl">
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -398,7 +457,7 @@ function PillarTimeItem({
   return (
     <div className="flex min-w-12 flex-col gap-1 leading-none sm:min-w-14">
       <div className="flex items-baseline gap-1">
-        <span className="text-lg font-semibold text-foreground sm:text-xl">{value}</span>
+        <span className="text-base font-semibold text-foreground">{value}</span>
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
       </div>
       <div className="text-[11px] text-muted-foreground">{voidValue}空</div>
@@ -447,10 +506,10 @@ function PaipanLineRow({
       </tr>
       <tr className="bg-background text-[11px] leading-tight text-muted-foreground sm:text-sm">
         <td className="px-[var(--liuyao-cell-x)] pb-0.5 pt-0 sm:pb-1" aria-hidden="true" />
-        <td className="h-3 px-[var(--liuyao-cell-x)] pb-0.5 pt-0 sm:h-4 sm:pb-1 lg:w-0 lg:whitespace-nowrap">
+        <td className="h-3 w-0 whitespace-nowrap px-[var(--liuyao-cell-x)] pb-0.5 pt-0 sm:h-4 sm:pb-1">
           <span
             className={cn(
-              "inline-flex items-center",
+              "inline-flex shrink-0 items-center whitespace-nowrap",
               !hiddenGodsText && "invisible"
             )}
             aria-hidden={!hiddenGodsText}
