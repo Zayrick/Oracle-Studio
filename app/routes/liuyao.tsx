@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { format } from "date-fns";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, CornerLeftUpIcon } from "lucide-react";
 import type { Route } from "./+types/liuyao";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import { TimePicker } from "@/components/time-picker";
+import {
+  buildLiuyaoPaipan,
+  YAO_NAMES,
+  type LiuyaoInputYao,
+  type LiuyaoLineInfo,
+  type LiuyaoPaipan,
+  type YaoType,
+} from "@/features/liuyao/paipan";
+import { cn } from "@/lib/utils";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -21,14 +31,7 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-type YaoType = "阴" | "阳";
-
-interface Yao {
-  type: YaoType;
-  moving: boolean;
-}
-
-const YAO_NAMES = ["初爻", "二爻", "三爻", "四爻", "五爻", "上爻"];
+const YAO_INDEXES_TOP_DOWN = [5, 4, 3, 2, 1, 0];
 
 export default function Liuyao() {
   const [question, setQuestion] = useState("");
@@ -38,9 +41,11 @@ export default function Liuyao() {
     format(new Date(), "HH:mm:ss")
   );
 
-  const [yaos, setYaos] = useState<Yao[]>(
-    Array(6).fill({ type: "阳", moving: false })
+  const [yaos, setYaos] = useState<LiuyaoInputYao[]>(
+    Array.from({ length: 6 }, () => ({ type: "阳", moving: false }))
   );
+  const [result, setResult] = useState<LiuyaoPaipan | null>(null);
+  const [error, setError] = useState("");
 
   const handleSetNow = () => {
     const now = new Date();
@@ -66,24 +71,30 @@ export default function Liuyao() {
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    console.log({
-      question,
-      date,
-      time,
-      yaos,
-    });
-    // 后续占卜逻辑
+    setError("");
+
+    try {
+      setResult(buildLiuyaoPaipan({ question, date, time, yaos }));
+    } catch (err) {
+      setResult(null);
+      setError(err instanceof Error ? err.message : "排盘失败，请检查输入。");
+    }
   };
 
   return (
-    <div className="container mx-auto px-4 py-16">
-      <div className="max-w-xl mx-auto">
-        <h1 className="text-3xl font-bold text-center mb-8">六爻占卜</h1>
+    <div className="container mx-auto px-4 py-12">
+      <div className="mx-auto flex max-w-6xl flex-col gap-10">
+        <div className="flex flex-col gap-3 text-center">
+          <h1 className="text-3xl font-bold tracking-tight">六爻排盘</h1>
+          <p className="text-muted-foreground">本卦、变卦、纳甲、六亲、六神与旬空</p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* 所问之事 */}
+        <form
+          onSubmit={handleSubmit}
+          className="mx-auto flex w-full max-w-2xl flex-col gap-8 rounded-lg border bg-card p-6 text-card-foreground shadow-sm"
+        >
           <Field>
             <FieldLabel htmlFor="question">所问之事</FieldLabel>
             <Input
@@ -96,10 +107,9 @@ export default function Liuyao() {
             />
           </Field>
 
-          {/* 占问时间 */}
-          <div>
+          <div className="flex flex-col gap-3">
             <FieldLabel className="mb-2 block">占问时间</FieldLabel>
-            <div className="flex items-end gap-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <FieldGroup className="flex-row">
                 <Field>
                   <FieldLabel htmlFor="date-picker">日期</FieldLabel>
@@ -152,63 +162,246 @@ export default function Liuyao() {
             </div>
           </div>
 
-          {/* 所得之卦 */}
-          <div>
+          <div className="flex flex-col gap-4">
             <FieldLabel className="mb-4 block">所得之卦</FieldLabel>
-            <div className="space-y-3">
-              {yaos.map((yao, index) => (
+            <div className="flex flex-col gap-3 rounded-lg bg-muted/40 p-4">
+              {YAO_INDEXES_TOP_DOWN.map((index) => {
+                const yao = yaos[index];
+
+                return (
                 <div
                   key={index}
-                  className="flex items-center justify-center gap-6"
+                  className="grid grid-cols-[3.5rem_1fr_4rem] items-center gap-4 sm:grid-cols-[4rem_10rem_4rem] sm:justify-center"
                 >
-                  {/* 左侧：爻名 */}
-                  <div className="w-16 text-right font-medium">
+                  <div className="text-right text-sm font-medium">
                     {YAO_NAMES[index]}
                   </div>
 
-                  {/* 中间：阴阳爻切换 */}
                   <button
                     type="button"
                     onClick={() => toggleYaoType(index)}
-                    className="relative w-32 h-12 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                    className="relative flex h-11 cursor-pointer items-center justify-center rounded-md hover:bg-background/70"
                   >
-                    {yao.type === "阳" ? (
-                      // 阳爻：实线
-                      <div className="w-full h-2 bg-foreground rounded" />
-                    ) : (
-                      // 阴爻：断开的线
-                      <div className="w-full flex gap-2">
-                        <div className="flex-1 h-2 bg-foreground rounded" />
-                        <div className="flex-1 h-2 bg-foreground rounded" />
-                      </div>
-                    )}
+                    <YaoGlyph type={yao.type} />
                   </button>
 
-                  {/* 右侧：动爻标记 */}
                   <button
                     type="button"
                     onClick={() => toggleYaoMoving(index)}
-                    className={`w-16 h-10 rounded-lg border-2 flex items-center justify-center font-medium transition-colors ${
+                    className={cn(
+                      "flex h-9 items-center justify-center rounded-md border text-sm font-medium transition-colors",
                       yao.moving
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background border-muted hover:border-muted-foreground"
-                    }`}
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background hover:bg-muted"
+                    )}
                   >
-                    动
+                    {yao.moving ? (yao.type === "阳" ? "老阳" : "老阴") : "静"}
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          {/* 开始占卜按钮 */}
-          <div className="flex justify-center pt-4">
+          {error ? (
+            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+
+          <div className="flex justify-center pt-2">
             <Button type="submit" size="lg" className="w-full max-w-xs">
-              开始占卜
+              开始排盘
             </Button>
           </div>
         </form>
+
+        {result ? <PaipanResult result={result} /> : null}
       </div>
+    </div>
+  );
+}
+
+function PaipanResult({ result }: { result: LiuyaoPaipan }) {
+  return (
+    <section className="flex flex-col gap-6 rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-2">
+          <div className="text-sm text-muted-foreground">{result.question}</div>
+          <h2 className="text-2xl font-semibold tracking-tight">
+            {formatHexagramName(result.primary)}
+            {result.changed ? ` 之 ${formatHexagramName(result.changed)}` : ""}
+          </h2>
+          <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+            <span>{formatHexagramMeta(result.primary)}</span>
+            <span>月建 {result.monthBuild}</span>
+            <span>日辰 {result.dayBranch}</span>
+            <span>旬空 {result.dayVoid}</span>
+          </div>
+        </div>
+
+        <div className="grid gap-2 text-sm sm:grid-cols-2 lg:min-w-80">
+          <InfoCell label="公历" value={result.solar} />
+          <InfoCell label="农历" value={result.lunar} />
+          <InfoCell label="年柱" value={result.pillars.year} />
+          <InfoCell label="月柱" value={result.pillars.month} />
+          <InfoCell label="日柱" value={result.pillars.day} />
+          <InfoCell label="时柱" value={result.pillars.hour} />
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[860px] border-collapse text-sm leading-tight">
+          <thead className="text-muted-foreground">
+            <tr>
+              <td className="px-2 py-1" aria-hidden="true" />
+              <td className="px-2 py-1" aria-hidden="true" />
+              <th className="px-2 py-1 text-center font-medium" scope="col">
+                <HexagramTableHeading hexagram={result.primary} fallback="本卦" />
+              </th>
+              <td className="px-2 py-1" aria-hidden="true" />
+              <td className="px-2 py-1" aria-hidden="true" />
+              <td className="px-2 py-1" aria-hidden="true" />
+              <th className="px-2 py-1 text-center font-medium" scope="col">
+                <HexagramTableHeading hexagram={result.changed} fallback="变卦" />
+              </th>
+              <td className="px-2 py-1" aria-hidden="true" />
+            </tr>
+          </thead>
+          <tbody>
+            {[...result.lines].reverse().map((line) => (
+              <PaipanLineRow key={line.position} line={line} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function PaipanLineRow({ line }: { line: LiuyaoLineInfo }) {
+  const hiddenGodsText = formatHiddenGods(line.hiddenGods);
+
+  return (
+    <>
+      <tr className="bg-background">
+        <td className="px-2 pt-1 font-medium">{line.deity}</td>
+        <td className="px-2 pt-1">
+          <LineRelativeCell line={line} />
+        </td>
+        <td className="px-2 pt-1">
+          <div className="flex items-center gap-3">
+            <YaoGlyph type={line.type} />
+          </div>
+        </td>
+        <td className="px-2 pt-1 font-medium">{line.role}</td>
+        <td className="px-2 pt-1 font-medium">{line.movingSymbol}</td>
+        <td className="px-2 pt-1">
+          {line.changed ? <LineRelativeCell line={line.changed} /> : null}
+        </td>
+        <td className="px-2 pt-1">
+          {line.changed ? <YaoGlyph type={line.changed.type} /> : null}
+        </td>
+        <td className="px-2 pt-1 font-medium">
+          {line.changed?.role ?? ""}
+        </td>
+      </tr>
+      <tr className="bg-background text-xs leading-tight text-muted-foreground">
+        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
+        <td className="h-4 px-2 pb-1 pt-0">
+          <span
+            className={cn(
+              "inline-flex items-center",
+              !hiddenGodsText && "invisible"
+            )}
+            aria-hidden={!hiddenGodsText}
+          >
+            <CornerLeftUpIcon className="size-[1em] shrink-0" aria-hidden="true" />
+            {hiddenGodsText || "占位"}
+          </span>
+        </td>
+        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
+        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
+        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
+        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
+        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
+        <td className="px-2 pb-1 pt-0" aria-hidden="true" />
+      </tr>
+    </>
+  );
+}
+
+function HexagramTableHeading({
+  hexagram,
+  fallback,
+}: {
+  hexagram: LiuyaoPaipan["primary"] | null;
+  fallback: string;
+}) {
+  if (!hexagram) {
+    return <span className="block text-center">{fallback}</span>;
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-0.5 text-center leading-tight">
+      <span className="text-foreground">{formatHexagramName(hexagram)}</span>
+      <span className="text-xs font-normal leading-tight text-muted-foreground">
+        {formatHexagramMeta(hexagram)}
+      </span>
+    </div>
+  );
+}
+
+function LineRelativeCell({
+  line,
+}: {
+  line: Pick<LiuyaoLineInfo, "relation" | "stem" | "branch">;
+}) {
+  return (
+    <div className="leading-tight">
+      <span className="font-medium">
+        {line.relation}·{line.stem}{line.branch}
+      </span>
+    </div>
+  );
+}
+
+function formatHiddenGods(hiddenGods: LiuyaoLineInfo["hiddenGods"]) {
+  return hiddenGods
+    .map((hiddenGod) => `${hiddenGod.relation}·${hiddenGod.stem}${hiddenGod.branch}`)
+    .join("、");
+}
+
+function formatHexagramName(hexagram: Pick<LiuyaoPaipan["primary"], "name" | "pattern">) {
+  return `${hexagram.name}${hexagram.pattern ? `·${hexagram.pattern}` : ""}`;
+}
+
+function formatHexagramMeta(hexagram: Pick<LiuyaoPaipan["primary"], "palace" | "stage" | "pattern">) {
+  return `${hexagram.palace}·${hexagram.stage}`;
+}
+
+function InfoCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-muted/50 px-3 py-2">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="font-medium">{value}</div>
+    </div>
+  );
+}
+
+function YaoGlyph({ type, className }: { type: YaoType; className?: string }) {
+  return (
+    <div className={cn("flex h-4 w-full min-w-20 items-center", className)}>
+      {type === "阳" ? (
+        <div className="h-2 w-full rounded bg-foreground" />
+      ) : (
+        <div className="flex w-full gap-3">
+          <div className="h-2 flex-1 rounded bg-foreground" />
+          <div className="h-2 flex-1 rounded bg-foreground" />
+        </div>
+      )}
     </div>
   );
 }
