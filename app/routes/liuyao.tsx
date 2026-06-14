@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 import { format } from "date-fns";
-import { ArrowLeftIcon, ChevronDownIcon, CornerLeftUpIcon } from "lucide-react";
+import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, CopyIcon, CornerLeftUpIcon, SparklesIcon } from "lucide-react";
 import type { Route } from "./+types/liuyao";
 
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,206 @@ export function meta({}: Route.MetaArgs) {
 
 const YAO_INDEXES_TOP_DOWN = [5, 4, 3, 2, 1, 0];
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+type CopyElementName = LiuyaoLineInfo["element"];
+type CopyRelative = LiuyaoLineInfo["relation"];
+type CopyStemBasis = "yearStem" | "dayStem";
+type CopyBranchBasis = "yearBranch" | "dayBranch";
+type CopyTargetToken = { type: "stem" | "branch"; name: string };
+
+const COPY_BRANCH_ORDER = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
+
+const COPY_BRANCH_ELEMENTS: Record<string, CopyElementName> = {
+  子: "水",
+  丑: "土",
+  寅: "木",
+  卯: "木",
+  辰: "土",
+  巳: "火",
+  午: "火",
+  未: "土",
+  申: "金",
+  酉: "金",
+  戌: "土",
+  亥: "水",
+};
+
+const COPY_GENERATES: Record<CopyElementName, CopyElementName> = {
+  木: "火",
+  火: "土",
+  土: "金",
+  金: "水",
+  水: "木",
+};
+
+const COPY_CONTROLS: Record<CopyElementName, CopyElementName> = {
+  木: "土",
+  土: "水",
+  水: "火",
+  火: "金",
+  金: "木",
+};
+
+const COPY_BRANCH_OPPOSITES: Record<string, string> = {
+  子: "午",
+  丑: "未",
+  寅: "申",
+  卯: "酉",
+  辰: "戌",
+  巳: "亥",
+  午: "子",
+  未: "丑",
+  申: "寅",
+  酉: "卯",
+  戌: "辰",
+  亥: "巳",
+};
+
+const COPY_BRANCH_COMBINES: Record<string, string> = {
+  子: "丑",
+  丑: "子",
+  寅: "亥",
+  亥: "寅",
+  卯: "戌",
+  戌: "卯",
+  辰: "酉",
+  酉: "辰",
+  巳: "申",
+  申: "巳",
+  午: "未",
+  未: "午",
+};
+
+const COPY_CHANGSHENG_BY_ELEMENT: Record<CopyElementName, Record<string, string>> = {
+  木: { 亥: "长生", 子: "沐浴", 丑: "冠带", 寅: "临官", 卯: "帝旺", 辰: "衰", 巳: "病", 午: "死", 未: "墓", 申: "绝", 酉: "胎", 戌: "养" },
+  火: { 寅: "长生", 卯: "沐浴", 辰: "冠带", 巳: "临官", 午: "帝旺", 未: "衰", 申: "病", 酉: "死", 戌: "墓", 亥: "绝", 子: "胎", 丑: "养" },
+  土: { 申: "长生", 酉: "沐浴", 戌: "冠带", 亥: "临官", 子: "帝旺", 丑: "衰", 寅: "病", 卯: "死", 辰: "墓", 巳: "绝", 午: "胎", 未: "养" },
+  金: { 巳: "长生", 午: "沐浴", 未: "冠带", 申: "临官", 酉: "帝旺", 戌: "衰", 亥: "病", 子: "死", 丑: "墓", 寅: "绝", 卯: "胎", 辰: "养" },
+  水: { 申: "长生", 酉: "沐浴", 戌: "冠带", 亥: "临官", 子: "帝旺", 丑: "衰", 寅: "病", 卯: "死", 辰: "墓", 巳: "绝", 午: "胎", 未: "养" },
+};
+
+const COPY_STEM_BRANCH_SHENSHA_RULES: Array<{
+  name: string;
+  basis: CopyStemBasis[];
+  targets: Record<string, string[]>;
+}> = [
+  {
+    name: "天乙贵人",
+    basis: ["yearStem", "dayStem"],
+    targets: {
+      甲: ["丑", "未"],
+      戊: ["丑", "未"],
+      庚: ["丑", "未"],
+      乙: ["子", "申"],
+      己: ["子", "申"],
+      丙: ["亥", "酉"],
+      丁: ["亥", "酉"],
+      壬: ["卯", "巳"],
+      癸: ["卯", "巳"],
+      辛: ["寅", "午"],
+    },
+  },
+  {
+    name: "文昌贵人",
+    basis: ["yearStem", "dayStem"],
+    targets: {
+      甲: ["巳"],
+      乙: ["午"],
+      丙: ["申"],
+      丁: ["酉"],
+      戊: ["申"],
+      己: ["酉"],
+      庚: ["亥"],
+      辛: ["子"],
+      壬: ["寅"],
+      癸: ["卯"],
+    },
+  },
+  {
+    name: "羊刃",
+    basis: ["dayStem"],
+    targets: {
+      甲: ["卯"],
+      乙: ["寅"],
+      丙: ["午"],
+      丁: ["巳"],
+      戊: ["午"],
+      己: ["巳"],
+      庚: ["酉"],
+      辛: ["申"],
+      壬: ["子"],
+      癸: ["亥"],
+    },
+  },
+  {
+    name: "禄神",
+    basis: ["dayStem"],
+    targets: {
+      甲: ["寅"],
+      乙: ["卯"],
+      丙: ["巳"],
+      丁: ["午"],
+      戊: ["巳"],
+      己: ["午"],
+      庚: ["申"],
+      辛: ["酉"],
+      壬: ["亥"],
+      癸: ["子"],
+    },
+  },
+];
+
+const COPY_BRANCH_GROUP_SHENSHA_RULES: Array<{
+  name: string;
+  basis: CopyBranchBasis[];
+  targetsByGroup: Record<string, string>;
+}> = [
+  { name: "桃花/咸池", basis: ["yearBranch", "dayBranch"], targetsByGroup: { 申子辰: "酉", 寅午戌: "卯", 巳酉丑: "午", 亥卯未: "子" } },
+  { name: "驿马", basis: ["yearBranch", "dayBranch"], targetsByGroup: { 申子辰: "寅", 寅午戌: "申", 巳酉丑: "亥", 亥卯未: "巳" } },
+  { name: "华盖", basis: ["yearBranch", "dayBranch"], targetsByGroup: { 申子辰: "辰", 寅午戌: "戌", 巳酉丑: "丑", 亥卯未: "未" } },
+  { name: "劫煞", basis: ["yearBranch", "dayBranch"], targetsByGroup: { 申子辰: "巳", 寅午戌: "亥", 巳酉丑: "寅", 亥卯未: "申" } },
+  { name: "将星", basis: ["yearBranch", "dayBranch"], targetsByGroup: { 申子辰: "子", 寅午戌: "午", 巳酉丑: "酉", 亥卯未: "卯" } },
+];
+
+const COPY_MONTH_BRANCH_SHENSHA_RULES: Array<{
+  name: string;
+  targets: Record<string, CopyTargetToken[]>;
+}> = [
+  {
+    name: "天德贵人",
+    targets: {
+      寅: [{ type: "stem", name: "丁" }],
+      卯: [{ type: "branch", name: "申" }],
+      辰: [{ type: "stem", name: "壬" }],
+      巳: [{ type: "stem", name: "辛" }],
+      午: [{ type: "branch", name: "亥" }],
+      未: [{ type: "stem", name: "甲" }],
+      申: [{ type: "stem", name: "癸" }],
+      酉: [{ type: "branch", name: "寅" }],
+      戌: [{ type: "stem", name: "丙" }],
+      亥: [{ type: "stem", name: "乙" }],
+      子: [{ type: "branch", name: "巳" }],
+      丑: [{ type: "stem", name: "庚" }],
+    },
+  },
+  {
+    name: "月德贵人",
+    targets: {
+      寅: [{ type: "stem", name: "丙" }],
+      午: [{ type: "stem", name: "丙" }],
+      戌: [{ type: "stem", name: "丙" }],
+      申: [{ type: "stem", name: "壬" }],
+      子: [{ type: "stem", name: "壬" }],
+      辰: [{ type: "stem", name: "壬" }],
+      亥: [{ type: "stem", name: "甲" }],
+      卯: [{ type: "stem", name: "甲" }],
+      未: [{ type: "stem", name: "甲" }],
+      巳: [{ type: "stem", name: "庚" }],
+      酉: [{ type: "stem", name: "庚" }],
+      丑: [{ type: "stem", name: "庚" }],
+    },
+  },
+];
 
 type ViewTransitionDocument = Document & {
   startViewTransition?: (updateCallback: () => void) => ViewTransition;
@@ -279,14 +479,36 @@ function PaipanResult({
   onStartOver: () => void;
 }) {
   const showChangedColumns = Boolean(result.changed);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+
+  const handleCopy = async () => {
+    try {
+      await copyTextToClipboard(formatLiuyaoCopyMarkdown(result));
+      setCopyStatus("copied");
+      window.setTimeout(() => setCopyStatus("idle"), 1600);
+    } catch {
+      setCopyStatus("error");
+      window.setTimeout(() => setCopyStatus("idle"), 2200);
+    }
+  };
 
   return (
     <section className="flex w-full flex-col gap-4 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 sm:gap-6 lg:mx-auto lg:w-fit lg:max-w-full">
-      <div className="flex justify-start">
+      <div className="flex items-center justify-between gap-3">
         <Button type="button" variant="outline" onClick={onStartOver}>
           <ArrowLeftIcon data-icon="inline-start" />
           再起一卦
         </Button>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="icon" aria-label={copyStatus === "copied" ? "已复制排盘结果" : "复制排盘结果"} onClick={handleCopy}>
+            {copyStatus === "copied" ? <CheckIcon /> : <CopyIcon />}
+          </Button>
+          {copyStatus === "error" ? <span className="text-xs text-destructive">复制失败</span> : null}
+          <Button type="button">
+            <SparklesIcon data-icon="inline-start" />
+            AI 解卦
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-stretch lg:justify-between lg:gap-10">
@@ -350,6 +572,218 @@ function PaipanResult({
       </div>
     </section>
   );
+}
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  textarea.style.left = "0";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  try {
+    if (!document.execCommand("copy")) {
+      throw new Error("Copy command failed");
+    }
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
+function formatLiuyaoCopyMarkdown(result: LiuyaoPaipan) {
+  const changed = result.changed ?? result.primary;
+  const movingLines = result.lines.filter((line) => line.moving);
+
+  return joinCopySections([
+    [
+      `所问之事：${result.question}`,
+      `时间：${result.solar}`,
+      `干支:${result.pillars.year}年 ${result.pillars.month}月 ${result.pillars.day}日 ${result.pillars.hour}时`,
+      `空亡：年空亡${result.pillarVoids.year} 月空亡${result.pillarVoids.month} 日空亡${result.pillarVoids.day} 时空亡${result.pillarVoids.hour}`,
+      `卦身：${formatCopyGuaBody(result)}；世身：${formatCopyWorldBody(result)}`,
+      `动爻：${movingLines.length > 0 ? movingLines.map((line) => line.label).join("、") : "无（静卦）"}`,
+    ].join("\n"),
+    formatLiuyaoCopyCombinedTable(result, changed),
+  ]);
+}
+
+function formatLiuyaoCopyCombinedTable(
+  result: LiuyaoPaipan,
+  changed: LiuyaoPaipan["primary"]
+) {
+  const primary = result.primary;
+
+  return joinCopySections([
+    `主卦/变卦：${primary.name} → ${changed.name}（主卦${primary.palace}${primary.palaceElement}，${primary.stage}，世在${YAO_NAMES[primary.worldPosition - 1]}，应在${YAO_NAMES[primary.responsePosition - 1]}；变卦六亲沿用主卦卦宫五行）`,
+    copyMdTable(
+      ["爻位", "六神", "世应", "主卦六亲", "主卦干支", "伏神", "是否变卦", "主卦神煞", "主卦长生", "变卦六亲", "变卦干支", "变卦神煞", "变卦长生"],
+      [...result.lines]
+        .sort((a, b) => b.position - a.position)
+        .map((line) => {
+          const changedLine = line.changed ?? line;
+
+          return [
+            `${line.label} ${line.type === "阳" ? "━━━ 阳" : "━ ━ 阴"}`,
+            line.deity,
+            line.role,
+            line.relation,
+            formatCopyStemBranch(line),
+            formatCopyHiddenGods(line.hiddenGods),
+            line.moving ? "是" : "-",
+            formatCopyLineShensha(result, line),
+            formatCopyLineChangsheng(result, line.element),
+            copyRelationFor(primary.palaceElement, changedLine.element),
+            formatCopyStemBranch(changedLine),
+            formatCopyLineShensha(result, changedLine),
+            formatCopyLineChangsheng(result, changedLine.element),
+          ];
+        })
+    ),
+  ]);
+}
+
+function formatCopyGuaBody(result: LiuyaoPaipan) {
+  const worldLine = result.lines[result.primary.worldPosition - 1];
+  const startBranchIndex = worldLine.type === "阳" ? COPY_BRANCH_ORDER.indexOf("子") : COPY_BRANCH_ORDER.indexOf("午");
+  const bodyBranch = COPY_BRANCH_ORDER[(startBranchIndex + result.primary.worldPosition - 1) % COPY_BRANCH_ORDER.length];
+  const bodyHits = result.lines
+    .filter((line) => line.branch === bodyBranch)
+    .map(formatCopyBodyLine);
+
+  return `${bodyBranch}${bodyHits.length > 0 ? `（${bodyHits.join("、")}）` : "（不上卦）"}`;
+}
+
+function formatCopyWorldBody(result: LiuyaoPaipan) {
+  const worldLine = result.lines[result.primary.worldPosition - 1];
+  const worldBodyLinePosition = (COPY_BRANCH_ORDER.indexOf(worldLine.branch) % 6) + 1;
+  const worldBodyLine = result.lines[worldBodyLinePosition - 1];
+
+  return `${YAO_NAMES[worldBodyLinePosition - 1]}（${formatCopyBodyLine(worldBodyLine)}）`;
+}
+
+function formatCopyBodyLine(line: LiuyaoLineInfo) {
+  return `${line.label} ${line.relation}${line.stem}${line.branch}${line.element}`;
+}
+
+function formatCopyStemBranch(line: Pick<LiuyaoLineInfo, "stem" | "branch" | "element">) {
+  return `${line.stem}${line.branch}（${line.element}）`;
+}
+
+function formatCopyHiddenGods(hiddenGods: LiuyaoLineInfo["hiddenGods"]) {
+  return hiddenGods.length > 0
+    ? hiddenGods.map((hiddenGod) => `${hiddenGod.relation}${hiddenGod.stem}${hiddenGod.branch}${COPY_BRANCH_ELEMENTS[hiddenGod.branch] ?? ""}`).join("、")
+    : "-";
+}
+
+function formatCopyLineShensha(result: LiuyaoPaipan, line: Pick<LiuyaoLineInfo, "stem" | "branch">) {
+  const basisValues = getCopyBasisValues(result);
+  const monthBranch = getBranchFromPillarText(result.pillars.month);
+  const dayBranch = getBranchFromPillarText(result.pillars.day);
+  const { branch } = line;
+  const hits: string[] = [];
+
+  if (branch === monthBranch) hits.push("临月");
+  if (branch === dayBranch) hits.push("临日");
+  if (COPY_BRANCH_OPPOSITES[monthBranch] === branch) hits.push("月破");
+  if (COPY_BRANCH_OPPOSITES[dayBranch] === branch) hits.push("日冲");
+  if (COPY_BRANCH_COMBINES[monthBranch] === branch) hits.push("月合");
+  if (COPY_BRANCH_COMBINES[dayBranch] === branch) hits.push("日合");
+  if (result.pillarVoids.day.includes(branch)) hits.push("日空");
+
+  for (const rule of COPY_STEM_BRANCH_SHENSHA_RULES) {
+    for (const basis of rule.basis) {
+      const basisValue = basisValues[basis];
+      if ((rule.targets[basisValue.value] ?? []).includes(branch)) {
+        hits.push(`${basisValue.label}${basisValue.value}:${rule.name}`);
+      }
+    }
+  }
+
+  for (const rule of COPY_BRANCH_GROUP_SHENSHA_RULES) {
+    for (const basis of rule.basis) {
+      const basisValue = basisValues[basis];
+      if (copyGroupTarget(basisValue.value, rule.targetsByGroup) === branch) {
+        hits.push(`${basisValue.label}${basisValue.value}:${rule.name}`);
+      }
+    }
+  }
+
+  for (const rule of COPY_MONTH_BRANCH_SHENSHA_RULES) {
+    const targets = rule.targets[monthBranch] ?? [];
+
+    if (copyMatchesTargets(line, targets)) {
+      hits.push(`月支${monthBranch}:${rule.name}`);
+    }
+  }
+
+  return [...new Set(hits)].join("、") || "-";
+}
+
+function getCopyBasisValues(result: LiuyaoPaipan) {
+  return {
+    yearStem: { label: "年干", value: getStemFromPillarText(result.pillars.year) },
+    dayStem: { label: "日干", value: getStemFromPillarText(result.pillars.day) },
+    yearBranch: { label: "年支", value: getBranchFromPillarText(result.pillars.year) },
+    dayBranch: { label: "日支", value: getBranchFromPillarText(result.pillars.day) },
+  } satisfies Record<CopyStemBasis | CopyBranchBasis, { label: string; value: string }>;
+}
+
+function copyGroupTarget(originBranch: string, targetsByGroup: Record<string, string>) {
+  const group = Object.keys(targetsByGroup).find((item) => item.includes(originBranch));
+  return group ? targetsByGroup[group] : undefined;
+}
+
+function copyMatchesTargets(line: Pick<LiuyaoLineInfo, "stem" | "branch">, targets: CopyTargetToken[]) {
+  return targets.some((target) => target.type === "stem" ? line.stem === target.name : line.branch === target.name);
+}
+
+function formatCopyLineChangsheng(result: LiuyaoPaipan, element: CopyElementName) {
+  const monthBranch = getBranchFromPillarText(result.pillars.month);
+  const dayBranch = getBranchFromPillarText(result.pillars.day);
+
+  return `月:${COPY_CHANGSHENG_BY_ELEMENT[element]?.[monthBranch] ?? "-"} 日:${COPY_CHANGSHENG_BY_ELEMENT[element]?.[dayBranch] ?? "-"}`;
+}
+
+function copyRelationFor(palaceElement: CopyElementName, lineElement: CopyElementName): CopyRelative {
+  if (palaceElement === lineElement) return "兄弟";
+  if (COPY_GENERATES[lineElement] === palaceElement) return "父母";
+  if (COPY_GENERATES[palaceElement] === lineElement) return "子孙";
+  if (COPY_CONTROLS[lineElement] === palaceElement) return "官鬼";
+  return "妻财";
+}
+
+function getBranchFromPillarText(pillar: string) {
+  return pillar.slice(-1);
+}
+
+function getStemFromPillarText(pillar: string) {
+  return pillar.slice(0, 1);
+}
+
+function joinCopySections(sections: Array<string | undefined | null | false>) {
+  return sections.filter(Boolean).join("\n\n");
+}
+
+function copyMdValue(value: unknown) {
+  const text = value === undefined || value === null || value === "" ? "-" : String(value);
+  return text.replace(/\r?\n/g, "<br>").replace(/\|/g, "\\|");
+}
+
+function copyMdTable(headers: string[], rows: unknown[][]) {
+  return [
+    `| ${headers.map(copyMdValue).join(" | ")} |`,
+    `| ${headers.map(() => "---").join(" | ")} |`,
+    ...rows.map((row) => `| ${row.map(copyMdValue).join(" | ")} |`),
+  ].join("\n");
 }
 
 function AutoFitQuestionText({ children }: { children: string }) {
