@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 import { format } from "date-fns";
-import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, CopyIcon, CornerLeftUpIcon, SparklesIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, CopyIcon, CornerLeftUpIcon, SparklesIcon } from "lucide-react";
 import type { Route } from "./+types/liuyao";
 
 import { Button } from "@/components/ui/button";
@@ -734,7 +734,7 @@ function AIDivinationPanelContent({
             placeholder="输入想追问的内容"
           />
           <Button type="submit" size="icon" aria-label="发送追问" tabIndex={tabIndex} disabled={!message.trim()}>
-            <CornerLeftUpIcon />
+            <ArrowUpIcon />
           </Button>
         </div>
       </form>
