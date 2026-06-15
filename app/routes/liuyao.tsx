@@ -1,22 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
+import { Link } from "react-router";
 import { format } from "date-fns";
-import { ArrowLeftIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, CopyIcon, CornerLeftUpIcon, PlusIcon, SparklesIcon, SquareIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowUpIcon, CheckIcon, CopyIcon, CornerLeftUpIcon, PlusIcon, SparklesIcon, SquareIcon } from "lucide-react";
 import { Marked, type RendererObject } from "marked";
 import type { Route } from "./+types/liuyao";
 
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { TimePicker } from "@/components/time-picker";
+import { DateTimeWheelPicker } from "@/components/date-time-wheel-picker";
 import {
   buildLiuyaoPaipan,
   YAO_NAMES,
@@ -307,11 +302,8 @@ function runLiuyaoViewTransition(update: () => void) {
 
 export default function Liuyao() {
   const [question, setQuestion] = useState("");
-  const [dateOpen, setDateOpen] = useState(false);
   const [date, setDate] = useState<Date>(new Date());
-  const [time, setTime] = useState(
-    format(new Date(), "HH:mm:ss")
-  );
+  const [time, setTime] = useState(format(new Date(), "HH:mm"));
 
   const [yaos, setYaos] = useState<LiuyaoInputYao[]>(
     Array.from({ length: 6 }, () => ({ type: "阳", moving: false }))
@@ -323,7 +315,7 @@ export default function Liuyao() {
   const handleSetNow = () => {
     const now = new Date();
     setDate(now);
-    setTime(format(now, "HH:mm:ss"));
+    setTime(format(now, "HH:mm"));
   };
 
   const toggleYaoType = (index: number) => {
@@ -371,8 +363,18 @@ export default function Liuyao() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 lg:py-10">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:gap-8">
+    <div className="container relative mx-auto flex min-h-svh items-center px-4 py-20 md:min-h-[calc(100svh-3.5rem)] lg:py-10">
+      <Link
+        to="/"
+        className={cn(
+          buttonVariants({ variant: "outline", size: "sm" }),
+          "absolute left-4 top-4 md:hidden"
+        )}
+      >
+        <ArrowLeftIcon data-icon="inline-start" />
+        返回主页
+      </Link>
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 lg:gap-8">
         {!result ? (
           <div className="flex flex-col gap-2 text-center">
             <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">六爻排盘</h1>
@@ -418,58 +420,28 @@ export default function Liuyao() {
             </Field>
 
             <div className="flex flex-col gap-2">
-              <FieldLabel className="block">占问时间</FieldLabel>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <FieldGroup className="flex-row">
-                  <Field>
-                    <FieldLabel htmlFor="date-picker">日期</FieldLabel>
-                    <Popover open={dateOpen} onOpenChange={setDateOpen}>
-                      <PopoverTrigger
-                        render={
-                          <Button
-                            variant="outline"
-                            id="date-picker"
-                            className="w-40 justify-between font-normal"
-                          >
-                            {date ? format(date, "yyyy年MM月dd日") : "选择日期"}
-                            <ChevronDownIcon data-icon="inline-end" />
-                          </Button>
-                        }
-                      />
-                      <PopoverContent className="w-auto overflow-hidden p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={date}
-                          captionLayout="dropdown"
-                          defaultMonth={date}
-                          onSelect={(selectedDate) => {
-                            if (selectedDate) {
-                              setDate(selectedDate);
-                              setDateOpen(false);
-                            }
-                          }}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="time-picker">时间</FieldLabel>
-                    <TimePicker
-                      id="time-picker"
-                      value={time}
-                      onChange={setTime}
-                    />
-                  </Field>
-                </FieldGroup>
+              <FieldGroup className="flex-row items-end gap-2">
+                <Field className="min-w-0 flex-1">
+                  <FieldLabel htmlFor="date-time-picker">占问时间</FieldLabel>
+                  <DateTimeWheelPicker
+                    id="date-time-picker"
+                    date={date}
+                    time={time}
+                    onChange={(nextValue) => {
+                      setDate(nextValue.date);
+                      setTime(nextValue.time);
+                    }}
+                  />
+                </Field>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleSetNow}
-                  className="mb-[1px]"
+                  className="shrink-0"
                 >
                   现在
                 </Button>
-              </div>
+              </FieldGroup>
             </div>
 
             <div className="flex flex-col gap-2">
