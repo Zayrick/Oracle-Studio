@@ -8,7 +8,9 @@
 	"compatibility_date": "2026-06-13",
 	"main": "./workers/app.ts",
 	"vars": {
-		"VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare"
+		"VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
+		"liuyao_OPENROUTER_MODEL": "deepseek/deepseek-chat-v3.1",
+		"liuyao_OPENROUTER_APP_NAME": "Oracle Studio"
 	},
 	"observability": {
 		"enabled": true

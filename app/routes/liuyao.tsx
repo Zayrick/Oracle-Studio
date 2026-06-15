@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 import { format } from "date-fns";
-import { ArrowLeftIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, CopyIcon, CornerLeftUpIcon, SparklesIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, CopyIcon, CornerLeftUpIcon, PlusIcon, SparklesIcon, SquareIcon } from "lucide-react";
 import type { Route } from "./+types/liuyao";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { TimePicker } from "@/components/time-picker";
 import {
@@ -40,7 +41,16 @@ type CopyRelative = LiuyaoLineInfo["relation"];
 type CopyStemBasis = "yearStem" | "dayStem";
 type CopyBranchBasis = "yearBranch" | "dayBranch";
 type CopyTargetToken = { type: "stem" | "branch"; name: string };
+type AIDivinationMessage = {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  status?: "streaming" | "complete" | "stopped" | "error";
+};
 
+const LIUYAO_AI_ENDPOINT = "/api/liuyao/ai";
+const MAX_LIUYAO_AI_CONTEXT_MESSAGES = 12;
+const MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH = 4_000;
 const COPY_BRANCH_ORDER = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
 
 const COPY_BRANCH_ELEMENTS: Record<string, CopyElementName> = {
@@ -354,6 +364,7 @@ export default function Liuyao() {
               />
               <AIDivinationPanel
                 open={aiPanelOpen}
+                result={result}
                 onClose={() => setAiPanelOpen(false)}
               />
             </div>
@@ -530,7 +541,7 @@ function PaipanResult({
           {copyStatus === "error" ? <span className="text-xs text-destructive">复制失败</span> : null}
           <Button type="button" aria-expanded={aiPanelOpen} onClick={onToggleAiPanel}>
             <SparklesIcon data-icon="inline-start" />
-            AI 解卦
+            询问AI
           </Button>
         </div>
       </div>
@@ -600,16 +611,189 @@ function PaipanResult({
 
 function AIDivinationPanel({
   open,
+  result,
   onClose,
 }: {
   open: boolean;
+  result: LiuyaoPaipan;
   onClose: () => void;
 }) {
   const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState<AIDivinationMessage[]>([]);
+  const [sessionId, setSessionId] = useState(createLiuyaoAISessionId);
+  const [isSending, setIsSending] = useState(false);
+  const nextMessageIdRef = useRef(1);
+  const activeRequestIdRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+
+    const content = message.trim();
+
+    if (!content || isSending) {
+      return;
+    }
+
+    const userMessageId = nextMessageIdRef.current++;
+    const assistantMessageId = nextMessageIdRef.current++;
+    const requestMessages = buildLiuyaoAIRequestMessages(messages, content);
+    const requestId = activeRequestIdRef.current + 1;
+    activeRequestIdRef.current = requestId;
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: userMessageId,
+        role: "user",
+        content,
+      },
+      {
+        id: assistantMessageId,
+        role: "assistant",
+        content: "",
+        status: "streaming",
+      },
+    ]);
     setMessage("");
+    setIsSending(true);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    const isActiveRequest = () => activeRequestIdRef.current === requestId;
+
+    try {
+      const response = await fetch(LIUYAO_AI_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          payload: encodeBase64Json({
+            systemPrompt: formatLiuyaoCopyMarkdown(result),
+            sessionId,
+            messages: requestMessages,
+          }),
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!isActiveRequest()) {
+        return;
+      }
+
+      if (!response.ok || !response.body) {
+        throw new Error(await readAIErrorMessage(response));
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            break;
+          }
+
+          const chunk = decoder.decode(value, { stream: true });
+
+          if (!chunk) {
+            continue;
+          }
+
+          if (isActiveRequest()) {
+            setMessages((prev) => appendToMessage(prev, assistantMessageId, chunk));
+          }
+        }
+
+        const rest = decoder.decode();
+
+        if (rest && isActiveRequest()) {
+          setMessages((prev) => appendToMessage(prev, assistantMessageId, rest));
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      if (!isActiveRequest()) {
+        return;
+      }
+
+      setMessages((prev) =>
+        prev.map((item) => {
+          if (item.id !== assistantMessageId) {
+            return item;
+          }
+
+          return {
+            ...item,
+            content: item.content || "AI 未返回内容。",
+            status: item.content ? "complete" : "error",
+          };
+        })
+      );
+    } catch (err) {
+      if (!isActiveRequest()) {
+        return;
+      }
+
+      if (abortController.signal.aborted) {
+        setMessages((prev) =>
+          prev.map((item) =>
+            item.id === assistantMessageId
+              ? {
+                  ...item,
+                  content: item.content || "已停止。",
+                  status: "stopped",
+                }
+              : item
+          )
+        );
+        return;
+      }
+
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === assistantMessageId
+            ? {
+                ...item,
+                content: err instanceof Error ? err.message : "AI 解卦失败，请稍后再试。",
+                status: "error",
+              }
+            : item
+        )
+      );
+    } finally {
+      if (abortControllerRef.current === abortController) {
+        abortControllerRef.current = null;
+      }
+
+      if (isActiveRequest()) {
+        setIsSending(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  const handleStop = () => {
+    abortControllerRef.current?.abort();
+  };
+
+  const handleNewSession = () => {
+    activeRequestIdRef.current += 1;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setMessage("");
+    setMessages([]);
+    setIsSending(false);
+    setSessionId(createLiuyaoAISessionId());
   };
 
   useEffect(() => {
@@ -648,14 +832,18 @@ function AIDivinationPanel({
       <aside
         aria-hidden={!open}
         className={cn(
-          "liuyao-ai-motion hidden min-h-full w-[23rem] shrink-0 overflow-hidden rounded-2xl border bg-card shadow-sm lg:block lg:self-stretch",
+          "liuyao-ai-motion hidden min-h-0 w-[23rem] shrink-0 overflow-hidden rounded-2xl border bg-card shadow-sm lg:block lg:h-[clamp(28rem,calc(100vh-7rem),42rem)] lg:self-start",
           open ? "liuyao-ai-panel-open" : "liuyao-ai-panel-closed"
         )}
       >
         <AIDivinationPanelContent
+          isSending={isSending}
           message={message}
+          messages={messages}
           onClose={onClose}
+          onNewSession={handleNewSession}
           onMessageChange={setMessage}
+          onStop={handleStop}
           onSubmit={handleSubmit}
           tabIndex={open ? 0 : -1}
         />
@@ -666,7 +854,7 @@ function AIDivinationPanel({
       >
         <button
           type="button"
-          aria-label="关闭 AI 解卦"
+          aria-label="关闭询问AI"
           tabIndex={open ? 0 : -1}
           className="absolute inset-0 bg-transparent"
           onClick={onClose}
@@ -674,16 +862,20 @@ function AIDivinationPanel({
         <section
           role="dialog"
           aria-modal="true"
-          aria-label="AI 解卦"
+          aria-label="询问AI"
           className={cn(
             "liuyao-ai-motion absolute inset-x-0 bottom-0 top-8 overflow-hidden rounded-t-2xl border bg-card shadow-lg",
             open ? "liuyao-ai-sheet-open" : "liuyao-ai-sheet-closed"
           )}
         >
           <AIDivinationPanelContent
+            isSending={isSending}
             message={message}
+            messages={messages}
             onClose={onClose}
+            onNewSession={handleNewSession}
             onMessageChange={setMessage}
+            onStop={handleStop}
             onSubmit={handleSubmit}
             tabIndex={open ? 0 : -1}
           />
@@ -694,52 +886,230 @@ function AIDivinationPanel({
 }
 
 function AIDivinationPanelContent({
+  isSending,
   message,
+  messages,
   onClose,
+  onNewSession,
   onMessageChange,
+  onStop,
   onSubmit,
   tabIndex,
 }: {
+  isSending: boolean;
   message: string;
+  messages: AIDivinationMessage[];
   onClose: () => void;
+  onNewSession: () => void;
   onMessageChange: (value: string) => void;
+  onStop: () => void;
   onSubmit: (event: FormEvent) => void;
   tabIndex: 0 | -1;
 }) {
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const shouldStickToBottomRef = useRef(true);
+
+  useEffect(() => {
+    if (tabIndex === -1) {
+      return;
+    }
+
+    const viewport = getScrollAreaViewport(scrollAreaRef.current);
+
+    if (!viewport) {
+      return;
+    }
+
+    const updateShouldStick = () => {
+      shouldStickToBottomRef.current = isScrolledNearBottom(viewport);
+    };
+
+    updateShouldStick();
+    viewport.addEventListener("scroll", updateShouldStick, { passive: true });
+
+    return () => {
+      viewport.removeEventListener("scroll", updateShouldStick);
+    };
+  }, [tabIndex]);
+
+  useEffect(() => {
+    if (tabIndex === -1 || !shouldStickToBottomRef.current) {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const viewport = getScrollAreaViewport(scrollAreaRef.current);
+
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [messages, tabIndex]);
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
       <div className="flex items-center justify-between border-b px-3 py-2">
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label="关闭 AI 解卦"
+          aria-label="关闭询问AI"
           tabIndex={tabIndex}
           onClick={onClose}
         >
           <ArrowLeftIcon />
         </Button>
-        <div className="text-sm font-medium">AI 解卦</div>
-        <div className="size-8" aria-hidden="true" />
+        <div className="text-sm font-medium">询问AI</div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="新建询问AI会话"
+          tabIndex={tabIndex}
+          onClick={onNewSession}
+        >
+          <PlusIcon />
+        </Button>
       </div>
 
-      <div className="min-h-0 flex-1" />
+      <div ref={scrollAreaRef} className="h-full min-h-0">
+        <ScrollArea className="h-full min-h-0" aria-live="polite" aria-label="询问AI消息">
+          <div className="flex min-h-full flex-col justify-end gap-3 px-3 py-4">
+            {messages.map((item) => (
+              <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
+                <div
+                  className={cn(
+                    "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm break-words whitespace-pre-wrap",
+                    item.role === "user"
+                      ? "rounded-br-md bg-primary text-primary-foreground"
+                      : "rounded-bl-md bg-muted text-card-foreground",
+                    item.status === "error" && "bg-destructive/10 text-destructive"
+                  )}
+                >
+                  {item.content || (item.status === "streaming" ? "正在解卦..." : "")}
+                </div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
 
       <form className="border-t p-3" onSubmit={onSubmit}>
-        <div className="flex items-center gap-2">
-          <Input
-            value={message}
-            tabIndex={tabIndex}
-            onChange={(event) => onMessageChange(event.target.value)}
-            placeholder="输入想追问的内容"
-          />
-          <Button type="submit" size="icon" aria-label="发送追问" tabIndex={tabIndex} disabled={!message.trim()}>
-            <ArrowUpIcon />
-          </Button>
-        </div>
+        <FieldGroup className="gap-0">
+          <Field orientation="horizontal" className="items-center gap-2">
+            <FieldLabel htmlFor="liuyao-ai-message" className="sr-only">追问内容</FieldLabel>
+            <Input
+              id="liuyao-ai-message"
+              value={message}
+              tabIndex={tabIndex}
+              disabled={isSending}
+              onChange={(event) => onMessageChange(event.target.value)}
+              placeholder="输入你想了解的内容"
+            />
+            <Button
+              type={isSending ? "button" : "submit"}
+              size="icon"
+              aria-label={isSending ? "停止输出" : "发送追问"}
+              tabIndex={tabIndex}
+              disabled={!isSending && !message.trim()}
+              onClick={isSending ? onStop : undefined}
+            >
+              {isSending ? <SquareIcon /> : <ArrowUpIcon />}
+            </Button>
+          </Field>
+        </FieldGroup>
       </form>
     </div>
   );
+}
+
+function getScrollAreaViewport(root: HTMLDivElement | null) {
+  return root?.querySelector<HTMLElement>("[data-slot='scroll-area-viewport']") ?? null;
+}
+
+function isScrolledNearBottom(element: HTMLElement) {
+  const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+  return distanceToBottom < 32;
+}
+
+function appendToMessage(messages: AIDivinationMessage[], messageId: number, chunk: string) {
+  return messages.map((item) =>
+    item.id === messageId
+      ? {
+          ...item,
+          content: item.content + chunk,
+        }
+      : item
+  );
+}
+
+function buildLiuyaoAIRequestMessages(messages: AIDivinationMessage[], currentContent: string) {
+  const history = messages
+    .flatMap((item): Array<Pick<AIDivinationMessage, "role" | "content">> => {
+      const content = item.content.trim();
+
+      if (!content || (item.role === "assistant" && item.status === "error")) {
+        return [];
+      }
+
+      return [
+        {
+          role: item.role,
+          content: content.slice(0, MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH),
+        },
+      ];
+    })
+    .slice(-(MAX_LIUYAO_AI_CONTEXT_MESSAGES - 1));
+
+  return [
+    ...history,
+    {
+      role: "user" as const,
+      content: currentContent.slice(0, MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH),
+    },
+  ];
+}
+
+function createLiuyaoAISessionId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return `liuyao-${globalThis.crypto.randomUUID()}`;
+  }
+
+  return `liuyao-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function encodeBase64Json(value: unknown) {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  let binary = "";
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+
+  return btoa(binary);
+}
+
+async function readAIErrorMessage(response: Response) {
+  try {
+    const data = await response.json();
+
+    if (isRecord(data) && typeof data.error === "string") {
+      return data.error;
+    }
+  } catch {
+    // Fall through to the generic message below.
+  }
+
+  return "AI 解卦失败，请稍后再试。";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 async function copyTextToClipboard(text: string) {
