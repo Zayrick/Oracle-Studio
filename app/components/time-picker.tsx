@@ -10,8 +10,62 @@ interface TimePickerProps {
 
 export function TimePicker({ value, onChange, id, className }: TimePickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const handledKeyboardDigitRef = useRef(false);
   const [displayValue, setDisplayValue] = useState("--:--:--");
   const [cursorPos, setCursorPos] = useState(0);
+
+  const updateSegment = (digit: string, input?: HTMLInputElement) => {
+    const parts = displayValue.split(":");
+    let hours = parts[0] || "--";
+    let minutes = parts[1] || "--";
+    let seconds = parts[2] || "--";
+
+    const segmentIndex = Math.floor(cursorPos / 3);
+    const posInSegment = cursorPos % 3;
+
+    if (segmentIndex === 0) {
+      if (posInSegment === 0) {
+        hours = digit + (hours[1] === "-" ? "-" : hours[1]);
+      } else {
+        hours = (hours[0] === "-" ? "0" : hours[0]) + digit;
+      }
+      const h = parseInt(hours.replace(/-/g, "0"));
+      if (h > 23) hours = "23";
+    } else if (segmentIndex === 1) {
+      if (posInSegment === 0) {
+        minutes = digit + (minutes[1] === "-" ? "-" : minutes[1]);
+      } else {
+        minutes = (minutes[0] === "-" ? "0" : minutes[0]) + digit;
+      }
+      const m = parseInt(minutes.replace(/-/g, "0"));
+      if (m > 59) minutes = "59";
+    } else if (segmentIndex === 2) {
+      if (posInSegment === 0) {
+        seconds = digit + (seconds[1] === "-" ? "-" : seconds[1]);
+      } else {
+        seconds = (seconds[0] === "-" ? "0" : seconds[0]) + digit;
+      }
+      const s = parseInt(seconds.replace(/-/g, "0"));
+      if (s > 59) seconds = "59";
+    }
+
+    const newValue = `${hours}:${minutes}:${seconds}`;
+    setDisplayValue(newValue);
+
+    let newPos = cursorPos + 1;
+    if (newPos === 2 || newPos === 5) newPos++;
+    if (newPos >= 8) newPos = 6;
+
+    setCursorPos(newPos);
+    setTimeout(() => {
+      const targetInput = input || inputRef.current;
+      targetInput?.setSelectionRange(newPos, newPos);
+    }, 0);
+
+    if (!newValue.includes("-")) {
+      onChange(newValue);
+    }
+  };
 
   // Update display value when prop value changes
   useEffect(() => {
@@ -44,61 +98,8 @@ export function TimePicker({ value, onChange, id, className }: TimePickerProps) 
     // Handle number keys
     if (/^\d$/.test(e.key)) {
       e.preventDefault();
-
-      const parts = displayValue.split(":");
-      let hours = parts[0] || "--";
-      let minutes = parts[1] || "--";
-      let seconds = parts[2] || "--";
-
-      const segmentIndex = Math.floor(cursorPos / 3);
-      const posInSegment = cursorPos % 3;
-
-      if (segmentIndex === 0) {
-        // Hours
-        if (posInSegment === 0) {
-          hours = e.key + (hours[1] === "-" ? "-" : hours[1]);
-        } else {
-          hours = (hours[0] === "-" ? "0" : hours[0]) + e.key;
-        }
-        const h = parseInt(hours.replace(/-/g, "0"));
-        if (h > 23) hours = "23";
-      } else if (segmentIndex === 1) {
-        // Minutes
-        if (posInSegment === 0) {
-          minutes = e.key + (minutes[1] === "-" ? "-" : minutes[1]);
-        } else {
-          minutes = (minutes[0] === "-" ? "0" : minutes[0]) + e.key;
-        }
-        const m = parseInt(minutes.replace(/-/g, "0"));
-        if (m > 59) minutes = "59";
-      } else if (segmentIndex === 2) {
-        // Seconds
-        if (posInSegment === 0) {
-          seconds = e.key + (seconds[1] === "-" ? "-" : seconds[1]);
-        } else {
-          seconds = (seconds[0] === "-" ? "0" : seconds[0]) + e.key;
-        }
-        const s = parseInt(seconds.replace(/-/g, "0"));
-        if (s > 59) seconds = "59";
-      }
-
-      const newValue = `${hours}:${minutes}:${seconds}`;
-      setDisplayValue(newValue);
-
-      // Move to next position
-      let newPos = cursorPos + 1;
-      if (newPos === 2 || newPos === 5) newPos++; // Skip colon
-      if (newPos >= 8) newPos = 6; // Stay at end
-
-      setCursorPos(newPos);
-      setTimeout(() => {
-        input.setSelectionRange(newPos, newPos);
-      }, 0);
-
-      // Update parent if complete
-      if (!newValue.includes("-")) {
-        onChange(newValue);
-      }
+      handledKeyboardDigitRef.current = true;
+      updateSegment(e.key, input);
     }
     // Handle arrow keys and tab
     else if (e.key === "ArrowRight" || e.key === "Tab") {
@@ -143,6 +144,21 @@ export function TimePicker({ value, onChange, id, className }: TimePickerProps) 
     }
   };
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (handledKeyboardDigitRef.current) {
+      handledKeyboardDigitRef.current = false;
+      return;
+    }
+
+    const digit = e.currentTarget.value.replace(displayValue, "").match(/\d/)?.[0];
+    if (digit) {
+      updateSegment(digit, e.currentTarget);
+      return;
+    }
+
+    setDisplayValue(displayValue);
+  };
+
   return (
     <Input
       ref={inputRef}
@@ -151,11 +167,11 @@ export function TimePicker({ value, onChange, id, className }: TimePickerProps) 
       inputMode="numeric"
       value={displayValue}
       onClick={handleClick}
+      onChange={handleChange}
       onKeyDown={handleKeyDown}
       onFocus={handleFocus}
       placeholder="--:--:--"
       className={`font-mono text-center ${className || ""}`}
-      readOnly
     />
   );
 }

@@ -605,6 +605,13 @@ function AIDivinationPanel({
   open: boolean;
   onClose: () => void;
 }) {
+  const [message, setMessage] = useState("");
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    setMessage("");
+  };
+
   useEffect(() => {
     if (!open) {
       return;
@@ -641,10 +648,18 @@ function AIDivinationPanel({
       <aside
         aria-hidden={!open}
         className={cn(
-          "liuyao-ai-motion pointer-events-none hidden min-h-full w-[23rem] shrink-0 overflow-hidden rounded-2xl border bg-card shadow-sm lg:block lg:self-stretch",
+          "liuyao-ai-motion hidden min-h-full w-[23rem] shrink-0 overflow-hidden rounded-2xl border bg-card shadow-sm lg:block lg:self-stretch",
           open ? "liuyao-ai-panel-open" : "liuyao-ai-panel-closed"
         )}
-      />
+      >
+        <AIDivinationPanelContent
+          message={message}
+          onClose={onClose}
+          onMessageChange={setMessage}
+          onSubmit={handleSubmit}
+          tabIndex={open ? 0 : -1}
+        />
+      </aside>
       <div
         aria-hidden={!open}
         className={cn("fixed inset-x-0 bottom-0 top-14 z-40 lg:hidden", open ? "pointer-events-auto" : "pointer-events-none")}
@@ -661,12 +676,69 @@ function AIDivinationPanel({
           aria-modal="true"
           aria-label="AI 解卦"
           className={cn(
-            "liuyao-ai-motion absolute inset-x-0 bottom-0 top-8 rounded-t-2xl border bg-card shadow-lg",
+            "liuyao-ai-motion absolute inset-x-0 bottom-0 top-8 overflow-hidden rounded-t-2xl border bg-card shadow-lg",
             open ? "liuyao-ai-sheet-open" : "liuyao-ai-sheet-closed"
           )}
-        />
+        >
+          <AIDivinationPanelContent
+            message={message}
+            onClose={onClose}
+            onMessageChange={setMessage}
+            onSubmit={handleSubmit}
+            tabIndex={open ? 0 : -1}
+          />
+        </section>
       </div>
     </>
+  );
+}
+
+function AIDivinationPanelContent({
+  message,
+  onClose,
+  onMessageChange,
+  onSubmit,
+  tabIndex,
+}: {
+  message: string;
+  onClose: () => void;
+  onMessageChange: (value: string) => void;
+  onSubmit: (event: FormEvent) => void;
+  tabIndex: 0 | -1;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center justify-between border-b px-3 py-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="关闭 AI 解卦"
+          tabIndex={tabIndex}
+          onClick={onClose}
+        >
+          <ArrowLeftIcon />
+        </Button>
+        <div className="text-sm font-medium">AI 解卦</div>
+        <div className="size-8" aria-hidden="true" />
+      </div>
+
+      <div className="min-h-0 flex-1" />
+
+      <form className="border-t p-3" onSubmit={onSubmit}>
+        <div className="flex items-center gap-2">
+          <Input
+            value={message}
+            tabIndex={tabIndex}
+            onChange={(event) => onMessageChange(event.target.value)}
+            placeholder="输入想追问的内容"
+          />
+          <Button type="submit" size="icon" aria-label="发送追问" tabIndex={tabIndex} disabled={!message.trim()}>
+            <CornerLeftUpIcon />
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 }
 
