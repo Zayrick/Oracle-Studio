@@ -1542,10 +1542,17 @@ function AutoFitQuestionText({ children }: { children: string }) {
         const targetHeight = isDesktop ? 64 : 56;
         let nextFontSize = maxFontSize;
 
-        container.style.height = `${targetHeight}px`;
-        container.style.overflow = "hidden";
+        container.style.height = "auto";
+        container.style.overflow = "visible";
         textElement.style.fontSize = `${nextFontSize}px`;
         textElement.style.lineHeight = "1.3";
+
+        if (!isDesktop && textElement.scrollHeight <= targetHeight) {
+          return;
+        }
+
+        container.style.height = `${targetHeight}px`;
+        container.style.overflow = "hidden";
 
         while (nextFontSize > minFontSize && textElement.scrollHeight > container.clientHeight) {
           nextFontSize -= 1;
