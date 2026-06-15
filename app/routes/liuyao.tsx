@@ -26,10 +26,11 @@ import {
   type YaoType,
 } from "@/features/liuyao/paipan";
 import { cn } from "@/lib/utils";
+import { PAGE_TITLES } from "@/lib/page-titles";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "六爻 - 占卜大师" },
+    { title: PAGE_TITLES.liuyao },
     { name: "description", content: "六爻占卜" },
   ];
 }

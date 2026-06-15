@@ -1,18 +1,19 @@
 import { Link } from "react-router";
 import type { Route } from "./+types/home";
 import { Button } from "../components/ui/button";
+import { PAGE_TITLES } from "@/lib/page-titles";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "占卜大师" },
+    { title: PAGE_TITLES.home },
     { name: "description", content: "选择您的占卜方式" },
   ];
 }
 
 export default function Home() {
   const divinations = [
-    { name: "六爻", path: "/六爻" },
-    { name: "八字", path: "/八字" },
+    { name: "六爻", path: "/liuyao" },
+    { name: "八字", path: "/bazi" },
     { name: "塔罗牌", path: "/tarot" },
   ];
 
