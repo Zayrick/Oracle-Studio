@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "re
 import { flushSync } from "react-dom";
 import { format } from "date-fns";
 import { ArrowLeftIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, CopyIcon, CornerLeftUpIcon, PlusIcon, SparklesIcon, SquareIcon } from "lucide-react";
+import { Marked, type RendererObject } from "marked";
 import type { Route } from "./+types/liuyao";
 
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,36 @@ const LIUYAO_AI_ENDPOINT = "/api/liuyao/ai";
 const MAX_LIUYAO_AI_CONTEXT_MESSAGES = 12;
 const MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH = 4_000;
 const COPY_BRANCH_ORDER = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
+const MARKDOWN_ZERO_WIDTH_PREFIX_PATTERN = /^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/;
+
+const liuyaoMarkdownRenderer: RendererObject = {
+  html({ text }) {
+    return escapeHtml(text);
+  },
+  link({ href, title, tokens }) {
+    const text = this.parser.parseInline(tokens);
+    const safeHref = normalizeMarkdownUrl(href);
+
+    if (!safeHref) {
+      return text;
+    }
+
+    const titleAttribute = title ? ` title="${escapeHtmlAttribute(title)}"` : "";
+
+    return `<a href="${escapeHtmlAttribute(safeHref)}"${titleAttribute} target="_blank" rel="noreferrer noopener nofollow">${text}</a>`;
+  },
+  image({ text }) {
+    return text ? escapeHtml(`[图片：${text}]`) : "";
+  },
+};
+
+const liuyaoMarkdown = new Marked({
+  async: false,
+  breaks: true,
+  gfm: true,
+  renderer: liuyaoMarkdownRenderer,
+  silent: true,
+});
 
 const COPY_BRANCH_ELEMENTS: Record<string, CopyElementName> = {
   子: "水",
@@ -983,14 +1014,14 @@ function AIDivinationPanelContent({
               <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
                 <div
                   className={cn(
-                    "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm break-words whitespace-pre-wrap",
+                    "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm break-words",
                     item.role === "user"
-                      ? "rounded-br-md bg-primary text-primary-foreground"
-                      : "rounded-bl-md bg-muted text-card-foreground",
+                      ? "rounded-br-md bg-primary text-primary-foreground whitespace-pre-wrap"
+                      : "liuyao-ai-markdown rounded-bl-md bg-muted text-card-foreground",
                     item.status === "error" && "bg-destructive/10 text-destructive"
                   )}
                 >
-                  {item.content || (item.status === "streaming" ? "正在解卦..." : "")}
+                  <AIDivinationMessageContent message={item} />
                 </div>
               </div>
             ))}
@@ -1027,6 +1058,24 @@ function AIDivinationPanelContent({
   );
 }
 
+function AIDivinationMessageContent({ message }: { message: AIDivinationMessage }) {
+  if (!message.content) {
+    return message.status === "streaming" ? "正在解卦..." : null;
+  }
+
+  if (message.role === "assistant" && message.status !== "error") {
+    return (
+      <div
+        dangerouslySetInnerHTML={{
+          __html: renderLiuyaoMarkdown(message.content),
+        }}
+      />
+    );
+  }
+
+  return message.content;
+}
+
 function getScrollAreaViewport(root: HTMLDivElement | null) {
   return root?.querySelector<HTMLElement>("[data-slot='scroll-area-viewport']") ?? null;
 }
@@ -1034,6 +1083,50 @@ function getScrollAreaViewport(root: HTMLDivElement | null) {
 function isScrolledNearBottom(element: HTMLElement) {
   const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
   return distanceToBottom < 32;
+}
+
+function renderLiuyaoMarkdown(content: string) {
+  return liuyaoMarkdown.parse(
+    content.replace(MARKDOWN_ZERO_WIDTH_PREFIX_PATTERN, ""),
+    { async: false }
+  );
+}
+
+function normalizeMarkdownUrl(href: string) {
+  const trimmed = href.trim();
+
+  if (!trimmed || /[\u0000-\u001F\u007F\s]/.test(trimmed)) {
+    return "";
+  }
+
+  try {
+    const url = new URL(trimmed, "https://oracle-studio.local");
+
+    if (["http:", "https:", "mailto:", "tel:"].includes(url.protocol)) {
+      return trimmed;
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
+}
+
+const HTML_ESCAPE_REPLACEMENTS: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+  "`": "&#96;",
+};
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"'`]/g, (char) => HTML_ESCAPE_REPLACEMENTS[char] ?? char);
+}
+
+function escapeHtmlAttribute(value: string) {
+  return escapeHtml(value);
 }
 
 function appendToMessage(messages: AIDivinationMessage[], messageId: number, chunk: string) {
