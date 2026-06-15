@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { Link } from "react-router";
 import { format } from "date-fns";
@@ -38,6 +38,7 @@ type CopyRelative = LiuyaoLineInfo["relation"];
 type CopyStemBasis = "yearStem" | "dayStem";
 type CopyBranchBasis = "yearBranch" | "dayBranch";
 type CopyTargetToken = { type: "stem" | "branch"; name: string };
+type CopyStatus = "idle" | "copied" | "error";
 type AIDivinationMessage = {
   id: number;
   role: "user" | "assistant";
@@ -300,6 +301,61 @@ function runLiuyaoViewTransition(update: () => void) {
   });
 }
 
+function useLiuyaoResultCopy(result: LiuyaoPaipan | null) {
+  const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
+  const resetTimerRef = useRef<number | null>(null);
+
+  const clearResetTimer = () => {
+    if (resetTimerRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = null;
+  };
+
+  const scheduleReset = (delay: number) => {
+    clearResetTimer();
+
+    resetTimerRef.current = window.setTimeout(() => {
+      setCopyStatus("idle");
+      resetTimerRef.current = null;
+    }, delay);
+  };
+
+  const resetCopyStatus = () => {
+    clearResetTimer();
+    setCopyStatus("idle");
+  };
+
+  const copyResult = async () => {
+    if (!result) {
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(formatLiuyaoCopyMarkdown(result));
+      setCopyStatus("copied");
+      scheduleReset(1600);
+    } catch {
+      setCopyStatus("error");
+      scheduleReset(2200);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      clearResetTimer();
+    };
+  }, []);
+
+  return {
+    copyStatus,
+    copyResult,
+    resetCopyStatus,
+  };
+}
+
 export default function Liuyao() {
   const [question, setQuestion] = useState("");
   const [date, setDate] = useState<Date>(new Date());
@@ -311,6 +367,7 @@ export default function Liuyao() {
   const [result, setResult] = useState<LiuyaoPaipan | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [error, setError] = useState("");
+  const { copyStatus, copyResult, resetCopyStatus } = useLiuyaoResultCopy(result);
 
   const handleSetNow = () => {
     const now = new Date();
@@ -344,10 +401,12 @@ export default function Liuyao() {
       const nextResult = buildLiuyaoPaipan({ question, date, time, yaos });
 
       runLiuyaoViewTransition(() => {
+        resetCopyStatus();
         setResult(nextResult);
         setAiPanelOpen(false);
       });
     } catch (err) {
+      resetCopyStatus();
       setResult(null);
       setAiPanelOpen(false);
       setError(err instanceof Error ? err.message : "排盘失败，请检查输入。");
@@ -356,6 +415,7 @@ export default function Liuyao() {
 
   const handleStartOver = () => {
     runLiuyaoViewTransition(() => {
+      resetCopyStatus();
       setResult(null);
       setAiPanelOpen(false);
       setError("");
@@ -363,17 +423,20 @@ export default function Liuyao() {
   };
 
   return (
-    <div className="container relative mx-auto flex min-h-svh items-center px-4 py-20 md:min-h-[calc(100svh-3.5rem)] lg:py-10">
-      <Link
-        to="/"
-        className={cn(
-          buttonVariants({ variant: "outline", size: "sm" }),
-          "absolute left-4 top-4 md:hidden"
-        )}
-      >
-        <ArrowLeftIcon data-icon="inline-start" />
-        返回主页
-      </Link>
+    <div className="container relative mx-auto flex min-h-svh items-center px-4 py-13 md:min-h-[calc(100svh-3.5rem)] md:py-20 lg:py-10">
+      <LiuyaoMobilePageActions
+        result={result}
+        actions={
+          <LiuyaoResultActions
+            layout="mobile"
+            copyStatus={copyStatus}
+            aiPanelOpen={aiPanelOpen}
+            onCopy={copyResult}
+            onStartOver={handleStartOver}
+            onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
+          />
+        }
+      />
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 lg:gap-8">
         {!result ? (
           <div className="flex flex-col gap-2 text-center">
@@ -392,9 +455,16 @@ export default function Liuyao() {
             >
               <PaipanResult
                 result={result}
-                aiPanelOpen={aiPanelOpen}
-                onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
-                onStartOver={handleStartOver}
+                actions={
+                  <LiuyaoResultActions
+                    layout="desktop"
+                    copyStatus={copyStatus}
+                    aiPanelOpen={aiPanelOpen}
+                    onCopy={copyResult}
+                    onStartOver={handleStartOver}
+                    onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
+                  />
+                }
               />
               <AIDivinationPanel
                 open={aiPanelOpen}
@@ -506,48 +576,108 @@ export default function Liuyao() {
   );
 }
 
+function LiuyaoMobilePageActions({
+  result,
+  actions,
+}: {
+  result: LiuyaoPaipan | null;
+  actions: ReactNode;
+}) {
+  if (result) {
+    return (
+      <div className="absolute left-4 right-4 top-4 md:hidden">
+        {actions}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      to="/"
+      className={cn(
+        buttonVariants({ variant: "outline", size: "sm" }),
+        "absolute left-4 top-4 md:hidden"
+      )}
+    >
+      <ArrowLeftIcon data-icon="inline-start" />
+      返回主页
+    </Link>
+  );
+}
+
+function LiuyaoResultActions({
+  layout,
+  copyStatus,
+  aiPanelOpen,
+  onCopy,
+  onStartOver,
+  onToggleAiPanel,
+}: {
+  layout: "mobile" | "desktop";
+  copyStatus: CopyStatus;
+  aiPanelOpen: boolean;
+  onCopy: () => void;
+  onStartOver: () => void;
+  onToggleAiPanel: () => void;
+}) {
+  const compact = layout === "mobile";
+
+  return (
+    <div
+      className={cn(
+        "flex max-w-full items-center gap-2",
+        compact ? "justify-between" : "justify-between gap-3"
+      )}
+    >
+      <Button
+        type="button"
+        variant="outline"
+        size={compact ? "sm" : "default"}
+        onClick={onStartOver}
+      >
+        <ArrowLeftIcon data-icon="inline-start" />
+        再起一卦
+      </Button>
+      <div className="ml-auto flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size={compact ? "icon-sm" : "icon"}
+          aria-label={copyStatus === "copied" ? "已复制排盘结果" : "复制排盘结果"}
+          onClick={onCopy}
+        >
+          {copyStatus === "copied" ? <CheckIcon /> : <CopyIcon />}
+        </Button>
+        {copyStatus === "error" ? (
+          <span className="text-xs text-destructive">复制失败</span>
+        ) : null}
+        <Button
+          type="button"
+          size={compact ? "sm" : "default"}
+          aria-expanded={aiPanelOpen}
+          onClick={onToggleAiPanel}
+        >
+          <SparklesIcon data-icon="inline-start" />
+          询问AI
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function PaipanResult({
   result,
-  aiPanelOpen,
-  onToggleAiPanel,
-  onStartOver,
+  actions,
 }: {
   result: LiuyaoPaipan;
-  aiPanelOpen: boolean;
-  onToggleAiPanel: () => void;
-  onStartOver: () => void;
+  actions: ReactNode;
 }) {
   const showChangedColumns = Boolean(result.changed);
-  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
-
-  const handleCopy = async () => {
-    try {
-      await copyTextToClipboard(formatLiuyaoCopyMarkdown(result));
-      setCopyStatus("copied");
-      window.setTimeout(() => setCopyStatus("idle"), 1600);
-    } catch {
-      setCopyStatus("error");
-      window.setTimeout(() => setCopyStatus("idle"), 2200);
-    }
-  };
 
   return (
     <section className="flex w-full flex-col gap-4 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 sm:gap-6 lg:w-fit lg:max-w-full lg:flex-none">
-      <div className="flex items-center justify-between gap-3">
-        <Button type="button" variant="outline" onClick={onStartOver}>
-          <ArrowLeftIcon data-icon="inline-start" />
-          再起一卦
-        </Button>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="icon" aria-label={copyStatus === "copied" ? "已复制排盘结果" : "复制排盘结果"} onClick={handleCopy}>
-            {copyStatus === "copied" ? <CheckIcon /> : <CopyIcon />}
-          </Button>
-          {copyStatus === "error" ? <span className="text-xs text-destructive">复制失败</span> : null}
-          <Button type="button" aria-expanded={aiPanelOpen} onClick={onToggleAiPanel}>
-            <SparklesIcon data-icon="inline-start" />
-            询问AI
-          </Button>
-        </div>
+      <div className="hidden md:block">
+        {actions}
       </div>
 
       <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-stretch lg:justify-between lg:gap-10">
