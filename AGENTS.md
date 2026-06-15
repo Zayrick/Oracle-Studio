@@ -17,6 +17,8 @@ Oracle Studio 是一个使用 React Router 7 构建并部署在 Cloudflare Worke
 
 ## 开发命令
 
+除非用户明确要求启动本地服务，否则不要主动运行 `npm run dev`、`npm run preview` 或其他会占用端口的本地 dev/preview 服务。需要验证时优先使用 `npm run typecheck`、`npm run build` 等一次性命令。
+
 ```bash
 # 启动开发服务器，支持 HMR，访问 http://localhost:5173
 npm run dev
