@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type Reac
 import { flushSync } from "react-dom";
 import { Link } from "react-router";
 import { format } from "date-fns";
+import { motion, useReducedMotion } from "motion/react";
 import { ArrowLeftIcon, ArrowUpIcon, CheckIcon, CopyIcon, CornerLeftUpIcon, PlusIcon, SparklesIcon, SquareIcon } from "lucide-react";
 import { Marked, type RendererObject } from "marked";
 import type { Route } from "./+types/liuyao";
@@ -41,7 +42,14 @@ export function meta({}: Route.MetaArgs) {
 const YAO_INDEXES_TOP_DOWN = [5, 4, 3, 2, 1, 0];
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-type LiuyaoCastingMethod = "manual" | "random";
+type LiuyaoCastingMethod = "manual" | "random" | "online";
+type OnlineCoinSide = "front" | "back";
+type OnlineCoinState = {
+  side: OnlineCoinSide;
+  rotation: number;
+  tosses: number;
+  drift: number;
+};
 type CopyElementName = LiuyaoLineInfo["element"];
 type CopyRelative = LiuyaoLineInfo["relation"];
 type CopyStemBasis = "yearStem" | "dayStem";
@@ -62,7 +70,10 @@ const MARKDOWN_ZERO_WIDTH_PREFIX_PATTERN = /^[\u200B\u200C\u200D\u200E\u200F\uFE
 const LIUYAO_CASTING_METHOD_ITEMS = [
   { label: "手动指定", value: "manual" },
   { label: "随机起卦", value: "random" },
+  { label: "在线摇卦", value: "online" },
 ] satisfies Array<{ label: string; value: LiuyaoCastingMethod }>;
+const ONLINE_CASTING_LINE_COUNT = 6;
+const ONLINE_COIN_BASE_DRIFTS = [-10, 0, 10];
 
 const liuyaoMarkdownRenderer: RendererObject = {
   html({ text }) {
@@ -368,24 +379,76 @@ function useLiuyaoResultCopy(result: LiuyaoPaipan | null) {
   };
 }
 
+function createDefaultLiuyaoYaos(): LiuyaoInputYao[] {
+  return Array.from({ length: ONLINE_CASTING_LINE_COUNT }, () => ({ type: "阳", moving: false }));
+}
+
 function createRandomLiuyaoYaos(): LiuyaoInputYao[] {
-  return Array.from({ length: 6 }, () => {
-    const coinScore = getRandomBit() + getRandomBit() + getRandomBit();
+  return Array.from({ length: ONLINE_CASTING_LINE_COUNT }, () =>
+    createLiuyaoYaoFromCoinScore(getRandomCoinScore())
+  );
+}
 
-    if (coinScore === 0) {
-      return { type: "阴", moving: true };
-    }
+function createRandomCoinThrow(): OnlineCoinSide[] {
+  return Array.from({ length: 3 }, () => (getRandomBit() === 1 ? "front" : "back"));
+}
 
-    if (coinScore === 1) {
-      return { type: "阳", moving: false };
-    }
+function getCoinThrowScore(coins: OnlineCoinSide[]) {
+  return coins.filter((coin) => coin === "front").length;
+}
 
-    if (coinScore === 2) {
-      return { type: "阴", moving: false };
-    }
+function getRandomCoinScore() {
+  return getCoinThrowScore(createRandomCoinThrow());
+}
 
-    return { type: "阳", moving: true };
-  });
+function createLiuyaoYaoFromCoinScore(coinScore: number): LiuyaoInputYao {
+  if (coinScore === 0) {
+    return { type: "阴", moving: true };
+  }
+
+  if (coinScore === 1) {
+    return { type: "阳", moving: false };
+  }
+
+  if (coinScore === 2) {
+    return { type: "阴", moving: false };
+  }
+
+  return { type: "阳", moving: true };
+}
+
+function createInitialOnlineCoins(): OnlineCoinState[] {
+  return [
+    { side: "front", rotation: 0, tosses: 0, drift: ONLINE_COIN_BASE_DRIFTS[0] },
+    { side: "back", rotation: 180, tosses: 0, drift: ONLINE_COIN_BASE_DRIFTS[1] },
+    { side: "front", rotation: 0, tosses: 0, drift: ONLINE_COIN_BASE_DRIFTS[2] },
+  ];
+}
+
+function getCoinSideRotation(side: OnlineCoinSide) {
+  return side === "front" ? 0 : 180;
+}
+
+function getNextCoinRotation(currentRotation: number, nextSide: OnlineCoinSide) {
+  const normalizedRotation = ((currentRotation % 360) + 360) % 360;
+  const targetRotation = getCoinSideRotation(nextSide);
+  const deltaToTarget = (targetRotation - normalizedRotation + 360) % 360;
+
+  return currentRotation + (4 + getRandomInt(3)) * 360 + deltaToTarget;
+}
+
+function getNextCoinDrift(index: number) {
+  return ONLINE_COIN_BASE_DRIFTS[index] + getRandomInt(7) - 3;
+}
+
+function formatYaoResultName(yao: LiuyaoInputYao) {
+  return yao.type === "阳"
+    ? yao.moving ? "老阳" : "少阳"
+    : yao.moving ? "老阴" : "少阴";
+}
+
+function formatCoinThrowScore(score: number) {
+  return `${score}正 ${3 - score}反`;
 }
 
 function getRandomBit() {
@@ -398,24 +461,119 @@ function getRandomBit() {
   return Math.random() < 0.5 ? 0 : 1;
 }
 
+function getRandomInt(maxExclusive: number) {
+  if (globalThis.crypto?.getRandomValues) {
+    const values = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(values);
+    return values[0] % maxExclusive;
+  }
+
+  return Math.floor(Math.random() * maxExclusive);
+}
+
 export default function Liuyao() {
   const [question, setQuestion] = useState("");
   const [date, setDate] = useState<Date>(new Date());
   const [time, setTime] = useState(format(new Date(), "HH:mm"));
   const [castingMethod, setCastingMethod] = useState<LiuyaoCastingMethod>("manual");
-
-  const [yaos, setYaos] = useState<LiuyaoInputYao[]>(
-    Array.from({ length: 6 }, () => ({ type: "阳", moving: false }))
-  );
+  const [yaos, setYaos] = useState<LiuyaoInputYao[]>(() => createDefaultLiuyaoYaos());
+  const [onlineCoins, setOnlineCoins] = useState<OnlineCoinState[]>(() => createInitialOnlineCoins());
+  const [onlineCastCount, setOnlineCastCount] = useState(0);
+  const [onlineLastCoinScore, setOnlineLastCoinScore] = useState<number | null>(null);
+  const [onlineRolling, setOnlineRolling] = useState(false);
   const [result, setResult] = useState<LiuyaoPaipan | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [error, setError] = useState("");
   const { copyStatus, copyResult, resetCopyStatus } = useLiuyaoResultCopy(result);
+  const reduceMotion = useReducedMotion();
+  const onlineRollingRef = useRef(false);
+  const onlineRollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (onlineRollingTimeoutRef.current) {
+        clearTimeout(onlineRollingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleSetNow = () => {
     const now = new Date();
     setDate(now);
     setTime(format(now, "HH:mm"));
+  };
+
+  const clearOnlineRollingTimeout = () => {
+    if (onlineRollingTimeoutRef.current) {
+      clearTimeout(onlineRollingTimeoutRef.current);
+      onlineRollingTimeoutRef.current = null;
+    }
+  };
+
+  const resetOnlineCastingState = () => {
+    clearOnlineRollingTimeout();
+    onlineRollingRef.current = false;
+    setOnlineRolling(false);
+    setOnlineCoins(createInitialOnlineCoins());
+    setOnlineCastCount(0);
+    setOnlineLastCoinScore(null);
+    setYaos(createDefaultLiuyaoYaos());
+  };
+
+  const handleCastingMethodChange = (value: LiuyaoCastingMethod) => {
+    setCastingMethod(value);
+    setError("");
+
+    if (value === "online") {
+      resetOnlineCastingState();
+      return;
+    }
+
+    clearOnlineRollingTimeout();
+    onlineRollingRef.current = false;
+    setOnlineRolling(false);
+  };
+
+  const handleOnlineCoinCast = () => {
+    if (onlineRollingRef.current || onlineCastCount >= ONLINE_CASTING_LINE_COUNT) {
+      return;
+    }
+
+    const coinThrow = createRandomCoinThrow();
+    const coinScore = getCoinThrowScore(coinThrow);
+    const nextLineIndex = onlineCastCount;
+    const nextYao = createLiuyaoYaoFromCoinScore(coinScore);
+    const shouldReduceMotion = Boolean(reduceMotion);
+
+    clearOnlineRollingTimeout();
+    onlineRollingRef.current = true;
+    setError("");
+    setOnlineRolling(true);
+    setOnlineCoins((coins) =>
+      coins.map((coin, index) => {
+        const nextSide = coinThrow[index];
+
+        return {
+          side: nextSide,
+          rotation: shouldReduceMotion
+            ? getCoinSideRotation(nextSide)
+            : getNextCoinRotation(coin.rotation, nextSide),
+          tosses: coin.tosses + 1,
+          drift: shouldReduceMotion ? 0 : getNextCoinDrift(index),
+        };
+      })
+    );
+
+    onlineRollingTimeoutRef.current = setTimeout(() => {
+      setYaos((prev) =>
+        prev.map((yao, index) => (index === nextLineIndex ? nextYao : yao))
+      );
+      setOnlineLastCoinScore(coinScore);
+      setOnlineCastCount(nextLineIndex + 1);
+      onlineRollingRef.current = false;
+      onlineRollingTimeoutRef.current = null;
+      setOnlineRolling(false);
+    }, shouldReduceMotion ? 140 : 860);
   };
 
   const toggleYaoType = (index: number) => {
@@ -439,6 +597,11 @@ export default function Liuyao() {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (castingMethod === "online" && onlineCastCount < ONLINE_CASTING_LINE_COUNT) {
+      setError(`请先完成六次在线摇卦，还差 ${ONLINE_CASTING_LINE_COUNT - onlineCastCount} 爻。`);
+      return;
+    }
 
     try {
       const submittedYaos = castingMethod === "random" ? createRandomLiuyaoYaos() : yaos;
@@ -466,10 +629,15 @@ export default function Liuyao() {
       setResult(null);
       setAiPanelOpen(false);
       setError("");
+      if (castingMethod === "online") {
+        resetOnlineCastingState();
+      }
     });
   };
 
   const mobileAiChatActive = Boolean(result && aiPanelOpen);
+  const onlineCastingComplete = onlineCastCount >= ONLINE_CASTING_LINE_COUNT;
+  const submitDisabled = castingMethod === "online" && (!onlineCastingComplete || onlineRolling);
 
   return (
     <div
@@ -593,7 +761,7 @@ export default function Liuyao() {
                     value={castingMethod}
                     onValueChange={(value) => {
                       if (value) {
-                        setCastingMethod(value);
+                        handleCastingMethodChange(value);
                       }
                     }}
                   >
@@ -649,14 +817,24 @@ export default function Liuyao() {
                               : "border-border bg-background hover:bg-muted"
                           )}
                         >
-                          {yao.type === "阳"
-                            ? yao.moving ? "老阳" : "少阳"
-                            : yao.moving ? "老阴" : "少阴"}
+                          {formatYaoResultName(yao)}
                         </button>
                       </div>
                     );
                   })}
                 </div>
+              ) : null}
+
+              {castingMethod === "online" ? (
+                <OnlineCoinCastingPanel
+                  coins={onlineCoins}
+                  yaos={yaos}
+                  castCount={onlineCastCount}
+                  rolling={onlineRolling}
+                  lastCoinScore={onlineLastCoinScore}
+                  onCast={handleOnlineCoinCast}
+                  onReset={resetOnlineCastingState}
+                />
               ) : null}
             </div>
 
@@ -667,7 +845,7 @@ export default function Liuyao() {
             ) : null}
 
             <div className="flex justify-center pt-1">
-              <Button type="submit" size="lg" className="w-full max-w-xs">
+              <Button type="submit" size="lg" className="w-full max-w-xs" disabled={submitDisabled}>
                 开始排盘
               </Button>
             </div>
@@ -705,6 +883,155 @@ function LiuyaoMobilePageActions({
       <ArrowLeftIcon data-icon="inline-start" />
       返回主页
     </Link>
+  );
+}
+
+function OnlineCoinCastingPanel({
+  coins,
+  yaos,
+  castCount,
+  rolling,
+  lastCoinScore,
+  onCast,
+  onReset,
+}: {
+  coins: OnlineCoinState[];
+  yaos: LiuyaoInputYao[];
+  castCount: number;
+  rolling: boolean;
+  lastCoinScore: number | null;
+  onCast: () => void;
+  onReset: () => void;
+}) {
+  const complete = castCount >= ONLINE_CASTING_LINE_COUNT;
+  const activeYaoName = complete ? "六爻" : YAO_NAMES[castCount];
+  const lastYao = castCount > 0 ? yaos[castCount - 1] : null;
+  const lastYaoName = castCount > 0 ? YAO_NAMES[castCount - 1] : "";
+  const coinButtonsDisabled = rolling || complete;
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg bg-muted/40 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium">
+            {rolling ? "摇卦中" : complete ? "六爻已成" : `下一爻：${activeYaoName}`}
+          </div>
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            {rolling
+              ? `正在决定：${activeYaoName}`
+              : lastYao && lastCoinScore !== null
+              ? `${lastYaoName}：${formatYaoResultName(lastYao)} · ${formatCoinThrowScore(lastCoinScore)}`
+              : "从初爻起"}
+          </div>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={onReset} disabled={rolling}>
+          重摇
+        </Button>
+      </div>
+
+      <div className="flex items-center justify-center gap-3 py-1 [perspective:900px]">
+        {coins.map((coin, index) => (
+          <OnlineCoinButton
+            key={index}
+            coin={coin}
+            index={index}
+            rolling={rolling}
+            disabled={coinButtonsDisabled}
+            onCast={onCast}
+          />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {YAO_NAMES.map((name, index) => {
+          const done = index < castCount;
+          const active = !complete && index === castCount;
+          const yao = yaos[index];
+
+          return (
+            <div
+              key={name}
+              className={cn(
+                "flex min-h-16 flex-col items-center justify-center gap-1 rounded-md border px-1.5 py-2 text-center",
+                done ? "border-border bg-background" : "border-dashed border-border/70 text-muted-foreground",
+                active && "border-primary/50 bg-background/80 text-foreground"
+              )}
+            >
+              <span className="text-[0.68rem] font-medium">{name}</span>
+              {done ? (
+                <>
+                  <YaoGlyph
+                    type={yao.type}
+                    className="[--liuyao-yao-gap:0.32rem] [--liuyao-yao-width:2.25rem]"
+                  />
+                  <span className="text-[0.68rem] text-muted-foreground">
+                    {formatYaoResultName(yao)}
+                  </span>
+                </>
+              ) : (
+                <span className="text-xs">待定</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="text-center text-xs text-muted-foreground">
+        {complete ? "可开始排盘" : `${castCount}/${ONLINE_CASTING_LINE_COUNT}`}
+      </div>
+    </div>
+  );
+}
+
+function OnlineCoinButton({
+  coin,
+  index,
+  rolling,
+  disabled,
+  onCast,
+}: {
+  coin: OnlineCoinState;
+  index: number;
+  rolling: boolean;
+  disabled: boolean;
+  onCast: () => void;
+}) {
+  const sideLabel = coin.side === "front" ? "正" : "反";
+
+  return (
+    <motion.button
+      type="button"
+      aria-label={`硬币${index + 1}，${sideLabel}面`}
+      onClick={onCast}
+      disabled={disabled}
+      className={cn(
+        "relative size-16 shrink-0 rounded-full outline-none transition-opacity focus-visible:ring-3 focus-visible:ring-ring/30 sm:size-20",
+        disabled && !rolling ? "cursor-default" : "cursor-pointer"
+      )}
+      animate={
+        rolling
+          ? {
+              y: [0, -42 - index * 8, -18, 0],
+              x: [0, coin.drift, coin.drift / 2, 0],
+              scale: [1, 1.08, 1.02, 1],
+            }
+          : { y: 0, x: 0, scale: 1 }
+      }
+      transition={{ duration: 0.86, times: [0, 0.34, 0.72, 1], ease: "easeOut" }}
+    >
+      <motion.span
+        className="relative block size-full rounded-full [transform-style:preserve-3d]"
+        animate={{ rotateY: coin.rotation }}
+        transition={{ duration: rolling ? 0.84 : 0.35, ease: "easeOut" }}
+      >
+        <span className="absolute inset-0 flex items-center justify-center rounded-full border border-border bg-background text-lg font-semibold ring-1 ring-foreground/5 [backface-visibility:hidden] sm:text-xl">
+          正
+        </span>
+        <span className="absolute inset-0 flex items-center justify-center rounded-full border border-border bg-secondary text-lg font-semibold ring-1 ring-foreground/5 [backface-visibility:hidden] [transform:rotateY(180deg)] sm:text-xl">
+          反
+        </span>
+      </motion.span>
+    </motion.button>
   );
 }
 
