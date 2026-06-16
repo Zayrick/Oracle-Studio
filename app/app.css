@@ -145,6 +145,8 @@ body {
 
   .liuyao-ai-motion {
     transition:
+      height 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+      max-height 0.5s cubic-bezier(0.16, 1, 0.3, 1),
       transform 0.42s cubic-bezier(0.16, 1, 0.3, 1),
       opacity 0.24s ease,
       width 0.42s cubic-bezier(0.16, 1, 0.3, 1),
@@ -154,12 +156,78 @@ body {
       box-shadow 0.24s ease;
   }
 
-  .liuyao-ai-sheet-open {
-    transform: translateY(0);
+  .liuyao-mobile-ai-title,
+  .liuyao-mobile-ai-collapse,
+  .liuyao-ai-mobile-panel {
+    transition:
+      height 0.52s cubic-bezier(0.16, 1, 0.3, 1),
+      max-height 0.52s cubic-bezier(0.16, 1, 0.3, 1),
+      flex-basis 0.52s cubic-bezier(0.16, 1, 0.3, 1),
+      flex-grow 0.52s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.22s ease,
+      transform 0.46s cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 0.24s ease;
   }
 
-  .liuyao-ai-sheet-closed {
-    transform: translateY(100%);
+  @media (max-width: 1023.98px) {
+    .liuyao-ai-layout-open {
+      gap: 0.75rem;
+    }
+
+    .liuyao-ai-layout-closed {
+      gap: 0;
+    }
+
+    .liuyao-mobile-ai-title {
+      overflow: hidden;
+    }
+
+    .liuyao-mobile-ai-title-open {
+      max-height: 4rem;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .liuyao-mobile-ai-title-closed {
+      max-height: 0;
+      opacity: 0;
+      transform: translateY(-0.35rem);
+    }
+
+    .liuyao-mobile-ai-collapse {
+      overflow: hidden;
+    }
+
+    .liuyao-mobile-ai-collapse-open {
+      max-height: 64rem;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .liuyao-mobile-ai-collapse-closed {
+      max-height: 0;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-0.65rem);
+    }
+
+    .liuyao-ai-mobile-panel-open {
+      flex: 1 1 0;
+      height: auto;
+      min-height: 0;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .liuyao-ai-mobile-panel-closed {
+      flex: 0 0 0;
+      height: 0;
+      min-height: 0;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(0.9rem);
+      border-color: transparent;
+    }
   }
 
   @media (min-width: 1024px) {
@@ -189,7 +257,10 @@ body {
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .liuyao-ai-motion {
+    .liuyao-ai-motion,
+    .liuyao-mobile-ai-title,
+    .liuyao-mobile-ai-collapse,
+    .liuyao-ai-mobile-panel {
       transition-duration: 1ms;
     }
   }
