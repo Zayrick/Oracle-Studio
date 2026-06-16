@@ -385,6 +385,10 @@ function createDefaultLiuyaoYaos(): LiuyaoInputYao[] {
   return Array.from({ length: ONLINE_CASTING_LINE_COUNT }, () => ({ type: "阳", moving: false }));
 }
 
+function createManualYaoSelectionState(selected: boolean) {
+  return Array.from({ length: ONLINE_CASTING_LINE_COUNT }, () => selected);
+}
+
 function createRandomLiuyaoYaos(): LiuyaoInputYao[] {
   return Array.from({ length: ONLINE_CASTING_LINE_COUNT }, () =>
     createLiuyaoYaoFromCoinScore(getRandomCoinScore())
@@ -479,6 +483,9 @@ export default function Liuyao() {
   const [time, setTime] = useState(format(new Date(), "HH:mm"));
   const [castingMethod, setCastingMethod] = useState<LiuyaoCastingMethod>("manual");
   const [yaos, setYaos] = useState<LiuyaoInputYao[]>(() => createDefaultLiuyaoYaos());
+  const [manualYaoSelections, setManualYaoSelections] = useState(() =>
+    createManualYaoSelectionState(false)
+  );
   const [onlineCoins, setOnlineCoins] = useState<OnlineCoinState[]>(() => createInitialOnlineCoins());
   const [onlineCastCount, setOnlineCastCount] = useState(0);
   const [onlineLastCoinScore, setOnlineLastCoinScore] = useState<number | null>(null);
@@ -520,6 +527,7 @@ export default function Liuyao() {
     setOnlineCastCount(0);
     setOnlineLastCoinScore(null);
     setYaos(createDefaultLiuyaoYaos());
+    setManualYaoSelections(createManualYaoSelectionState(false));
   };
 
   const handleCastingMethodChange = (value: LiuyaoCastingMethod) => {
@@ -570,6 +578,9 @@ export default function Liuyao() {
       setYaos((prev) =>
         prev.map((yao, index) => (index === nextLineIndex ? nextYao : yao))
       );
+      setManualYaoSelections((prev) =>
+        prev.map((selected, index) => (index === nextLineIndex ? true : selected))
+      );
       setOnlineLastCoinScore(coinScore);
       setOnlineCastCount(nextLineIndex + 1);
       onlineRollingRef.current = false;
@@ -579,6 +590,16 @@ export default function Liuyao() {
   };
 
   const toggleYaoType = (index: number) => {
+    const selected = manualYaoSelections[index];
+
+    setManualYaoSelections((prev) =>
+      prev.map((isSelected, i) => (i === index ? true : isSelected))
+    );
+
+    if (!selected) {
+      return;
+    }
+
     setYaos((prev) =>
       prev.map((yao, i) =>
         i === index
@@ -589,9 +610,14 @@ export default function Liuyao() {
   };
 
   const toggleYaoMoving = (index: number) => {
+    const selected = manualYaoSelections[index];
+
+    setManualYaoSelections((prev) =>
+      prev.map((isSelected, i) => (i === index ? true : isSelected))
+    );
     setYaos((prev) =>
       prev.map((yao, i) =>
-        i === index ? { ...yao, moving: !yao.moving } : yao
+        i === index ? { ...yao, moving: selected ? !yao.moving : true } : yao
       )
     );
   };
@@ -599,6 +625,12 @@ export default function Liuyao() {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (castingMethod === "manual" && !manualYaoSelections.every(Boolean)) {
+      const missingYaos = YAO_NAMES.filter((_, index) => !manualYaoSelections[index]);
+      setError(`请先完成手动指定：${missingYaos.join("、")}。`);
+      return;
+    }
 
     if (castingMethod === "online" && onlineCastCount < ONLINE_CASTING_LINE_COUNT) {
       setError(`请先完成六次在线摇卦，还差 ${ONLINE_CASTING_LINE_COUNT - onlineCastCount} 爻。`);
@@ -618,6 +650,7 @@ export default function Liuyao() {
         resetCopyStatus();
         if (castingMethod === "random" || castingMethod === "time") {
           setYaos(submittedYaos);
+          setManualYaoSelections(createManualYaoSelectionState(true));
         }
         setResult(nextResult);
         setAiPanelOpen(false);
@@ -796,6 +829,7 @@ export default function Liuyao() {
                 <div className="flex flex-col gap-1.5 rounded-lg bg-muted/40 p-2 [--liuyao-yao-gap:clamp(0.35rem,1vw,0.75rem)] [--liuyao-yao-width:100%] lg:gap-2 lg:p-3">
                   {YAO_INDEXES_TOP_DOWN.map((index) => {
                     const yao = yaos[index];
+                    const yaoSelected = manualYaoSelections[index];
 
                     return (
                       <div
@@ -809,9 +843,10 @@ export default function Liuyao() {
                         <button
                           type="button"
                           onClick={() => toggleYaoType(index)}
+                          aria-label={`${YAO_NAMES[index]}爻象，${yaoSelected ? formatYaoResultName(yao) : "未选择"}`}
                           className="relative flex h-9 w-full cursor-pointer items-center justify-center rounded-md hover:bg-background/70 lg:h-10"
                         >
-                          <YaoGlyph type={yao.type} />
+                          {yaoSelected ? <YaoGlyph type={yao.type} /> : <YaoPlaceholderGlyph />}
                         </button>
 
                         <button
@@ -819,12 +854,12 @@ export default function Liuyao() {
                           onClick={() => toggleYaoMoving(index)}
                           className={cn(
                             "flex h-8 items-center justify-center rounded-md border text-xs font-medium transition-colors lg:h-9 lg:text-sm",
-                            yao.moving
+                            yaoSelected && yao.moving
                               ? "border-primary bg-primary text-primary-foreground"
                               : "border-border bg-background hover:bg-muted"
                           )}
                         >
-                          {formatYaoResultName(yao)}
+                          {yaoSelected ? formatYaoResultName(yao) : "无"}
                         </button>
                       </div>
                     );
@@ -2335,6 +2370,14 @@ function YaoGlyph({ type, className }: { type: YaoType; className?: string }) {
           <div className="h-2 flex-1 rounded bg-foreground" />
         </div>
       )}
+    </div>
+  );
+}
+
+function YaoPlaceholderGlyph({ className }: { className?: string }) {
+  return (
+    <div className={cn("flex h-4 w-[var(--liuyao-yao-width,5rem)] min-w-0 items-center", className)}>
+      <div className="h-2 w-full rounded border border-dashed border-muted-foreground/60" />
     </div>
   );
 }
