@@ -1,11 +1,10 @@
 import { Link } from "react-router";
 import type { Route } from "./+types/home";
 import { Button } from "../components/ui/button";
-import { PAGE_TITLES } from "@/lib/page-titles";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: PAGE_TITLES.home },
+    { title: "云占" },
     { name: "description", content: "选择您的占卜方式" },
   ];
 }

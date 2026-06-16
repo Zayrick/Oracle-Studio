@@ -31,11 +31,10 @@ import {
   type YaoType,
 } from "@/features/liuyao/paipan";
 import { cn } from "@/lib/utils";
-import { PAGE_TITLES } from "@/lib/page-titles";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: PAGE_TITLES.liuyao },
+    { title: "云占·六爻" },
     { name: "description", content: "六爻占卜" },
   ];
 }
@@ -682,7 +681,7 @@ export default function Liuyao() {
   return (
     <div
       className={cn(
-        "container relative mx-auto flex min-h-svh px-4 py-16 md:min-h-[calc(100svh-3.5rem)] md:py-20 lg:py-10",
+        "container relative mx-auto flex min-h-svh px-4 py-16 md:py-20 lg:py-10",
         result ? "items-start" : "items-center",
         mobileAiChatActive && "max-lg:h-svh max-lg:min-h-0 max-lg:items-stretch max-lg:overflow-hidden max-lg:pb-0"
       )}

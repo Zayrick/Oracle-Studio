@@ -9,7 +9,7 @@ import {
 
 import type { Route } from "./+types/root";
 import "./app.css";
-import { Navbar } from "./components/navbar";
+import { SidebarNav } from "./components/sidebar-nav";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -44,10 +44,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <>
-      <Navbar />
-      <Outlet />
-    </>
+    <div className="min-h-svh bg-background">
+      <SidebarNav />
+      <main className="min-h-svh md:pl-[224px]">
+        <Outlet />
+      </main>
+    </div>
   );
 }
 
@@ -68,14 +70,19 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 
   return (
-    <main className="pt-16 p-4 container mx-auto">
-      <h1>{message}</h1>
-      <p>{details}</p>
-      {stack && (
-        <pre className="w-full p-4 overflow-x-auto">
-          <code>{stack}</code>
-        </pre>
-      )}
-    </main>
+    <div className="min-h-svh bg-background">
+      <SidebarNav />
+      <main className="min-h-svh md:pl-[224px]">
+        <div className="container mx-auto p-4">
+          <h1>{message}</h1>
+          <p>{details}</p>
+          {stack && (
+            <pre className="w-full overflow-x-auto p-4">
+              <code>{stack}</code>
+            </pre>
+          )}
+        </div>
+      </main>
+    </div>
   );
 }

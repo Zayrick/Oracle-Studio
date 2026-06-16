@@ -1,9 +1,8 @@
 import type { Route } from "./+types/bazi";
-import { PAGE_TITLES } from "@/lib/page-titles";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: PAGE_TITLES.bazi },
+    { title: "云占·八字" },
     { name: "description", content: "八字占卜" },
   ];
 }

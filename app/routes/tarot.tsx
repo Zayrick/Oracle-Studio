@@ -1,9 +1,8 @@
 import type { Route } from "./+types/tarot";
-import { PAGE_TITLES } from "@/lib/page-titles";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: PAGE_TITLES.tarot },
+    { title: "云占·塔罗牌" },
     { name: "description", content: "塔罗牌占卜" },
   ];
 }
