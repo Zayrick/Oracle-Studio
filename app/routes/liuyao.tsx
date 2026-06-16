@@ -49,7 +49,6 @@ type AIDivinationMessage = {
 const LIUYAO_AI_ENDPOINT = "/api/liuyao/ai";
 const MAX_LIUYAO_AI_CONTEXT_MESSAGES = 12;
 const MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH = 4_000;
-const COPY_BRANCH_ORDER = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
 const MARKDOWN_ZERO_WIDTH_PREFIX_PATTERN = /^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/;
 
 const liuyaoMarkdownRenderer: RendererObject = {
@@ -727,7 +726,7 @@ function PaipanResult({
             <AutoFitQuestionText compactOnMobile={aiPanelOpen}>{result.question}</AutoFitQuestionText>
           </div>
 
-          <div className="flex flex-col gap-0">
+          <div className={cn("flex flex-col", aiPanelOpen ? "gap-1" : "gap-2 sm:gap-3")}>
             <div
               className={cn(
                 "liuyao-mobile-ai-title",
@@ -740,6 +739,7 @@ function PaipanResult({
               </h2>
             </div>
             <PillarTimeSummary result={result} compactOnMobile={aiPanelOpen} />
+            {!aiPanelOpen ? <BodySummary result={result} /> : null}
           </div>
         </div>
 
@@ -1395,7 +1395,7 @@ function formatLiuyaoCopyMarkdown(result: LiuyaoPaipan) {
       `时间：${result.solar}`,
       `干支:${result.pillars.year}年 ${result.pillars.month}月 ${result.pillars.day}日 ${result.pillars.hour}时`,
       `空亡：年空亡${result.pillarVoids.year} 月空亡${result.pillarVoids.month} 日空亡${result.pillarVoids.day} 时空亡${result.pillarVoids.hour}`,
-      `卦身：${formatCopyGuaBody(result)}；世身：${formatCopyWorldBody(result)}`,
+      `卦身：${result.guaBody}；世身：${result.worldBody}`,
       `动爻：${movingLines.length > 0 ? movingLines.map((line) => line.label).join("、") : "无（静卦）"}`,
     ].join("\n"),
     formatLiuyaoCopyCombinedTable(result, changed),
@@ -1435,29 +1435,6 @@ function formatLiuyaoCopyCombinedTable(
         })
     ),
   ]);
-}
-
-function formatCopyGuaBody(result: LiuyaoPaipan) {
-  const worldLine = result.lines[result.primary.worldPosition - 1];
-  const startBranchIndex = worldLine.type === "阳" ? COPY_BRANCH_ORDER.indexOf("子") : COPY_BRANCH_ORDER.indexOf("午");
-  const bodyBranch = COPY_BRANCH_ORDER[(startBranchIndex + result.primary.worldPosition - 1) % COPY_BRANCH_ORDER.length];
-  const bodyHits = result.lines
-    .filter((line) => line.branch === bodyBranch)
-    .map(formatCopyBodyLine);
-
-  return `${bodyBranch}${bodyHits.length > 0 ? `（${bodyHits.join("、")}）` : "（不上卦）"}`;
-}
-
-function formatCopyWorldBody(result: LiuyaoPaipan) {
-  const worldLine = result.lines[result.primary.worldPosition - 1];
-  const worldBodyLinePosition = (COPY_BRANCH_ORDER.indexOf(worldLine.branch) % 6) + 1;
-  const worldBodyLine = result.lines[worldBodyLinePosition - 1];
-
-  return `${YAO_NAMES[worldBodyLinePosition - 1]}（${formatCopyBodyLine(worldBodyLine)}）`;
-}
-
-function formatCopyBodyLine(line: LiuyaoLineInfo) {
-  return `${line.label} ${line.relation}${line.stem}${line.branch}${line.element}`;
 }
 
 function formatCopyStemBranch(line: Pick<LiuyaoLineInfo, "stem" | "branch" | "element">) {
@@ -1764,6 +1741,34 @@ function PillarTimeItem({
       <div className={cn("text-[11px] text-muted-foreground", compactOnMobile && "max-lg:hidden")}>
         {voidValue}空
       </div>
+    </div>
+  );
+}
+
+function BodySummary({
+  result,
+}: {
+  result: LiuyaoPaipan;
+}) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-xs leading-tight sm:text-sm">
+      <BodySummaryItem label="卦身" value={result.guaBody} />
+      <BodySummaryItem label="世身" value={result.worldBody} />
+    </div>
+  );
+}
+
+function BodySummaryItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-baseline gap-1.5">
+      <span className="shrink-0 font-medium text-muted-foreground">{label}</span>
+      <span className="min-w-0 break-words font-medium text-foreground">{value}</span>
     </div>
   );
 }

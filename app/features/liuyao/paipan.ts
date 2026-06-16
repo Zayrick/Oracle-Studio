@@ -84,10 +84,13 @@ export interface LiuyaoPaipan {
   primary: LiuyaoHexagramInfo;
   changed: LiuyaoHexagramInfo | null;
   lines: LiuyaoLineInfo[];
+  guaBody: string;
+  worldBody: string;
   shenshas: LiuyaoShenshaInfo[];
 }
 
 export const YAO_NAMES = ["初爻", "二爻", "三爻", "四爻", "五爻", "上爻"];
+const EARTHLY_BRANCH_ORDER = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
 
 const TRIGRAMS = {
   qian: { name: "乾", image: "天", code: "111", element: "金" },
@@ -453,6 +456,8 @@ export function buildLiuyaoPaipan(input: LiuyaoPaipanInput): LiuyaoPaipan {
     ...line,
     hiddenGods: hiddenGods.get(line.position) ?? [],
   }));
+  const guaBody = calculateGuaBody(primary, lines);
+  const worldBody = calculateWorldBody(primary, lines);
 
   return {
     question: input.question.trim(),
@@ -463,6 +468,8 @@ export function buildLiuyaoPaipan(input: LiuyaoPaipanInput): LiuyaoPaipan {
     primary,
     changed,
     lines,
+    guaBody,
+    worldBody,
     shenshas: calculateShenshas(timeContext),
   };
 }
@@ -550,6 +557,22 @@ function getDayBranchShenshaGroup(dayBranch: string) {
 
 function splitBranches(branches: string) {
   return branches.split("").filter(Boolean);
+}
+
+function calculateGuaBody(hexagram: LiuyaoHexagramInfo, lines: LiuyaoLineInfo[]) {
+  const worldLine = lines[hexagram.worldPosition - 1];
+  const startBranch = worldLine.type === "阳" ? "子" : "午";
+  const startBranchIndex = EARTHLY_BRANCH_ORDER.indexOf(startBranch);
+  return EARTHLY_BRANCH_ORDER[
+    (startBranchIndex + hexagram.worldPosition - 1) % EARTHLY_BRANCH_ORDER.length
+  ];
+}
+
+function calculateWorldBody(hexagram: LiuyaoHexagramInfo, lines: LiuyaoLineInfo[]) {
+  const worldLine = lines[hexagram.worldPosition - 1];
+  const bodyPosition = (EARTHLY_BRANCH_ORDER.indexOf(worldLine.branch) % 6) + 1;
+
+  return lines[bodyPosition - 1].branch;
 }
 
 function formatVoidBranches(pillar: { getExtraEarthBranches(): Array<{ getName(): string }> }) {
