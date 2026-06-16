@@ -10,6 +10,14 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { DateTimeWheelPicker } from "@/components/date-time-wheel-picker";
 import {
@@ -33,6 +41,7 @@ export function meta({}: Route.MetaArgs) {
 const YAO_INDEXES_TOP_DOWN = [5, 4, 3, 2, 1, 0];
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
+type LiuyaoCastingMethod = "manual" | "random";
 type CopyElementName = LiuyaoLineInfo["element"];
 type CopyRelative = LiuyaoLineInfo["relation"];
 type CopyStemBasis = "yearStem" | "dayStem";
@@ -50,6 +59,10 @@ const LIUYAO_AI_ENDPOINT = "/api/liuyao/ai";
 const MAX_LIUYAO_AI_CONTEXT_MESSAGES = 12;
 const MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH = 4_000;
 const MARKDOWN_ZERO_WIDTH_PREFIX_PATTERN = /^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/;
+const LIUYAO_CASTING_METHOD_ITEMS = [
+  { label: "手动指定", value: "manual" },
+  { label: "随机起卦", value: "random" },
+] satisfies Array<{ label: string; value: LiuyaoCastingMethod }>;
 
 const liuyaoMarkdownRenderer: RendererObject = {
   html({ text }) {
@@ -355,10 +368,41 @@ function useLiuyaoResultCopy(result: LiuyaoPaipan | null) {
   };
 }
 
+function createRandomLiuyaoYaos(): LiuyaoInputYao[] {
+  return Array.from({ length: 6 }, () => {
+    const coinScore = getRandomBit() + getRandomBit() + getRandomBit();
+
+    if (coinScore === 0) {
+      return { type: "阴", moving: true };
+    }
+
+    if (coinScore === 1) {
+      return { type: "阳", moving: false };
+    }
+
+    if (coinScore === 2) {
+      return { type: "阴", moving: false };
+    }
+
+    return { type: "阳", moving: true };
+  });
+}
+
+function getRandomBit() {
+  if (globalThis.crypto?.getRandomValues) {
+    const values = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(values);
+    return values[0] % 2;
+  }
+
+  return Math.random() < 0.5 ? 0 : 1;
+}
+
 export default function Liuyao() {
   const [question, setQuestion] = useState("");
   const [date, setDate] = useState<Date>(new Date());
   const [time, setTime] = useState(format(new Date(), "HH:mm"));
+  const [castingMethod, setCastingMethod] = useState<LiuyaoCastingMethod>("manual");
 
   const [yaos, setYaos] = useState<LiuyaoInputYao[]>(
     Array.from({ length: 6 }, () => ({ type: "阳", moving: false }))
@@ -397,10 +441,14 @@ export default function Liuyao() {
     setError("");
 
     try {
-      const nextResult = buildLiuyaoPaipan({ question, date, time, yaos });
+      const submittedYaos = castingMethod === "random" ? createRandomLiuyaoYaos() : yaos;
+      const nextResult = buildLiuyaoPaipan({ question, date, time, yaos: submittedYaos });
 
       runLiuyaoViewTransition(() => {
         resetCopyStatus();
+        if (castingMethod === "random") {
+          setYaos(submittedYaos);
+        }
         setResult(nextResult);
         setAiPanelOpen(false);
       });
@@ -534,46 +582,82 @@ export default function Liuyao() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <FieldLabel className="block">所得之卦</FieldLabel>
-              <div className="flex flex-col gap-1.5 rounded-lg bg-muted/40 p-2 [--liuyao-yao-gap:clamp(0.35rem,1vw,0.75rem)] [--liuyao-yao-width:100%] lg:gap-2 lg:p-3">
-                {YAO_INDEXES_TOP_DOWN.map((index) => {
-                  const yao = yaos[index];
-
-                  return (
-                  <div
-                    key={index}
-                    className="grid grid-cols-[3rem_minmax(0,1fr)_3.25rem] items-center gap-10 lg:grid-cols-[3.5rem_9rem_3.5rem] lg:justify-center lg:gap-5"
+              <div className="flex items-center justify-between gap-3">
+                <FieldLabel className="block">所得之卦</FieldLabel>
+                <Field className="w-36 gap-1">
+                  <FieldLabel htmlFor="liuyao-casting-method" className="sr-only">
+                    起卦方式
+                  </FieldLabel>
+                  <Select
+                    items={LIUYAO_CASTING_METHOD_ITEMS}
+                    value={castingMethod}
+                    onValueChange={(value) => {
+                      if (value) {
+                        setCastingMethod(value);
+                      }
+                    }}
                   >
-                    <div className="text-right text-xs font-medium lg:text-sm">
-                      {YAO_NAMES[index]}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => toggleYaoType(index)}
-                      className="relative flex h-9 w-full cursor-pointer items-center justify-center rounded-md hover:bg-background/70 lg:h-10"
+                    <SelectTrigger
+                      id="liuyao-casting-method"
+                      size="sm"
+                      className="w-full"
                     >
-                      <YaoGlyph type={yao.type} />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => toggleYaoMoving(index)}
-                      className={cn(
-                        "flex h-8 items-center justify-center rounded-md border text-xs font-medium transition-colors lg:h-9 lg:text-sm",
-                        yao.moving
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-background hover:bg-muted"
-                      )}
-                    >
-                      {yao.type === "阳"
-                        ? yao.moving ? "老阳" : "少阳"
-                        : yao.moving ? "老阴" : "少阴"}
-                    </button>
-                  </div>
-                  );
-                })}
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent alignItemWithTrigger={false}>
+                      <SelectGroup>
+                        {LIUYAO_CASTING_METHOD_ITEMS.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
               </div>
+
+              {castingMethod === "manual" ? (
+                <div className="flex flex-col gap-1.5 rounded-lg bg-muted/40 p-2 [--liuyao-yao-gap:clamp(0.35rem,1vw,0.75rem)] [--liuyao-yao-width:100%] lg:gap-2 lg:p-3">
+                  {YAO_INDEXES_TOP_DOWN.map((index) => {
+                    const yao = yaos[index];
+
+                    return (
+                      <div
+                        key={index}
+                        className="grid grid-cols-[3rem_minmax(0,1fr)_3.25rem] items-center gap-10 lg:grid-cols-[3.5rem_9rem_3.5rem] lg:justify-center lg:gap-5"
+                      >
+                        <div className="text-right text-xs font-medium lg:text-sm">
+                          {YAO_NAMES[index]}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => toggleYaoType(index)}
+                          className="relative flex h-9 w-full cursor-pointer items-center justify-center rounded-md hover:bg-background/70 lg:h-10"
+                        >
+                          <YaoGlyph type={yao.type} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => toggleYaoMoving(index)}
+                          className={cn(
+                            "flex h-8 items-center justify-center rounded-md border text-xs font-medium transition-colors lg:h-9 lg:text-sm",
+                            yao.moving
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-background hover:bg-muted"
+                          )}
+                        >
+                          {yao.type === "阳"
+                            ? yao.moving ? "老阳" : "少阳"
+                            : yao.moving ? "老阴" : "少阴"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
 
             {error ? (
