@@ -50,6 +50,7 @@ export interface LiuyaoLineInfo {
   branch: string;
   element: ElementName;
   hiddenGods: LiuyaoHiddenGodInfo[];
+  huozhulinHiddenGod: LiuyaoHiddenGodInfo;
   changed: {
     type: YaoType;
     relation: SixRelative;
@@ -468,7 +469,7 @@ export function buildLiuyaoPaipan(input: LiuyaoPaipanInput): LiuyaoPaipan {
   const primary = buildHexagramInfo(primaryCode);
   const changed = hasMovingLine ? buildHexagramInfo(changedCode) : null;
   const deities = sixDeitiesForDayStem(timeContext.dayStem);
-  const rawLines: Array<Omit<LiuyaoLineInfo, "hiddenGods">> = input.yaos.map((yao, index) => {
+  const rawLines: Array<Omit<LiuyaoLineInfo, "hiddenGods" | "huozhulinHiddenGod">> = input.yaos.map((yao, index) => {
     const position = index + 1;
     const najia = getNajia(primary.code, index);
     const changedNajia = getNajia(changedCode, index);
@@ -499,10 +500,12 @@ export function buildLiuyaoPaipan(input: LiuyaoPaipanInput): LiuyaoPaipan {
         : null,
     };
   });
-  const hiddenGods = calculateHiddenGods(rawLines, primary);
+  const huozhulinHiddenGods = calculateHuozhulinHiddenGods(primary);
+  const hiddenGods = calculateHiddenGods(rawLines, huozhulinHiddenGods);
   const lines = rawLines.map((line) => ({
     ...line,
     hiddenGods: hiddenGods.get(line.position) ?? [],
+    huozhulinHiddenGod: huozhulinHiddenGods[line.position - 1],
   }));
   const guaBody = calculateGuaBody(primary, lines);
   const worldBody = calculateWorldBody(primary, lines);
@@ -697,32 +700,40 @@ function roleForPosition(
 
 function calculateHiddenGods(
   lines: Array<Pick<LiuyaoLineInfo, "position" | "relation">>,
-  hexagram: LiuyaoHexagramInfo
+  huozhulinHiddenGods: LiuyaoHiddenGodInfo[]
 ) {
   const presentRelatives = new Set(lines.map((line) => line.relation));
-  const palace = PALACE_BY_CODE[hexagram.code];
-  const palaceCode = TRIGRAMS[palace.trigramKey].code.repeat(2);
   const hiddenGods = new Map<number, LiuyaoHiddenGodInfo[]>();
 
-  YAO_NAMES.forEach((_, index) => {
-    const najia = getNajia(palaceCode, index);
-    const relation = relationFor(hexagram.palaceElement, BRANCH_ELEMENTS[najia.branch]);
+  huozhulinHiddenGods.forEach((hiddenGod, index) => {
+    const { relation } = hiddenGod;
 
     if (!presentRelatives.has(relation)) {
       const position = index + 1;
 
       hiddenGods.set(position, [
         ...(hiddenGods.get(position) ?? []),
-        {
-          relation,
-          stem: najia.stem,
-          branch: najia.branch,
-        },
+        hiddenGod,
       ]);
     }
   });
 
   return hiddenGods;
+}
+
+function calculateHuozhulinHiddenGods(hexagram: LiuyaoHexagramInfo) {
+  const palace = PALACE_BY_CODE[hexagram.code];
+  const palaceCode = TRIGRAMS[palace.trigramKey].code.repeat(2);
+
+  return YAO_NAMES.map((_, index) => {
+    const najia = getNajia(palaceCode, index);
+
+    return {
+      relation: relationFor(hexagram.palaceElement, BRANCH_ELEMENTS[najia.branch]),
+      stem: najia.stem,
+      branch: najia.branch,
+    };
+  });
 }
 
 function sixDeitiesForDayStem(dayStem: string) {

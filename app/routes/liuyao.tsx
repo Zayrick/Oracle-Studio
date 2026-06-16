@@ -1874,7 +1874,7 @@ function formatLiuyaoCopyCombinedTable(
   return joinCopySections([
     `主卦/变卦：${primary.name} → ${changed.name}（主卦${primary.palace}${primary.palaceElement}，${primary.stage}，世在${YAO_NAMES[primary.worldPosition - 1]}，应在${YAO_NAMES[primary.responsePosition - 1]}；变卦六亲沿用主卦卦宫五行）`,
     copyMdTable(
-      ["爻位", "六神", "世应", "主卦六亲", "主卦干支", "伏神", "是否变卦", "主卦神煞", "主卦长生", "变卦六亲", "变卦干支", "变卦神煞", "变卦长生"],
+      ["爻位", "六神", "世应", "主卦六亲", "主卦干支", "伏神", "火珠林伏神", "是否变卦", "主卦神煞", "主卦长生", "变卦六亲", "变卦干支", "变卦神煞", "变卦长生"],
       [...result.lines]
         .sort((a, b) => b.position - a.position)
         .map((line) => {
@@ -1887,6 +1887,7 @@ function formatLiuyaoCopyCombinedTable(
             line.relation,
             formatCopyStemBranch(line),
             formatCopyHiddenGods(line.hiddenGods),
+            formatCopyHiddenGod(line.huozhulinHiddenGod),
             line.moving ? "是" : "-",
             formatCopyLineShensha(result, line),
             formatCopyLineChangsheng(result, line.element),
@@ -1904,9 +1905,13 @@ function formatCopyStemBranch(line: Pick<LiuyaoLineInfo, "stem" | "branch" | "el
   return `${line.stem}${line.branch}（${line.element}）`;
 }
 
+function formatCopyHiddenGod(hiddenGod: LiuyaoLineInfo["huozhulinHiddenGod"]) {
+  return `${hiddenGod.relation}${hiddenGod.stem}${hiddenGod.branch}${COPY_BRANCH_ELEMENTS[hiddenGod.branch] ?? ""}`;
+}
+
 function formatCopyHiddenGods(hiddenGods: LiuyaoLineInfo["hiddenGods"]) {
   return hiddenGods.length > 0
-    ? hiddenGods.map((hiddenGod) => `${hiddenGod.relation}${hiddenGod.stem}${hiddenGod.branch}${COPY_BRANCH_ELEMENTS[hiddenGod.branch] ?? ""}`).join("、")
+    ? hiddenGods.map(formatCopyHiddenGod).join("、")
     : "-";
 }
 
