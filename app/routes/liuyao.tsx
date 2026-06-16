@@ -394,7 +394,7 @@ function createRandomCoinThrow(): OnlineCoinSide[] {
 }
 
 function getCoinThrowScore(coins: OnlineCoinSide[]) {
-  return coins.filter((coin) => coin === "front").length;
+  return coins.filter((coin) => coin === "back").length;
 }
 
 function getRandomCoinScore() {
@@ -448,7 +448,7 @@ function formatYaoResultName(yao: LiuyaoInputYao) {
 }
 
 function formatCoinThrowScore(score: number) {
-  return `${score}正 ${3 - score}反`;
+  return `${3 - score}字 ${score}花`;
 }
 
 function getRandomBit() {
@@ -996,7 +996,7 @@ function OnlineCoinButton({
   disabled: boolean;
   onCast: () => void;
 }) {
-  const sideLabel = coin.side === "front" ? "正" : "反";
+  const sideLabel = coin.side === "front" ? "字" : "花";
 
   return (
     <motion.button
@@ -1024,11 +1024,21 @@ function OnlineCoinButton({
         animate={{ rotateY: coin.rotation }}
         transition={{ duration: rolling ? 0.84 : 0.35, ease: "easeOut" }}
       >
-        <span className="absolute inset-0 flex items-center justify-center rounded-full border border-border bg-background text-lg font-semibold ring-1 ring-foreground/5 [backface-visibility:hidden] sm:text-xl">
-          正
+        <span className="absolute inset-0 overflow-hidden rounded-full border border-border bg-background ring-1 ring-foreground/5 [backface-visibility:hidden]">
+          <img
+            src="/assets/0.png"
+            alt=""
+            draggable={false}
+            className="size-full select-none object-cover"
+          />
         </span>
-        <span className="absolute inset-0 flex items-center justify-center rounded-full border border-border bg-secondary text-lg font-semibold ring-1 ring-foreground/5 [backface-visibility:hidden] [transform:rotateY(180deg)] sm:text-xl">
-          反
+        <span className="absolute inset-0 overflow-hidden rounded-full border border-border bg-secondary ring-1 ring-foreground/5 [backface-visibility:hidden] [transform:rotateY(180deg)]">
+          <img
+            src="/assets/1.png"
+            alt=""
+            draggable={false}
+            className="size-full select-none object-cover"
+          />
         </span>
       </motion.span>
     </motion.button>
