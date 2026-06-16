@@ -114,7 +114,6 @@ The Cloudflare Worker is configured in `wrangler.jsonc`:
 - Entry point: `workers/app.ts`
 - Node.js compatibility enabled via `nodejs_compat` flag
 - Observability and source maps enabled
-- Access environment variables via `VALUE_FROM_CLOUDFLARE` binding
 
 ### Type Generation
 

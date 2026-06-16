@@ -116,7 +116,6 @@ Cloudflare Worker 在 `wrangler.jsonc` 中配置：
 - 入口点：`workers/app.ts`
 - 通过 `nodejs_compat` 标志启用 Node.js 兼容性
 - 启用可观察性和源码映射
-- 通过 `VALUE_FROM_CLOUDFLARE` 绑定访问环境变量
 
 ### 类型生成
 
