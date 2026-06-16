@@ -15,6 +15,8 @@ type LiuyaoAIEnv = Env & {
   liuyao_OPENROUTER_API_KEY?: string;
   liuyao_OPENROUTER_MODEL?: string;
   liuyao_OPENROUTER_APP_NAME?: string;
+  liuyao_OPENROUTER_PROVIDER_SORT?: string;
+  liuyao_OPENROUTER_REASONING_EFFORT?: string;
 };
 
 type LiuyaoAIClientRequest = {
@@ -30,6 +32,19 @@ type LiuyaoAIDecodedPayload = {
 type LiuyaoAIMessage = {
   role: "user" | "assistant";
   content: string;
+};
+
+type OpenRouterChatCompletionRequest = {
+  model: string;
+  session_id: string;
+  stream: true;
+  messages: Array<{ role: "system" | LiuyaoAIMessage["role"]; content: string }>;
+  provider?: {
+    sort: string;
+  };
+  reasoning?: {
+    effort: string;
+  };
 };
 
 type OpenRouterStreamChunk = {
@@ -79,15 +94,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       "HTTP-Referer": new URL(request.url).origin,
       "X-Title": env.liuyao_OPENROUTER_APP_NAME || DEFAULT_LIUYAO_OPENROUTER_APP_NAME,
     },
-    body: JSON.stringify({
-      model: env.liuyao_OPENROUTER_MODEL || DEFAULT_LIUYAO_OPENROUTER_MODEL,
-      session_id: decodedPayload.value.sessionId,
-      stream: true,
-      messages: [
-        { role: "system", content: decodedPayload.value.systemPrompt },
-        ...decodedPayload.value.messages,
-      ],
-    }),
+    body: JSON.stringify(buildOpenRouterRequestBody(env, decodedPayload.value)),
   });
 
   if (!openRouterResponse.ok) {
@@ -106,6 +113,32 @@ export async function action({ request, context }: Route.ActionArgs) {
       "X-Content-Type-Options": "nosniff",
     },
   });
+}
+
+function buildOpenRouterRequestBody(env: LiuyaoAIEnv, payload: LiuyaoAIDecodedPayload) {
+  const providerSort = env.liuyao_OPENROUTER_PROVIDER_SORT?.trim();
+  const reasoningEffort = env.liuyao_OPENROUTER_REASONING_EFFORT?.trim();
+
+  const body: OpenRouterChatCompletionRequest = {
+    model: env.liuyao_OPENROUTER_MODEL || DEFAULT_LIUYAO_OPENROUTER_MODEL,
+    session_id: payload.sessionId,
+    stream: true,
+    messages: [{ role: "system", content: payload.systemPrompt }, ...payload.messages],
+  };
+
+  if (providerSort) {
+    body.provider = {
+      sort: providerSort,
+    };
+  }
+
+  if (reasoningEffort) {
+    body.reasoning = {
+      effort: reasoningEffort,
+    };
+  }
+
+  return body;
 }
 
 async function readClientPayload(request: Request) {
