@@ -1666,7 +1666,7 @@ function ShenshaPanel({ result }: { result: LiuyaoPaipan }) {
 
   return (
     <aside className="flex w-full flex-col gap-2 sm:gap-3 sm:rounded-lg sm:bg-muted/35 sm:p-4 lg:w-max lg:min-w-0">
-      <div className="text-sm font-semibold tracking-tight">神煞</div>
+      <div className="hidden text-sm font-semibold tracking-tight sm:block">神煞</div>
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(4.75rem,1fr))] gap-x-1.5 gap-y-1.5 text-xs sm:gap-x-3 sm:gap-y-2 sm:text-sm lg:w-max lg:grid-cols-[max-content_max-content]">
         {shenshaItems.map((item) => (
