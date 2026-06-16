@@ -91,6 +91,9 @@ export interface LiuyaoPaipan {
 
 export const YAO_NAMES = ["初爻", "二爻", "三爻", "四爻", "五爻", "上爻"];
 const EARTHLY_BRANCH_ORDER = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
+const EARTHLY_BRANCH_NUMBERS = Object.fromEntries(
+  EARTHLY_BRANCH_ORDER.map((branch, index) => [branch, index + 1])
+) as Record<string, number>;
 
 const TRIGRAMS = {
   qian: { name: "乾", image: "天", code: "111", element: "金" },
@@ -102,6 +105,17 @@ const TRIGRAMS = {
   gen: { name: "艮", image: "山", code: "001", element: "土" },
   kun: { name: "坤", image: "地", code: "000", element: "土" },
 } as const;
+
+const TIME_CASTING_TRIGRAM_CODES_BY_NUMBER: Record<number, string> = {
+  1: TRIGRAMS.qian.code,
+  2: TRIGRAMS.dui.code,
+  3: TRIGRAMS.li.code,
+  4: TRIGRAMS.zhen.code,
+  5: TRIGRAMS.xun.code,
+  6: TRIGRAMS.kan.code,
+  7: TRIGRAMS.gen.code,
+  8: TRIGRAMS.kun.code,
+};
 
 type TrigramKey = keyof typeof TRIGRAMS;
 type Trigram = (typeof TRIGRAMS)[TrigramKey];
@@ -403,6 +417,40 @@ interface PalaceLookupItem {
 
 const PALACE_BY_CODE = buildPalaceLookup();
 
+export function createLiuyaoTimeCastingYaos(date: Date, time: string): LiuyaoInputYao[] {
+  const { hour, minute, second } = parseTime(time);
+  const solarTime = SolarTime.fromYmdHms(
+    date.getFullYear(),
+    date.getMonth() + 1,
+    date.getDate(),
+    hour,
+    minute,
+    second
+  );
+  const lunarHour = solarTime.getLunarHour();
+  const lunarDay = solarTime.getSolarDay().getLunarDay();
+  const lunarMonth = lunarDay.getLunarMonth();
+  const yearNumber = getEarthlyBranchNumber(
+    lunarDay.getYearSixtyCycle().getEarthBranch().getName()
+  );
+  const monthNumber = Math.abs(lunarMonth.getMonth());
+  const dayNumber = lunarDay.getDay();
+  const hourNumber = getEarthlyBranchNumber(
+    lunarHour.getSixtyCycle().getEarthBranch().getName()
+  );
+  const upperBase = yearNumber + monthNumber + dayNumber;
+  const lowerBase = upperBase + hourNumber;
+  const upperCode = TIME_CASTING_TRIGRAM_CODES_BY_NUMBER[getRemainderNumber(upperBase, 8)];
+  const lowerCode = TIME_CASTING_TRIGRAM_CODES_BY_NUMBER[getRemainderNumber(lowerBase, 8)];
+  const movingLine = getRemainderNumber(lowerBase, 6);
+  const code = `${lowerCode}${upperCode}`;
+
+  return code.split("").map((bit, index) => ({
+    type: bit === "1" ? "阳" : "阴",
+    moving: index === movingLine - 1,
+  }));
+}
+
 export function buildLiuyaoPaipan(input: LiuyaoPaipanInput): LiuyaoPaipan {
   if (input.yaos.length !== 6) {
     throw new Error("六爻排盘需要完整的六个爻位。");
@@ -557,6 +605,21 @@ function getDayBranchShenshaGroup(dayBranch: string) {
 
 function splitBranches(branches: string) {
   return branches.split("").filter(Boolean);
+}
+
+function getEarthlyBranchNumber(branch: string) {
+  const number = EARTHLY_BRANCH_NUMBERS[branch];
+
+  if (!number) {
+    throw new Error("无法识别时间起卦所需的地支。");
+  }
+
+  return number;
+}
+
+function getRemainderNumber(value: number, divisor: number) {
+  const remainder = value % divisor;
+  return remainder === 0 ? divisor : remainder;
 }
 
 function calculateGuaBody(hexagram: LiuyaoHexagramInfo, lines: LiuyaoLineInfo[]) {

@@ -23,6 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { DateTimeWheelPicker } from "@/components/date-time-wheel-picker";
 import {
   buildLiuyaoPaipan,
+  createLiuyaoTimeCastingYaos,
   YAO_NAMES,
   type LiuyaoInputYao,
   type LiuyaoLineInfo,
@@ -42,7 +43,7 @@ export function meta({}: Route.MetaArgs) {
 const YAO_INDEXES_TOP_DOWN = [5, 4, 3, 2, 1, 0];
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-type LiuyaoCastingMethod = "manual" | "random" | "online";
+type LiuyaoCastingMethod = "manual" | "random" | "online" | "time";
 type OnlineCoinSide = "front" | "back";
 type OnlineCoinState = {
   side: OnlineCoinSide;
@@ -71,6 +72,7 @@ const LIUYAO_CASTING_METHOD_ITEMS = [
   { label: "手动指定", value: "manual" },
   { label: "随机起卦", value: "random" },
   { label: "在线摇卦", value: "online" },
+  { label: "时间起卦", value: "time" },
 ] satisfies Array<{ label: string; value: LiuyaoCastingMethod }>;
 const ONLINE_CASTING_LINE_COUNT = 6;
 const ONLINE_COIN_BASE_DRIFTS = [-10, 0, 10];
@@ -604,12 +606,17 @@ export default function Liuyao() {
     }
 
     try {
-      const submittedYaos = castingMethod === "random" ? createRandomLiuyaoYaos() : yaos;
+      const submittedYaos =
+        castingMethod === "random"
+          ? createRandomLiuyaoYaos()
+          : castingMethod === "time"
+            ? createLiuyaoTimeCastingYaos(date, time)
+            : yaos;
       const nextResult = buildLiuyaoPaipan({ question, date, time, yaos: submittedYaos });
 
       runLiuyaoViewTransition(() => {
         resetCopyStatus();
-        if (castingMethod === "random") {
+        if (castingMethod === "random" || castingMethod === "time") {
           setYaos(submittedYaos);
         }
         setResult(nextResult);
@@ -751,7 +758,7 @@ export default function Liuyao() {
 
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-3">
-                <FieldLabel className="block">所得之卦</FieldLabel>
+                <FieldLabel className="block">起卦方式</FieldLabel>
                 <Field className="w-36 gap-1">
                   <FieldLabel htmlFor="liuyao-casting-method" className="sr-only">
                     起卦方式
