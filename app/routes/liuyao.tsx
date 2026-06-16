@@ -681,8 +681,9 @@ export default function Liuyao() {
   return (
     <div
       className={cn(
-        "container relative mx-auto flex min-h-svh px-4 py-16 md:py-20 lg:py-10",
-        result ? "items-start" : "items-center",
+        result
+          ? "relative mx-auto flex min-h-svh w-full px-4 pb-6 pt-16 md:h-svh md:min-h-0 md:overflow-hidden md:px-0 md:pb-0 md:pt-0"
+          : "container relative mx-auto flex min-h-svh items-center px-4 py-16 md:py-20 lg:py-10",
         mobileAiChatActive && "max-lg:h-svh max-lg:min-h-0 max-lg:items-stretch max-lg:overflow-hidden max-lg:pb-0"
       )}
     >
@@ -701,7 +702,8 @@ export default function Liuyao() {
       />
       <div
         className={cn(
-          "mx-auto flex w-full max-w-6xl flex-col gap-6 lg:gap-8",
+          "mx-auto flex w-full flex-col",
+          result ? "max-w-none" : "max-w-6xl gap-6 lg:gap-8",
           mobileAiChatActive && "max-lg:h-full max-lg:min-h-0 max-lg:flex-1 max-lg:gap-0"
         )}
       >
@@ -712,41 +714,18 @@ export default function Liuyao() {
           </div>
         ) : null}
 
-        <div
-          className={cn(
-            "liuyao-transition-content",
-            mobileAiChatActive && "max-lg:flex max-lg:h-full max-lg:min-h-0 max-lg:flex-1"
-          )}
-        >
-          {result ? (
-            <div
-              className={cn(
-                "liuyao-ai-motion flex w-full flex-col lg:mx-auto lg:w-fit lg:flex-row lg:items-stretch lg:justify-center lg:gap-0",
-                mobileAiChatActive && "max-lg:h-full max-lg:min-h-0 max-lg:flex-1",
-                aiPanelOpen ? "liuyao-ai-layout-open" : "liuyao-ai-layout-closed"
-              )}
-            >
-              <PaipanResult
-                result={result}
-                aiPanelOpen={aiPanelOpen}
-                actions={
-                  <LiuyaoResultActions
-                    layout="desktop"
-                    copyStatus={copyStatus}
-                    aiPanelOpen={aiPanelOpen}
-                    onCopy={copyResult}
-                    onStartOver={handleStartOver}
-                    onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
-                  />
-                }
-              />
-              <AIDivinationPanel
-                open={aiPanelOpen}
-                result={result}
-                onClose={() => setAiPanelOpen(false)}
-              />
-            </div>
-          ) : (
+        {result ? (
+          <LiuyaoResultWorkspace
+            result={result}
+            copyStatus={copyStatus}
+            aiPanelOpen={aiPanelOpen}
+            onCopy={copyResult}
+            onStartOver={handleStartOver}
+            onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
+            onCloseAi={() => setAiPanelOpen(false)}
+          />
+        ) : (
+          <div className="liuyao-transition-content">
             <form
               onSubmit={handleSubmit}
               className="mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 lg:gap-6"
@@ -891,8 +870,8 @@ export default function Liuyao() {
               </Button>
             </div>
             </form>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -924,6 +903,88 @@ function LiuyaoMobilePageActions({
       <ArrowLeftIcon data-icon="inline-start" />
       返回主页
     </Link>
+  );
+}
+
+function LiuyaoResultWorkspace({
+  result,
+  copyStatus,
+  aiPanelOpen,
+  onCopy,
+  onStartOver,
+  onToggleAiPanel,
+  onCloseAi,
+}: {
+  result: LiuyaoPaipan;
+  copyStatus: CopyStatus;
+  aiPanelOpen: boolean;
+  onCopy: () => void;
+  onStartOver: () => void;
+  onToggleAiPanel: () => void;
+  onCloseAi: () => void;
+}) {
+  return (
+    <section
+      className={cn(
+        "liuyao-transition-content flex w-full flex-col md:h-full md:min-h-0",
+        aiPanelOpen && "max-lg:h-full max-lg:min-h-0 max-lg:flex-1"
+      )}
+      aria-label="六爻解卦结果"
+    >
+      <div className="fixed inset-x-0 top-0 z-20 hidden h-16 border-b bg-background/95 backdrop-blur md:left-[224px] md:flex md:items-center">
+        <div className="mx-auto flex w-full max-w-[96rem] px-6 lg:px-8">
+          <LiuyaoResultActions
+            layout="desktop"
+            copyStatus={copyStatus}
+            aiPanelOpen={aiPanelOpen}
+            onCopy={onCopy}
+            onStartOver={onStartOver}
+            onToggleAiPanel={onToggleAiPanel}
+          />
+        </div>
+      </div>
+
+      <div
+        className={cn(
+          "flex w-full flex-1 flex-col md:h-full md:min-h-0 md:pt-16",
+          aiPanelOpen && "max-lg:h-full max-lg:min-h-0"
+        )}
+      >
+        <div
+          className={cn(
+            "mx-auto flex w-full flex-1 flex-col lg:h-full lg:min-h-0 lg:overflow-hidden",
+            aiPanelOpen
+              ? "liuyao-result-grid-open max-lg:h-full max-lg:min-h-0 lg:grid lg:max-w-[96rem]"
+              : "liuyao-result-grid-closed lg:grid lg:max-w-[96rem]"
+          )}
+        >
+          <div
+            className={cn(
+              "min-w-0 lg:flex lg:h-full lg:min-h-0 lg:items-center lg:justify-center lg:overflow-y-auto lg:px-8 lg:py-8",
+              aiPanelOpen
+                ? "max-lg:max-h-[42svh] max-lg:shrink-0 max-lg:overflow-y-auto"
+                : "lg:w-full"
+            )}
+          >
+            <PaipanResult result={result} compactOnMobile={aiPanelOpen} />
+          </div>
+
+          <Separator
+            orientation="vertical"
+            className={cn(
+              "liuyao-result-divider hidden",
+              aiPanelOpen ? "liuyao-result-divider-open lg:block" : "liuyao-result-divider-closed lg:block"
+            )}
+          />
+
+          <AIDivinationPanel
+            open={aiPanelOpen}
+            result={result}
+            onClose={onCloseAi}
+          />
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1106,7 +1167,7 @@ function LiuyaoResultActions({
   return (
     <div
       className={cn(
-        "flex max-w-full items-center gap-2",
+        "flex w-full max-w-full items-center gap-2",
         compact ? "justify-between" : "justify-between gap-3"
       )}
     >
@@ -1148,12 +1209,10 @@ function LiuyaoResultActions({
 
 function PaipanResult({
   result,
-  aiPanelOpen,
-  actions,
+  compactOnMobile = false,
 }: {
   result: LiuyaoPaipan;
-  aiPanelOpen: boolean;
-  actions: ReactNode;
+  compactOnMobile?: boolean;
 }) {
   const showChangedColumns = Boolean(result.changed);
   const hexagramTitle = formatHexagramTransition(result);
@@ -1161,66 +1220,48 @@ function PaipanResult({
   return (
     <section
       className={cn(
-        "flex w-full flex-col gap-4 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 sm:gap-6 lg:w-fit lg:max-w-full lg:flex-none",
-        aiPanelOpen && "max-lg:gap-0"
+        "flex w-full flex-col gap-4 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 sm:gap-6 lg:mx-auto lg:max-w-[46rem]",
+        compactOnMobile && "max-lg:gap-3"
       )}
     >
-      <div className="hidden md:block">
-        {actions}
-      </div>
-
       <div
         className={cn(
-          "flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-stretch lg:justify-between lg:gap-10",
-          aiPanelOpen && "max-lg:gap-0"
+          "flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-8",
+          compactOnMobile && "max-lg:gap-3"
         )}
       >
-        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:gap-3 lg:w-max lg:max-w-[36rem] lg:flex-none">
-          <div className={cn("flex flex-col lg:gap-2", aiPanelOpen ? "gap-2" : "gap-0")}>
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:gap-3">
+          <div className="flex flex-col gap-2 lg:gap-2">
             <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
               <div className="min-w-0 flex-1 truncate">{result.solar}</div>
-              {aiPanelOpen ? (
+              {compactOnMobile ? (
                 <div className="max-w-[50%] shrink-0 truncate text-right lg:hidden">
                   {hexagramTitle}
                 </div>
               ) : null}
             </div>
-            <AutoFitQuestionText compactOnMobile={aiPanelOpen}>{result.question}</AutoFitQuestionText>
+            <AutoFitQuestionText compactOnMobile={compactOnMobile}>{result.question}</AutoFitQuestionText>
           </div>
 
-          <div className={cn("flex flex-col", aiPanelOpen ? "gap-1" : "gap-2 sm:gap-3")}>
-            <div
-              className={cn(
-                "liuyao-mobile-ai-title",
-                aiPanelOpen && "max-lg:hidden",
-                aiPanelOpen ? "liuyao-mobile-ai-title-open" : "liuyao-mobile-ai-title-closed"
-              )}
-            >
+          <div className="flex flex-col gap-2 sm:gap-3">
+            <div className={cn(compactOnMobile && "max-lg:hidden")}>
               <h2 className="text-lg font-semibold tracking-tight">
                 {hexagramTitle}
               </h2>
             </div>
-            <PillarTimeSummary result={result} compactOnMobile={aiPanelOpen} />
-            {!aiPanelOpen ? <BodySummary result={result} /> : null}
+            <PillarTimeSummary result={result} compactOnMobile={compactOnMobile} />
+            <div className={cn(compactOnMobile && "max-lg:hidden")}>
+              <BodySummary result={result} />
+            </div>
           </div>
         </div>
 
-        <div
-          className={cn(
-            "liuyao-mobile-ai-collapse lg:contents",
-            aiPanelOpen ? "liuyao-mobile-ai-collapse-closed" : "liuyao-mobile-ai-collapse-open"
-          )}
-        >
+        <div className={cn(compactOnMobile && "max-lg:hidden")}>
           <ShenshaPanel result={result} />
         </div>
       </div>
 
-      <div
-        className={cn(
-          "liuyao-mobile-ai-collapse",
-          aiPanelOpen ? "liuyao-mobile-ai-collapse-closed" : "liuyao-mobile-ai-collapse-open"
-        )}
-      >
+      <div className={cn(compactOnMobile && "max-lg:hidden")}>
         <div className="flex flex-col gap-4 sm:gap-6">
           <Separator />
 
@@ -1477,16 +1518,16 @@ function AIDivinationPanel({
     <>
       <aside
         aria-hidden={!open}
+        aria-label="询问AI"
         className={cn(
-          "liuyao-ai-motion hidden min-h-0 w-[23rem] shrink-0 overflow-hidden rounded-2xl border bg-card shadow-sm lg:block lg:h-[clamp(28rem,calc(100vh-7rem),42rem)] lg:self-start",
-          open ? "liuyao-ai-panel-open" : "liuyao-ai-panel-closed"
+          "liuyao-ai-pane hidden min-h-0 overflow-hidden bg-background lg:flex lg:h-full lg:flex-col",
+          open ? "liuyao-ai-pane-open" : "liuyao-ai-pane-closed"
         )}
       >
         <AIDivinationPanelContent
           isSending={isSending}
           message={message}
           messages={messages}
-          onClose={onClose}
           onNewSession={handleNewSession}
           onMessageChange={setMessage}
           onStop={handleStop}
@@ -1499,15 +1540,14 @@ function AIDivinationPanel({
         aria-hidden={!open}
         aria-label="询问AI"
         className={cn(
-          "liuyao-ai-mobile-panel liuyao-ai-motion min-h-0 w-full overflow-hidden border-t bg-background max-lg:flex max-lg:flex-col lg:hidden",
-          open ? "liuyao-ai-mobile-panel-open" : "liuyao-ai-mobile-panel-closed"
+          "min-h-0 w-full overflow-hidden border-t bg-background max-lg:flex max-lg:flex-col lg:hidden",
+          open ? "max-lg:flex-1" : "max-lg:hidden"
         )}
       >
         <AIDivinationPanelContent
           isSending={isSending}
           message={message}
           messages={messages}
-          onClose={onClose}
           onNewSession={handleNewSession}
           onMessageChange={setMessage}
           onStop={handleStop}
@@ -1524,7 +1564,6 @@ function AIDivinationPanelContent({
   isSending,
   message,
   messages,
-  onClose,
   onNewSession,
   onMessageChange,
   onStop,
@@ -1535,7 +1574,6 @@ function AIDivinationPanelContent({
   isSending: boolean;
   message: string;
   messages: AIDivinationMessage[];
-  onClose: () => void;
   onNewSession: () => void;
   onMessageChange: (value: string) => void;
   onStop: () => void;
@@ -1596,22 +1634,10 @@ function AIDivinationPanelContent({
         mobile && "flex-1"
       )}
     >
-      <div className={cn("flex items-center justify-between border-b", mobile ? "px-0 py-2" : "px-3 py-2")}>
-        {mobile ? (
-          <div className="text-xs font-medium text-muted-foreground">AI 解卦</div>
-        ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="关闭询问AI"
-            tabIndex={tabIndex}
-            onClick={onClose}
-          >
-            <ArrowLeftIcon />
-          </Button>
-        )}
-        {!mobile ? <div className="text-sm font-medium">询问AI</div> : null}
+      <div className={cn("flex items-center justify-between", mobile ? "border-b px-0 py-2" : "px-5 pb-2 pt-5")}>
+        <div className={cn("font-medium", mobile ? "text-xs text-muted-foreground" : "text-sm")}>
+          AI 解卦
+        </div>
         <Button
           type="button"
           variant="ghost"
@@ -1626,16 +1652,23 @@ function AIDivinationPanelContent({
 
       <div ref={scrollAreaRef} className="h-full min-h-0">
         <ScrollArea className="h-full min-h-0" aria-live="polite" aria-label="询问AI消息">
-          <div className={cn("flex min-h-full flex-col justify-end gap-3 py-4", mobile ? "px-0" : "px-3")}>
+          <div className={cn("flex min-h-full flex-col justify-end gap-3 py-4", mobile ? "px-0" : "px-5")}>
             {messages.map((item) => (
               <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
                 <div
                   className={cn(
-                    "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm break-words",
+                    "break-words text-sm leading-relaxed",
+                    mobile
+                      ? "max-w-[85%] rounded-2xl px-3 py-2 shadow-sm"
+                      : item.role === "assistant"
+                      ? "w-full max-w-full py-1"
+                      : "max-w-[82%] rounded-2xl px-3 py-2",
                     item.role === "user"
                       ? "rounded-br-md bg-primary text-primary-foreground whitespace-pre-wrap"
-                      : "liuyao-ai-markdown rounded-bl-md bg-muted text-card-foreground",
-                    item.status === "error" && "bg-destructive/10 text-destructive"
+                      : mobile
+                      ? "liuyao-ai-markdown rounded-bl-md bg-muted text-card-foreground"
+                      : "liuyao-ai-markdown text-card-foreground",
+                    item.status === "error" && (mobile ? "bg-destructive/10 text-destructive" : "text-destructive")
                   )}
                 >
                   <AIDivinationMessageContent message={item} />
@@ -1646,7 +1679,7 @@ function AIDivinationPanelContent({
         </ScrollArea>
       </div>
 
-      <form className={cn("border-t", mobile ? "py-3" : "p-3")} onSubmit={onSubmit}>
+      <form className={cn(mobile ? "border-t py-3" : "px-5 pb-5 pt-3")} onSubmit={onSubmit}>
         <FieldGroup className="gap-0">
           <Field orientation="horizontal" className="items-center gap-2">
             <FieldLabel htmlFor={messageInputId} className="sr-only">追问内容</FieldLabel>
