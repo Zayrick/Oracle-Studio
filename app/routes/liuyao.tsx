@@ -674,7 +674,6 @@ export default function Liuyao() {
     });
   };
 
-  const mobileAiChatActive = Boolean(result && aiPanelOpen);
   const onlineCastingComplete = onlineCastCount >= ONLINE_CASTING_LINE_COUNT;
   const submitDisabled = castingMethod === "online" && (!onlineCastingComplete || onlineRolling);
 
@@ -682,9 +681,8 @@ export default function Liuyao() {
     <div
       className={cn(
         result
-          ? "relative mx-auto flex min-h-svh w-full px-4 pb-6 pt-16 md:h-svh md:min-h-0 md:overflow-hidden md:px-0 md:pb-0 md:pt-0"
-          : "container relative mx-auto flex min-h-svh items-center px-4 py-16 md:py-20 lg:py-10",
-        mobileAiChatActive && "max-lg:h-svh max-lg:min-h-0 max-lg:items-stretch max-lg:overflow-hidden max-lg:pb-0"
+          ? "relative mx-auto flex h-svh min-h-0 w-full overflow-hidden px-4 pb-0 pt-16 md:px-0 md:pt-0"
+          : "container relative mx-auto flex min-h-svh items-center px-4 py-16 md:py-20 lg:py-10"
       )}
     >
       <LiuyaoMobilePageActions
@@ -703,8 +701,7 @@ export default function Liuyao() {
       <div
         className={cn(
           "mx-auto flex w-full flex-col",
-          result ? "max-w-none" : "max-w-6xl gap-6 lg:gap-8",
-          mobileAiChatActive && "max-lg:h-full max-lg:min-h-0 max-lg:flex-1 max-lg:gap-0"
+          result ? "h-full min-h-0 max-w-none" : "max-w-6xl gap-6 lg:gap-8"
         )}
       >
         {!result ? (
@@ -886,7 +883,7 @@ function LiuyaoMobilePageActions({
 }) {
   if (result) {
     return (
-      <div className="absolute left-4 right-4 top-4 md:hidden">
+      <div className="fixed left-4 right-4 top-4 z-20 md:hidden">
         {actions}
       </div>
     );
@@ -897,7 +894,7 @@ function LiuyaoMobilePageActions({
       to="/"
       className={cn(
         buttonVariants({ variant: "outline", size: "sm" }),
-        "absolute left-4 top-4 md:hidden"
+        "fixed left-4 top-4 z-20 md:hidden"
       )}
     >
       <ArrowLeftIcon data-icon="inline-start" />
@@ -925,10 +922,7 @@ function LiuyaoResultWorkspace({
 }) {
   return (
     <section
-      className={cn(
-        "liuyao-transition-content flex w-full flex-col md:h-full md:min-h-0",
-        aiPanelOpen && "max-lg:h-full max-lg:min-h-0 max-lg:flex-1"
-      )}
+      className="liuyao-transition-content flex h-full min-h-0 w-full flex-col"
       aria-label="六爻解卦结果"
     >
       <div className="fixed inset-x-0 top-0 z-20 hidden h-16 border-b bg-background/95 backdrop-blur md:left-[224px] md:flex md:items-center">
@@ -945,14 +939,11 @@ function LiuyaoResultWorkspace({
       </div>
 
       <div
-        className={cn(
-          "flex w-full flex-1 flex-col md:h-full md:min-h-0 md:pt-16",
-          aiPanelOpen && "max-lg:h-full max-lg:min-h-0"
-        )}
+        className="flex h-full min-h-0 w-full flex-1 flex-col md:pt-16"
       >
         <div
           className={cn(
-            "mx-auto flex w-full flex-1 flex-col lg:h-full lg:min-h-0 lg:overflow-hidden",
+            "mx-auto flex w-full flex-1 flex-col max-lg:relative max-lg:h-full max-lg:min-h-0 max-lg:overflow-hidden lg:h-full lg:min-h-0 lg:overflow-hidden",
             aiPanelOpen
               ? "liuyao-result-grid-open max-lg:h-full max-lg:min-h-0 lg:grid lg:max-w-[96rem]"
               : "liuyao-result-grid-closed lg:grid lg:max-w-[96rem]"
@@ -960,13 +951,12 @@ function LiuyaoResultWorkspace({
         >
           <div
             className={cn(
-              "min-w-0 lg:flex lg:h-full lg:min-h-0 lg:items-center lg:justify-center lg:overflow-y-auto lg:px-8 lg:py-8",
-              aiPanelOpen
-                ? "max-lg:max-h-[42svh] max-lg:shrink-0 max-lg:overflow-y-auto"
-                : "lg:w-full"
+              "liuyao-mobile-result-page min-w-0 max-lg:absolute max-lg:inset-0 max-lg:overflow-y-auto max-lg:pb-6 lg:flex lg:h-full lg:min-h-0 lg:items-center lg:justify-center lg:overflow-y-auto lg:px-8 lg:py-8",
+              aiPanelOpen ? "liuyao-mobile-result-page-open" : "liuyao-mobile-result-page-closed",
+              !aiPanelOpen && "lg:w-full"
             )}
           >
-            <PaipanResult result={result} compactOnMobile={aiPanelOpen} />
+            <PaipanResult result={result} />
           </div>
 
           <Separator
@@ -1209,59 +1199,44 @@ function LiuyaoResultActions({
 
 function PaipanResult({
   result,
-  compactOnMobile = false,
 }: {
   result: LiuyaoPaipan;
-  compactOnMobile?: boolean;
 }) {
   const showChangedColumns = Boolean(result.changed);
   const hexagramTitle = formatHexagramTransition(result);
 
   return (
     <section
-      className={cn(
-        "flex w-full flex-col gap-4 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 sm:gap-6 lg:mx-auto lg:max-w-[46rem]",
-        compactOnMobile && "max-lg:gap-3"
-      )}
+      className="flex w-full flex-col gap-4 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 sm:gap-6 lg:mx-auto lg:max-w-[46rem]"
     >
       <div
-        className={cn(
-          "flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-8",
-          compactOnMobile && "max-lg:gap-3"
-        )}
+        className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-8"
       >
         <div className="flex min-w-0 flex-1 flex-col gap-2 sm:gap-3">
           <div className="flex flex-col gap-2 lg:gap-2">
             <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
               <div className="min-w-0 flex-1 truncate">{result.solar}</div>
-              {compactOnMobile ? (
-                <div className="max-w-[50%] shrink-0 truncate text-right lg:hidden">
-                  {hexagramTitle}
-                </div>
-              ) : null}
             </div>
-            <AutoFitQuestionText compactOnMobile={compactOnMobile}>{result.question}</AutoFitQuestionText>
+            <AutoFitQuestionText>{result.question}</AutoFitQuestionText>
           </div>
 
           <div className="flex flex-col gap-2 sm:gap-3">
-            <div className={cn(compactOnMobile && "max-lg:hidden")}>
+            <div className="hidden lg:block">
               <h2 className="text-lg font-semibold tracking-tight">
                 {hexagramTitle}
               </h2>
             </div>
-            <PillarTimeSummary result={result} compactOnMobile={compactOnMobile} />
-            <div className={cn(compactOnMobile && "max-lg:hidden")}>
-              <BodySummary result={result} />
-            </div>
+            <PillarTimeSummary result={result} />
+            <BodySummary result={result} />
           </div>
         </div>
 
-        <div className={cn(compactOnMobile && "max-lg:hidden")}>
+        <div>
           <ShenshaPanel result={result} />
         </div>
       </div>
 
-      <div className={cn(compactOnMobile && "max-lg:hidden")}>
+      <div>
         <div className="flex flex-col gap-4 sm:gap-6">
           <Separator />
 
@@ -1325,6 +1300,7 @@ function AIDivinationPanel({
   const nextMessageIdRef = useRef(1);
   const activeRequestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const mobileTitle = formatHexagramTransition(result);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -1533,6 +1509,7 @@ function AIDivinationPanel({
           onStop={handleStop}
           onSubmit={handleSubmit}
           tabIndex={open ? 0 : -1}
+          title="AI 解卦"
           variant="desktop"
         />
       </aside>
@@ -1540,8 +1517,8 @@ function AIDivinationPanel({
         aria-hidden={!open}
         aria-label="询问AI"
         className={cn(
-          "min-h-0 w-full overflow-hidden border-t bg-background max-lg:flex max-lg:flex-col lg:hidden",
-          open ? "max-lg:flex-1" : "max-lg:hidden"
+          "liuyao-mobile-ai-page min-h-0 w-full overflow-hidden bg-background max-lg:absolute max-lg:inset-0 max-lg:flex max-lg:flex-col lg:hidden",
+          open ? "liuyao-mobile-ai-page-open" : "liuyao-mobile-ai-page-closed"
         )}
       >
         <AIDivinationPanelContent
@@ -1553,6 +1530,7 @@ function AIDivinationPanel({
           onStop={handleStop}
           onSubmit={handleSubmit}
           tabIndex={open ? 0 : -1}
+          title={mobileTitle}
           variant="mobile"
         />
       </section>
@@ -1569,6 +1547,7 @@ function AIDivinationPanelContent({
   onStop,
   onSubmit,
   tabIndex,
+  title,
   variant,
 }: {
   isSending: boolean;
@@ -1579,6 +1558,7 @@ function AIDivinationPanelContent({
   onStop: () => void;
   onSubmit: (event: FormEvent) => void;
   tabIndex: 0 | -1;
+  title: string;
   variant: "desktop" | "mobile";
 }) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -1634,9 +1614,9 @@ function AIDivinationPanelContent({
         mobile && "flex-1"
       )}
     >
-      <div className={cn("flex items-center justify-between", mobile ? "border-b px-0 py-2" : "px-5 pb-2 pt-5")}>
-        <div className={cn("font-medium", mobile ? "text-xs text-muted-foreground" : "text-sm")}>
-          AI 解卦
+      <div className={cn("flex items-center justify-between gap-2", mobile ? "border-b px-0 py-2" : "px-5 pb-2 pt-5")}>
+        <div className={cn("min-w-0 flex-1 truncate font-medium", mobile ? "text-xs text-muted-foreground" : "text-sm")}>
+          {title}
         </div>
         <Button
           type="button"
@@ -1655,22 +1635,7 @@ function AIDivinationPanelContent({
           <div className={cn("flex min-h-full flex-col justify-end gap-3 py-4", mobile ? "px-0" : "px-5")}>
             {messages.map((item) => (
               <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
-                <div
-                  className={cn(
-                    "break-words text-sm leading-relaxed",
-                    mobile
-                      ? "max-w-[85%] rounded-2xl px-3 py-2 shadow-sm"
-                      : item.role === "assistant"
-                      ? "w-full max-w-full py-1"
-                      : "max-w-[82%] rounded-2xl px-3 py-2",
-                    item.role === "user"
-                      ? "rounded-br-md bg-primary text-primary-foreground whitespace-pre-wrap"
-                      : mobile
-                      ? "liuyao-ai-markdown rounded-bl-md bg-muted text-card-foreground"
-                      : "liuyao-ai-markdown text-card-foreground",
-                    item.status === "error" && (mobile ? "bg-destructive/10 text-destructive" : "text-destructive")
-                  )}
-                >
+                <div className={getAIDivinationMessageClass(item)}>
                   <AIDivinationMessageContent message={item} />
                 </div>
               </div>
@@ -1705,6 +1670,20 @@ function AIDivinationPanelContent({
         </FieldGroup>
       </form>
     </div>
+  );
+}
+
+function getAIDivinationMessageClass(message: AIDivinationMessage) {
+  if (message.role === "user") {
+    return cn(
+      "max-w-[82%] rounded-2xl rounded-br-md bg-primary px-3 py-2 text-sm leading-relaxed text-primary-foreground break-words whitespace-pre-wrap",
+      message.status === "error" && "bg-destructive/10 text-destructive"
+    );
+  }
+
+  return cn(
+    "liuyao-ai-markdown w-full max-w-full py-1 text-sm leading-relaxed text-card-foreground break-words",
+    message.status === "error" && "text-destructive"
   );
 }
 
@@ -2049,13 +2028,7 @@ function copyMdTable(headers: string[], rows: unknown[][]) {
   ].join("\n");
 }
 
-function AutoFitQuestionText({
-  children,
-  compactOnMobile = false,
-}: {
-  children: string;
-  compactOnMobile?: boolean;
-}) {
+function AutoFitQuestionText({ children }: { children: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
 
@@ -2072,19 +2045,6 @@ function AutoFitQuestionText({
       window.cancelAnimationFrame(frameId);
       frameId = window.requestAnimationFrame(() => {
         const isDesktop = window.matchMedia("(min-width: 640px)").matches;
-        const isMobileAiLayout = !window.matchMedia("(min-width: 1024px)").matches;
-
-        if (compactOnMobile && isMobileAiLayout) {
-          container.style.height = "1.25rem";
-          container.style.overflow = "hidden";
-          textElement.style.fontSize = "0.75rem";
-          textElement.style.lineHeight = "1.25rem";
-          textElement.style.overflow = "hidden";
-          textElement.style.textOverflow = "ellipsis";
-          textElement.style.whiteSpace = "nowrap";
-          return;
-        }
-
         const maxFontSize = isDesktop ? 24 : 20;
         const minFontSize = isDesktop ? 12 : 14;
         const targetHeight = isDesktop ? 64 : 56;
@@ -2125,7 +2085,7 @@ function AutoFitQuestionText({
       window.cancelAnimationFrame(frameId);
       window.removeEventListener("resize", fitText);
     };
-  }, [children, compactOnMobile]);
+  }, [children]);
 
   return (
     <div ref={containerRef} className="overflow-hidden transition-[height] duration-500 ease-out">
@@ -2160,43 +2120,28 @@ function ShenshaPanel({ result }: { result: LiuyaoPaipan }) {
   );
 }
 
-function PillarTimeSummary({
-  result,
-  compactOnMobile = false,
-}: {
-  result: LiuyaoPaipan;
-  compactOnMobile?: boolean;
-}) {
+function PillarTimeSummary({ result }: { result: LiuyaoPaipan }) {
   return (
-    <div
-      className={cn(
-        "flex flex-wrap items-start gap-x-5 gap-y-2 sm:gap-x-8 sm:gap-y-3",
-        compactOnMobile && "max-lg:gap-x-3 max-lg:gap-y-1"
-      )}
-    >
+    <div className="flex flex-wrap items-start gap-x-5 gap-y-2 sm:gap-x-8 sm:gap-y-3">
       <PillarTimeItem
         label="年"
         value={result.pillars.year}
         voidValue={result.pillarVoids.year}
-        compactOnMobile={compactOnMobile}
       />
       <PillarTimeItem
         label="月"
         value={result.pillars.month}
         voidValue={result.pillarVoids.month}
-        compactOnMobile={compactOnMobile}
       />
       <PillarTimeItem
         label="日"
         value={result.pillars.day}
         voidValue={result.pillarVoids.day}
-        compactOnMobile={compactOnMobile}
       />
       <PillarTimeItem
         label="时"
         value={result.pillars.hour}
         voidValue={result.pillarVoids.hour}
-        compactOnMobile={compactOnMobile}
       />
     </div>
   );
@@ -2206,39 +2151,22 @@ function PillarTimeItem({
   label,
   value,
   voidValue,
-  compactOnMobile = false,
 }: {
   label: string;
   value: string;
   voidValue: string;
-  compactOnMobile?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        "flex min-w-12 flex-col gap-1 leading-none sm:min-w-14",
-        compactOnMobile && "max-lg:min-w-0 max-lg:gap-0.5"
-      )}
-    >
+    <div className="flex min-w-12 flex-col gap-1 leading-none sm:min-w-14">
       <div className="flex items-baseline gap-1">
-        <span
-          className={cn(
-            "text-base font-semibold text-foreground",
-            compactOnMobile && "max-lg:text-xs max-lg:font-normal"
-          )}
-        >
+        <span className="text-base font-semibold text-foreground">
           {value}
         </span>
-        <span
-          className={cn(
-            "text-xs font-medium text-muted-foreground",
-            compactOnMobile && "max-lg:font-normal"
-          )}
-        >
+        <span className="text-xs font-medium text-muted-foreground">
           {label}
         </span>
       </div>
-      <div className={cn("text-[11px] text-muted-foreground", compactOnMobile && "max-lg:hidden")}>
+      <div className="text-[11px] text-muted-foreground">
         {voidValue}空
       </div>
     </div>

@@ -144,6 +144,29 @@ body {
 }
 
 @layer components {
+  @media (max-width: 1023.98px) {
+    .liuyao-mobile-result-page,
+    .liuyao-mobile-ai-page {
+      transition: transform 460ms cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: transform;
+    }
+
+    .liuyao-mobile-result-page-closed,
+    .liuyao-mobile-ai-page-open {
+      transform: translateX(0);
+    }
+
+    .liuyao-mobile-result-page-open {
+      pointer-events: none;
+      transform: translateX(-100%);
+    }
+
+    .liuyao-mobile-ai-page-closed {
+      pointer-events: none;
+      transform: translateX(100%);
+    }
+  }
+
   @media (min-width: 1024px) {
     .liuyao-result-grid-closed,
     .liuyao-result-grid-open {
@@ -183,7 +206,9 @@ body {
     .liuyao-result-grid-closed,
     .liuyao-result-grid-open,
     .liuyao-result-divider,
-    .liuyao-ai-pane {
+    .liuyao-ai-pane,
+    .liuyao-mobile-result-page,
+    .liuyao-mobile-ai-page {
       transition-duration: 1ms;
     }
   }
