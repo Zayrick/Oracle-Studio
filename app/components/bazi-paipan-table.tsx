@@ -42,12 +42,10 @@ interface BaziPaipanTableProps {
 }
 
 export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
+  const displayName = paipan.name || "未署名";
   const summaryItems = [
-    paipan.name || "未署名",
     GENDER_LABELS[paipan.gender],
     paipan.solarText,
-    `日主 ${paipan.dayMaster}`,
-    paipan.kongWangText,
   ];
 
   return (
@@ -57,7 +55,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
     >
       <div className="flex flex-col gap-2 text-center">
         <h2 id="bazi-paipan-heading" className="text-xl font-semibold tracking-tight">
-          排盘结果
+          {displayName}
         </h2>
         <div className="mx-auto flex max-w-3xl flex-wrap justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           {summaryItems.map((item) => (
@@ -76,13 +74,12 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
         <Table className="min-w-[760px] table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-24 text-center">项目</TableHead>
+              <TableHead className="w-24 text-center">
+                <span className="sr-only">项目</span>
+              </TableHead>
               {paipan.pillars.map((pillar) => (
                 <TableHead key={pillar.key} className="text-center">
-                  <div className="flex flex-col gap-1">
-                    <span>{pillar.label}</span>
-                    <span className="font-normal text-muted-foreground">{pillar.name}</span>
-                  </div>
+                  {pillar.label}
                 </TableHead>
               ))}
             </TableRow>
