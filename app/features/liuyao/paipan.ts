@@ -456,14 +456,6 @@ function createShenshas(pan: PanResult): LiuyaoShenshaInfo[] {
     branches: [...branches],
   }));
 
-  if (pan.dayKong) {
-    shenshas.push({ name: "日空", branches: splitBranches(pan.dayKong) });
-  }
-
-  if (pan.hourKong) {
-    shenshas.push({ name: "时空", branches: splitBranches(pan.hourKong) });
-  }
-
   return shenshas.filter((shensha) => shensha.branches.length > 0);
 }
 
@@ -526,10 +518,6 @@ function toBinaryCode(yaoString: string) {
     .split("")
     .map((char) => (char === "7" || char === "9" ? "1" : "0"))
     .join("");
-}
-
-function splitBranches(value: string) {
-  return value.split("").filter(Boolean);
 }
 
 function getStem(naJia: string) {

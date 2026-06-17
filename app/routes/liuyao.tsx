@@ -2298,7 +2298,7 @@ function formatLiuyaoCopyCombinedTable(result: LiuyaoPaipan) {
   return joinCopySections([
     `## 六爻明细\n主卦/之卦：${formatHexagramName(primary)} → ${formatHexagramName(zhiHexagram)}（主卦${primary.palace}${primary.palaceElement}，${primary.stage}，世在${YAO_NAMES[primary.worldPosition - 1]}，应在${YAO_NAMES[primary.responsePosition - 1]}；之卦六亲沿用本卦卦宫五行）\n伏神说明：常规伏神=本卦中缺少的六亲；完整伏神=本宫纯卦逐爻排入的伏神；旁伏神=对宫纯卦体系排出的伏神。`,
     copyMdTable(
-      ["爻位", "本卦爻", "六兽", "世应", "本卦六亲", "本卦纳甲", "本卦纳音", "本卦五行", "星宿/锁泊", "岁限", "常规伏神", "完整伏神", "旁伏神", "是否动爻", "本卦神煞辅助", "本卦长生", "之卦爻", "之卦世应", "之卦六亲", "之卦纳甲", "之卦纳音", "之卦五行", "之卦星宿/锁泊", "之卦岁限", "之卦神煞辅助", "之卦长生"],
+      ["爻位", "本卦爻", "六兽", "世应", "本卦六亲", "本卦纳甲", "本卦纳音", "本卦五行", "星宿/锁泊", "岁限", "常规伏神", "完整伏神", "旁伏神", "是否动爻", "本卦状态", "本卦神煞辅助", "本卦长生", "之卦爻", "之卦世应", "之卦六亲", "之卦纳甲", "之卦纳音", "之卦五行", "之卦星宿/锁泊", "之卦岁限", "之卦状态", "之卦神煞辅助", "之卦长生"],
       [...result.lines]
         .sort((a, b) => b.position - a.position)
         .map((line) => {
@@ -2319,6 +2319,7 @@ function formatLiuyaoCopyCombinedTable(result: LiuyaoPaipan) {
             formatCopyHiddenGod(line.fuShen),
             formatCopyHiddenGod(line.pangFuShen),
             line.moving ? "是" : "-",
+            formatCopyLineStatuses(result, line),
             formatCopyAllLineShensha(result, line),
             formatCopyLineChangsheng(result, line.element),
             changedLine ? formatCopyChangedYao(changedLine) : "-",
@@ -2329,6 +2330,7 @@ function formatLiuyaoCopyCombinedTable(result: LiuyaoPaipan) {
             changedLine?.element ?? "-",
             changedLine ? formatCopyXingXiu(changedLine) : "-",
             changedLine?.suiXian ?? "-",
+            changedLine ? formatCopyLineStatuses(result, changedLine) : "-",
             changedLine ? formatCopyAllLineShensha(result, changedLine) : "-",
             changedLine ? formatCopyLineChangsheng(result, changedLine.element) : "-",
           ];
@@ -2415,6 +2417,17 @@ function formatCopyAllLineShensha(result: LiuyaoPaipan, line: Pick<LiuyaoLineInf
   ].filter((item, index, list) => item && list.indexOf(item) === index).join("、") || "-";
 }
 
+function formatCopyLineStatuses(result: LiuyaoPaipan, line: Pick<LiuyaoLineInfo, "branch">) {
+  const hits: string[] = [];
+
+  if (result.pillarVoids.year.includes(line.branch)) hits.push("年空");
+  if (result.pillarVoids.month.includes(line.branch)) hits.push("月空");
+  if (result.pillarVoids.day.includes(line.branch)) hits.push("日空");
+  if (result.pillarVoids.hour.includes(line.branch)) hits.push("时空");
+
+  return [...new Set(hits)].join("、") || "-";
+}
+
 function formatCopyRawShenYao(gua: LiuyaoPaipan["raw"]["benGua"]) {
   if (!gua.shenYao) {
     return "-";
@@ -2438,7 +2451,6 @@ function formatCopyLineShensha(result: LiuyaoPaipan, line: Pick<LiuyaoLineInfo, 
   if (COPY_BRANCH_OPPOSITES[dayBranch] === branch) hits.push("日冲");
   if (COPY_BRANCH_COMBINES[monthBranch] === branch) hits.push("月合");
   if (COPY_BRANCH_COMBINES[dayBranch] === branch) hits.push("日合");
-  if (result.pillarVoids.day.includes(branch)) hits.push("日空");
 
   for (const rule of COPY_STEM_BRANCH_SHENSHA_RULES) {
     for (const basis of rule.basis) {
