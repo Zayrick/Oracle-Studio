@@ -1,4 +1,21 @@
-import { SolarTime } from "tyme4ts";
+import {
+  BAGUA_XIANG,
+  calcXunKong,
+  dayan,
+  decodePan,
+  getZhiGua,
+  manualQiGua,
+  solarToLunar,
+  timeQiGua,
+  type FuShenData,
+  type GuaPan,
+  type LiuQin,
+  type PanResult,
+  type WuXing,
+  type YaoData,
+  type YaoString,
+  type YaoValue,
+} from "iching-shifa";
 
 export type YaoType = "阴" | "阳";
 
@@ -14,14 +31,17 @@ export interface LiuyaoPaipanInput {
   yaos: LiuyaoInputYao[];
 }
 
-type ElementName = "木" | "火" | "土" | "金" | "水";
-type SixRelative = "兄弟" | "子孙" | "妻财" | "官鬼" | "父母";
+type ElementName = WuXing;
+type SixRelative = LiuQin;
 type HexagramPattern = "六冲" | "六合";
 
 export interface LiuyaoHiddenGodInfo {
   relation: SixRelative;
   stem: string;
   branch: string;
+  element: ElementName;
+  naYin: string;
+  hostPosition: number;
 }
 
 export interface LiuyaoHexagramInfo {
@@ -35,11 +55,33 @@ export interface LiuyaoHexagramInfo {
   worldPosition: number;
   responsePosition: number;
   pattern: HexagramPattern | "";
+  wuXingStar: string;
+  guaCi: string;
+  yaoCi: string[];
+  tuanCi: string;
+  shenYao: number | null;
+}
+
+export interface LiuyaoChangedLineInfo {
+  type: YaoType;
+  yaoValue: YaoValue;
+  moving: boolean;
+  relation: SixRelative;
+  stem: string;
+  branch: string;
+  element: ElementName;
+  naYin: string;
+  role: "" | "世" | "应";
+  xingXiu: string;
+  suoBo: string;
+  suiXian: string;
 }
 
 export interface LiuyaoLineInfo {
   position: number;
   label: string;
+  yaoValue: YaoValue;
+  labelValue: string;
   type: YaoType;
   moving: boolean;
   movingSymbol: "" | "○" | "×";
@@ -49,16 +91,16 @@ export interface LiuyaoLineInfo {
   stem: string;
   branch: string;
   element: ElementName;
+  naYin: string;
+  xingXiu: string;
+  suoBo: string;
+  suiXian: string;
   hiddenGods: LiuyaoHiddenGodInfo[];
   huozhulinHiddenGod: LiuyaoHiddenGodInfo;
-  changed: {
-    type: YaoType;
-    relation: SixRelative;
-    stem: string;
-    branch: string;
-    element: ElementName;
-    role: "" | "世" | "应";
-  } | null;
+  regularFuShen: LiuyaoHiddenGodInfo | null;
+  fuShen: LiuyaoHiddenGodInfo | null;
+  pangFuShen: LiuyaoHiddenGodInfo | null;
+  changed: LiuyaoChangedLineInfo | null;
 }
 
 export interface LiuyaoShenshaInfo {
@@ -70,6 +112,10 @@ export interface LiuyaoPaipan {
   question: string;
   solar: string;
   lunar: string;
+  solarTerm: string;
+  monthJian: string;
+  dayKong: string;
+  hourKong: string;
   pillars: {
     year: string;
     month: string;
@@ -84,372 +130,87 @@ export interface LiuyaoPaipan {
   };
   primary: LiuyaoHexagramInfo;
   changed: LiuyaoHexagramInfo | null;
+  mutual: LiuyaoHexagramInfo;
   lines: LiuyaoLineInfo[];
   guaBody: string;
   worldBody: string;
   shenshas: LiuyaoShenshaInfo[];
+  regularFuShen: LiuyaoHiddenGodInfo[];
+  fuShen: LiuyaoHiddenGodInfo[];
+  pangFuShen: LiuyaoHiddenGodInfo[];
+  yaoString: YaoString;
+  zhiYaoString: YaoString;
+  huYaoString: YaoString;
+  dongYaoCount: number;
+  explanation: string;
+  raw: PanResult;
 }
 
 export const YAO_NAMES = ["初爻", "二爻", "三爻", "四爻", "五爻", "上爻"];
-const EARTHLY_BRANCH_ORDER = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
-const EARTHLY_BRANCH_NUMBERS = Object.fromEntries(
-  EARTHLY_BRANCH_ORDER.map((branch, index) => [branch, index + 1])
-) as Record<string, number>;
 
-const TRIGRAMS = {
-  qian: { name: "乾", image: "天", code: "111", element: "金" },
-  dui: { name: "兑", image: "泽", code: "110", element: "金" },
-  li: { name: "离", image: "火", code: "101", element: "火" },
-  zhen: { name: "震", image: "雷", code: "100", element: "木" },
-  xun: { name: "巽", image: "风", code: "011", element: "木" },
-  kan: { name: "坎", image: "水", code: "010", element: "水" },
-  gen: { name: "艮", image: "山", code: "001", element: "土" },
-  kun: { name: "坤", image: "地", code: "000", element: "土" },
-} as const;
-
-const TIME_CASTING_TRIGRAM_CODES_BY_NUMBER: Record<number, string> = {
-  1: TRIGRAMS.qian.code,
-  2: TRIGRAMS.dui.code,
-  3: TRIGRAMS.li.code,
-  4: TRIGRAMS.zhen.code,
-  5: TRIGRAMS.xun.code,
-  6: TRIGRAMS.kan.code,
-  7: TRIGRAMS.gen.code,
-  8: TRIGRAMS.kun.code,
+type TrigramInfo = {
+  name: string;
+  image: string;
 };
 
-type TrigramKey = keyof typeof TRIGRAMS;
-type Trigram = (typeof TRIGRAMS)[TrigramKey];
-
-const TRIGRAM_BY_CODE = Object.fromEntries(
-  (Object.entries(TRIGRAMS) as Array<[TrigramKey, Trigram]>).map(
-    ([key, trigram]) => [trigram.code, key]
-  )
-) as Record<string, TrigramKey>;
-
-const HEXAGRAM_GRID: Record<TrigramKey, Record<TrigramKey, string>> = {
-  qian: {
-    qian: "乾为天",
-    dui: "天泽履",
-    li: "天火同人",
-    zhen: "天雷无妄",
-    xun: "天风姤",
-    kan: "天水讼",
-    gen: "天山遯",
-    kun: "天地否",
-  },
-  dui: {
-    qian: "泽天夬",
-    dui: "兑为泽",
-    li: "泽火革",
-    zhen: "泽雷随",
-    xun: "泽风大过",
-    kan: "泽水困",
-    gen: "泽山咸",
-    kun: "泽地萃",
-  },
-  li: {
-    qian: "火天大有",
-    dui: "火泽睽",
-    li: "离为火",
-    zhen: "火雷噬嗑",
-    xun: "火风鼎",
-    kan: "火水未济",
-    gen: "火山旅",
-    kun: "火地晋",
-  },
-  zhen: {
-    qian: "雷天大壮",
-    dui: "雷泽归妹",
-    li: "雷火丰",
-    zhen: "震为雷",
-    xun: "雷风恒",
-    kan: "雷水解",
-    gen: "雷山小过",
-    kun: "雷地豫",
-  },
-  xun: {
-    qian: "风天小畜",
-    dui: "风泽中孚",
-    li: "风火家人",
-    zhen: "风雷益",
-    xun: "巽为风",
-    kan: "风水涣",
-    gen: "风山渐",
-    kun: "风地观",
-  },
-  kan: {
-    qian: "水天需",
-    dui: "水泽节",
-    li: "水火既济",
-    zhen: "水雷屯",
-    xun: "水风井",
-    kan: "坎为水",
-    gen: "水山蹇",
-    kun: "水地比",
-  },
-  gen: {
-    qian: "山天大畜",
-    dui: "山泽损",
-    li: "山火贲",
-    zhen: "山雷颐",
-    xun: "山风蛊",
-    kan: "山水蒙",
-    gen: "艮为山",
-    kun: "山地剥",
-  },
-  kun: {
-    qian: "地天泰",
-    dui: "地泽临",
-    li: "地火明夷",
-    zhen: "地雷复",
-    xun: "地风升",
-    kan: "地水师",
-    gen: "地山谦",
-    kun: "坤为地",
-  },
+const TRIGRAM_BY_STATIC_YAO: Partial<Record<string, TrigramInfo>> = {
+  "777": { name: "乾", image: BAGUA_XIANG["1"] },
+  "778": { name: "兑", image: BAGUA_XIANG["2"] },
+  "787": { name: "离", image: BAGUA_XIANG["3"] },
+  "788": { name: "震", image: BAGUA_XIANG["4"] },
+  "877": { name: "巽", image: BAGUA_XIANG["5"] },
+  "878": { name: "坎", image: BAGUA_XIANG["6"] },
+  "887": { name: "艮", image: BAGUA_XIANG["7"] },
+  "888": { name: "坤", image: BAGUA_XIANG["8"] },
 };
-
-const PALACE_ORDER: TrigramKey[] = [
-  "qian",
-  "dui",
-  "li",
-  "zhen",
-  "xun",
-  "kan",
-  "gen",
-  "kun",
-];
-
-const PALACE_STAGES = ["本宫", "一世", "二世", "三世", "四世", "五世", "游魂", "归魂"];
-const WORLD_POSITIONS = [6, 1, 2, 3, 4, 5, 4, 3];
 
 const HEXAGRAM_PATTERNS: Partial<Record<string, HexagramPattern>> = {
-  乾为天: "六冲",
-  坤为地: "六冲",
-  震为雷: "六冲",
-  巽为风: "六冲",
-  坎为水: "六冲",
-  离为火: "六冲",
-  艮为山: "六冲",
-  兑为泽: "六冲",
-  天雷无妄: "六冲",
-  雷天大壮: "六冲",
-  天地否: "六合",
-  地天泰: "六合",
-  泽水困: "六合",
-  水泽节: "六合",
-  山火贲: "六合",
-  火山旅: "六合",
-  雷地豫: "六合",
-  地雷复: "六合",
+  乾: "六冲",
+  坤: "六冲",
+  震: "六冲",
+  巽: "六冲",
+  坎: "六冲",
+  离: "六冲",
+  艮: "六冲",
+  兑: "六冲",
+  无妄: "六冲",
+  大壮: "六冲",
+  否: "六合",
+  泰: "六合",
+  困: "六合",
+  节: "六合",
+  贲: "六合",
+  旅: "六合",
+  豫: "六合",
+  复: "六合",
 };
 
-const NAJIA: Record<
-  TrigramKey,
-  {
-    innerStem: string;
-    outerStem: string;
-    innerBranches: [string, string, string];
-    outerBranches: [string, string, string];
-  }
-> = {
-  qian: {
-    innerStem: "甲",
-    outerStem: "壬",
-    innerBranches: ["子", "寅", "辰"],
-    outerBranches: ["午", "申", "戌"],
-  },
-  dui: {
-    innerStem: "丁",
-    outerStem: "丁",
-    innerBranches: ["巳", "卯", "丑"],
-    outerBranches: ["亥", "酉", "未"],
-  },
-  li: {
-    innerStem: "己",
-    outerStem: "己",
-    innerBranches: ["卯", "丑", "亥"],
-    outerBranches: ["酉", "未", "巳"],
-  },
-  zhen: {
-    innerStem: "庚",
-    outerStem: "庚",
-    innerBranches: ["子", "寅", "辰"],
-    outerBranches: ["午", "申", "戌"],
-  },
-  xun: {
-    innerStem: "辛",
-    outerStem: "辛",
-    innerBranches: ["丑", "亥", "酉"],
-    outerBranches: ["未", "巳", "卯"],
-  },
-  kan: {
-    innerStem: "戊",
-    outerStem: "戊",
-    innerBranches: ["寅", "辰", "午"],
-    outerBranches: ["申", "戌", "子"],
-  },
-  gen: {
-    innerStem: "丙",
-    outerStem: "丙",
-    innerBranches: ["辰", "午", "申"],
-    outerBranches: ["戌", "子", "寅"],
-  },
-  kun: {
-    innerStem: "乙",
-    outerStem: "癸",
-    innerBranches: ["未", "巳", "卯"],
-    outerBranches: ["丑", "亥", "酉"],
-  },
+const YAO_VALUE_LABELS: Record<YaoValue, string> = {
+  6: "老阴",
+  7: "少阳",
+  8: "少阴",
+  9: "老阳",
 };
-
-const BRANCH_ELEMENTS: Record<string, ElementName> = {
-  子: "水",
-  丑: "土",
-  寅: "木",
-  卯: "木",
-  辰: "土",
-  巳: "火",
-  午: "火",
-  未: "土",
-  申: "金",
-  酉: "金",
-  戌: "土",
-  亥: "水",
-};
-
-const GENERATES: Record<ElementName, ElementName> = {
-  木: "火",
-  火: "土",
-  土: "金",
-  金: "水",
-  水: "木",
-};
-
-const CONTROLS: Record<ElementName, ElementName> = {
-  木: "土",
-  土: "水",
-  水: "火",
-  火: "金",
-  金: "木",
-};
-
-const SIX_DEITY_START_BY_DAY_STEM: Record<string, number> = {
-  甲: 0,
-  乙: 0,
-  丙: 1,
-  丁: 1,
-  戊: 2,
-  己: 3,
-  庚: 4,
-  辛: 4,
-  壬: 5,
-  癸: 5,
-};
-
-const SIX_DEITIES = ["青龙", "朱雀", "勾陈", "螣蛇", "白虎", "玄武"];
-
-const TIAN_YI_GUI_REN_BY_DAY_STEM: Record<string, string[]> = {
-  甲: ["丑", "未"],
-  戊: ["丑", "未"],
-  乙: ["子", "申"],
-  己: ["子", "申"],
-  丙: ["亥", "酉"],
-  丁: ["亥", "酉"],
-  庚: ["午", "寅"],
-  辛: ["午", "寅"],
-  壬: ["卯", "巳"],
-  癸: ["卯", "巳"],
-};
-
-const WENCHANG_BY_DAY_STEM: Record<string, string> = {
-  甲: "巳",
-  乙: "午",
-  丙: "申",
-  戊: "申",
-  丁: "酉",
-  己: "酉",
-  庚: "亥",
-  辛: "子",
-  壬: "寅",
-  癸: "卯",
-};
-
-const DAY_LU_BY_STEM: Record<string, string> = {
-  甲: "寅",
-  乙: "卯",
-  丙: "巳",
-  戊: "巳",
-  丁: "午",
-  己: "午",
-  庚: "申",
-  辛: "酉",
-  壬: "亥",
-  癸: "子",
-};
-
-const YANG_REN_BY_STEM: Record<string, string> = {
-  甲: "卯",
-  乙: "寅",
-  丙: "午",
-  戊: "午",
-  丁: "巳",
-  己: "巳",
-  庚: "酉",
-  辛: "申",
-  壬: "子",
-  癸: "亥",
-};
-
-const DAY_BRANCH_SHENSHA_GROUPS = [
-  { branches: ["申", "子", "辰"], yima: "寅", taohua: "酉", huagai: "辰" },
-  { branches: ["寅", "午", "戌"], yima: "申", taohua: "卯", huagai: "戌" },
-  { branches: ["亥", "卯", "未"], yima: "巳", taohua: "子", huagai: "未" },
-  { branches: ["巳", "酉", "丑"], yima: "亥", taohua: "午", huagai: "丑" },
-];
-
-interface PalaceLookupItem {
-  trigramKey: TrigramKey;
-  stage: string;
-  worldPosition: number;
-  responsePosition: number;
-}
-
-const PALACE_BY_CODE = buildPalaceLookup();
 
 export function createLiuyaoTimeCastingYaos(date: Date, time: string): LiuyaoInputYao[] {
-  const { hour, minute, second } = parseTime(time);
-  const solarTime = SolarTime.fromYmdHms(
-    date.getFullYear(),
-    date.getMonth() + 1,
-    date.getDate(),
-    hour,
-    minute,
-    second
+  const options = createDivinationOptions(date, time);
+  const lunar = solarToLunar(options.year, options.month, options.day, options.hour);
+  const yaoString = timeQiGua(
+    options.year,
+    options.month,
+    options.day,
+    options.hour,
+    lunar.month,
+    lunar.day,
+    lunar.yearGanZhi.di,
+    lunar.hourGanZhi.di
   );
-  const lunarHour = solarTime.getLunarHour();
-  const lunarDay = solarTime.getSolarDay().getLunarDay();
-  const lunarMonth = lunarDay.getLunarMonth();
-  const yearNumber = getEarthlyBranchNumber(
-    lunarDay.getYearSixtyCycle().getEarthBranch().getName()
-  );
-  const monthNumber = Math.abs(lunarMonth.getMonth());
-  const dayNumber = lunarDay.getDay();
-  const hourNumber = getEarthlyBranchNumber(
-    lunarHour.getSixtyCycle().getEarthBranch().getName()
-  );
-  const upperBase = yearNumber + monthNumber + dayNumber;
-  const lowerBase = upperBase + hourNumber;
-  const upperCode = TIME_CASTING_TRIGRAM_CODES_BY_NUMBER[getRemainderNumber(upperBase, 8)];
-  const lowerCode = TIME_CASTING_TRIGRAM_CODES_BY_NUMBER[getRemainderNumber(lowerBase, 8)];
-  const movingLine = getRemainderNumber(lowerBase, 6);
-  const code = `${lowerCode}${upperCode}`;
 
-  return code.split("").map((bit, index) => ({
-    type: bit === "1" ? "阳" : "阴",
-    moving: index === movingLine - 1,
-  }));
+  return createInputYaosFromYaoString(yaoString);
+}
+
+export function createLiuyaoRandomYaos(): LiuyaoInputYao[] {
+  return createInputYaosFromYaoString(dayan());
 }
 
 export function buildLiuyaoPaipan(input: LiuyaoPaipanInput): LiuyaoPaipan {
@@ -457,195 +218,326 @@ export function buildLiuyaoPaipan(input: LiuyaoPaipanInput): LiuyaoPaipan {
     throw new Error("六爻排盘需要完整的六个爻位。");
   }
 
-  const timeContext = buildTimeContext(input.date, input.time);
-  const primaryCode = input.yaos.map((yao) => (yao.type === "阳" ? "1" : "0")).join("");
-  const changedCode = input.yaos
-    .map((yao) => {
-      const bit = yao.type === "阳" ? "1" : "0";
-      return yao.moving ? flipBit(bit) : bit;
-    })
-    .join("");
+  const options = createDivinationOptions(input.date, input.time);
+  const yaoString = manualQiGua(formatYaoString(input.yaos));
+  const pan = decodePan(yaoString, options);
+  const zhiYaoString = getZhiGua(yaoString);
+  const huYaoString = formatGuaYaoString(pan.huGua.yaoList);
   const hasMovingLine = input.yaos.some((yao) => yao.moving);
-  const primary = buildHexagramInfo(primaryCode);
-  const changed = hasMovingLine ? buildHexagramInfo(changedCode) : null;
-  const deities = sixDeitiesForDayStem(timeContext.dayStem);
-  const rawLines: Array<Omit<LiuyaoLineInfo, "hiddenGods" | "huozhulinHiddenGod">> = input.yaos.map((yao, index) => {
-    const position = index + 1;
-    const najia = getNajia(primary.code, index);
-    const changedNajia = getNajia(changedCode, index);
-    const lineElement = BRANCH_ELEMENTS[najia.branch];
-    const changedElement = BRANCH_ELEMENTS[changedNajia.branch];
-
-    return {
-      position,
-      label: YAO_NAMES[index],
-      type: yao.type,
-      moving: yao.moving,
-      movingSymbol: yao.moving ? (yao.type === "阳" ? "○" : "×") : "",
-      role: roleForPosition(position, primary),
-      deity: deities[index],
-      relation: relationFor(primary.palaceElement, lineElement),
-      stem: najia.stem,
-      branch: najia.branch,
-      element: lineElement,
-      changed: changed
-        ? {
-            type: changedCode[index] === "1" ? "阳" : "阴",
-            relation: relationFor(changed.palaceElement, changedElement),
-            stem: changedNajia.stem,
-            branch: changedNajia.branch,
-            element: changedElement,
-            role: roleForPosition(position, changed),
-          }
-        : null,
-    };
-  });
-  const huozhulinHiddenGods = calculateHuozhulinHiddenGods(primary);
-  const hiddenGods = calculateHiddenGods(rawLines, huozhulinHiddenGods);
-  const lines = rawLines.map((line) => ({
-    ...line,
-    hiddenGods: hiddenGods.get(line.position) ?? [],
-    huozhulinHiddenGod: huozhulinHiddenGods[line.position - 1],
-  }));
-  const guaBody = calculateGuaBody(primary, lines);
-  const worldBody = calculateWorldBody(primary, lines);
+  const fuShen = mapFuShenList(pan.benGua.fuShen);
+  const regularFuShen = filterRegularFuShen(pan.benGua.yaoList, fuShen);
+  const pangFuShen = mapFuShenList(pan.benGua.pangFuShen);
+  const lines = pan.benGua.yaoList.map((yao, index) =>
+    createLineInfo({
+      benYao: yao,
+      zhiYao: pan.zhiGua.yaoList[index],
+      regularFuShen: findHiddenGodByHost(regularFuShen, yao.position),
+      fuShen: findHiddenGodByHost(fuShen, yao.position),
+      pangFuShen: findHiddenGodByHost(pangFuShen, yao.position),
+      includeChanged: true,
+    })
+  );
 
   return {
     question: input.question.trim(),
-    solar: timeContext.solar,
-    lunar: timeContext.lunar,
-    pillars: timeContext.pillars,
-    pillarVoids: timeContext.pillarVoids,
-    primary,
-    changed,
-    lines,
-    guaBody,
-    worldBody,
-    shenshas: calculateShenshas(timeContext),
-  };
-}
-
-function buildHexagramInfo(code: string): LiuyaoHexagramInfo {
-  const lowerKey = trigramKeyFromCode(code.slice(0, 3));
-  const upperKey = trigramKeyFromCode(code.slice(3, 6));
-  const palace = PALACE_BY_CODE[code];
-
-  if (!palace) {
-    throw new Error("无法识别卦象。");
-  }
-
-  const palaceTrigram = TRIGRAMS[palace.trigramKey];
-  const name = HEXAGRAM_GRID[upperKey][lowerKey];
-
-  return {
-    code,
-    name,
-    palace: `${palaceTrigram.name}宫`,
-    palaceElement: palaceTrigram.element,
-    stage: palace.stage,
-    upperTrigram: TRIGRAMS[upperKey].name,
-    lowerTrigram: TRIGRAMS[lowerKey].name,
-    worldPosition: palace.worldPosition,
-    responsePosition: palace.responsePosition,
-    pattern: HEXAGRAM_PATTERNS[name] ?? "",
-  };
-}
-
-function buildTimeContext(date: Date, time: string) {
-  const { hour, minute, second } = parseTime(time);
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  const solarTime = SolarTime.fromYmdHms(year, month, day, hour, minute, second);
-  const lunarHour = solarTime.getLunarHour();
-  const lunarDay = solarTime.getSolarDay().getLunarDay();
-  const lunarMonth = lunarDay.getLunarMonth();
-  const eightChar = lunarHour.getEightChar();
-  const yearPillar = eightChar.getYear();
-  const monthPillar = eightChar.getMonth();
-  const dayPillar = eightChar.getDay();
-  const hourPillar = eightChar.getHour();
-
-  return {
-    solar: `${year}年${pad(month)}月${pad(day)}日 ${pad(hour)}:${pad(minute)}`,
-    lunar: `${lunarDay.getYear()}年${lunarMonth.isLeap() ? "闰" : ""}${lunarMonth.getName()}${lunarDay.getName()}`,
+    solar: formatSolarTime(options),
+    lunar: formatLunarDate(pan),
+    solarTerm: pan.solarTerm,
+    monthJian: pan.monthJian,
+    dayKong: pan.dayKong,
+    hourKong: pan.hourKong,
     pillars: {
-      year: yearPillar.getName(),
-      month: monthPillar.getName(),
-      day: dayPillar.getName(),
-      hour: hourPillar.getName(),
+      year: pan.ganZhiYear.gz,
+      month: pan.ganZhiMonth.gz,
+      day: pan.ganZhiDay.gz,
+      hour: pan.ganZhiHour.gz,
     },
     pillarVoids: {
-      year: formatVoidBranches(yearPillar),
-      month: formatVoidBranches(monthPillar),
-      day: formatVoidBranches(dayPillar),
-      hour: formatVoidBranches(hourPillar),
+      year: calcXunKong(pan.ganZhiYear.gz),
+      month: calcXunKong(pan.ganZhiMonth.gz),
+      day: pan.dayKong,
+      hour: pan.hourKong,
     },
-    dayStem: dayPillar.getHeavenStem().getName(),
-    dayBranch: dayPillar.getName().slice(1, 2),
+    primary: createHexagramInfo(pan.benGua, yaoString),
+    changed: hasMovingLine ? createHexagramInfo(pan.zhiGua, zhiYaoString) : null,
+    mutual: createHexagramInfo(pan.huGua, huYaoString),
+    lines,
+    guaBody: formatShenYao(pan.benGua),
+    worldBody: formatWorldYao(pan.benGua),
+    shenshas: createShenshas(pan),
+    regularFuShen,
+    fuShen,
+    pangFuShen,
+    yaoString,
+    zhiYaoString,
+    huYaoString,
+    dongYaoCount: pan.dongYaoCount,
+    explanation: pan.explanation,
+    raw: pan,
   };
 }
 
-function calculateShenshas(timeContext: ReturnType<typeof buildTimeContext>): LiuyaoShenshaInfo[] {
-  const branchGroup = getDayBranchShenshaGroup(timeContext.dayBranch);
-  const dayVoidBranches = splitBranches(timeContext.pillarVoids.day);
+function createDivinationOptions(date: Date, time: string) {
+  const { hour, minute } = parseTime(time);
 
-  return [
-    { name: "天乙贵人", branches: TIAN_YI_GUI_REN_BY_DAY_STEM[timeContext.dayStem] ?? [] },
-    { name: "驿马", branches: branchGroup ? [branchGroup.yima] : [] },
-    { name: "桃花", branches: branchGroup ? [branchGroup.taohua] : [] },
-    { name: "华盖", branches: branchGroup ? [branchGroup.huagai] : [] },
-    { name: "文昌", branches: WENCHANG_BY_DAY_STEM[timeContext.dayStem] ? [WENCHANG_BY_DAY_STEM[timeContext.dayStem]] : [] },
-    { name: "日禄", branches: DAY_LU_BY_STEM[timeContext.dayStem] ? [DAY_LU_BY_STEM[timeContext.dayStem]] : [] },
-    { name: "羊刃", branches: YANG_REN_BY_STEM[timeContext.dayStem] ? [YANG_REN_BY_STEM[timeContext.dayStem]] : [] },
-    { name: "日空", branches: dayVoidBranches },
-  ].filter((shensha) => shensha.branches.length > 0);
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: date.getDate(),
+    hour,
+    minute,
+  };
 }
 
-function getDayBranchShenshaGroup(dayBranch: string) {
-  return DAY_BRANCH_SHENSHA_GROUPS.find((group) => group.branches.includes(dayBranch));
+function createHexagramInfo(gua: GuaPan, yaoString: YaoString): LiuyaoHexagramInfo {
+  const staticYaoString = normalizeStaticYaoString(yaoString);
+  const lowerTrigram = TRIGRAM_BY_STATIC_YAO[staticYaoString.slice(0, 3)];
+  const upperTrigram = TRIGRAM_BY_STATIC_YAO[staticYaoString.slice(3, 6)];
+
+  return {
+    code: toBinaryCode(staticYaoString),
+    name: formatFullHexagramName(gua.guaName, upperTrigram, lowerTrigram),
+    palace: `${gua.palace}宫`,
+    palaceElement: gua.palaceWuXing,
+    stage: gua.palaceLevel,
+    upperTrigram: upperTrigram?.name ?? "",
+    lowerTrigram: lowerTrigram?.name ?? "",
+    worldPosition: findShiYingPosition(gua.yaoList, "世"),
+    responsePosition: findShiYingPosition(gua.yaoList, "应"),
+    pattern: HEXAGRAM_PATTERNS[gua.guaName] ?? "",
+    wuXingStar: gua.wuXingStar,
+    guaCi: gua.guaCi,
+    yaoCi: gua.yaoCi,
+    tuanCi: gua.tuanCi,
+    shenYao: gua.shenYao ?? null,
+  };
 }
 
-function splitBranches(branches: string) {
-  return branches.split("").filter(Boolean);
-}
-
-function getEarthlyBranchNumber(branch: string) {
-  const number = EARTHLY_BRANCH_NUMBERS[branch];
-
-  if (!number) {
-    throw new Error("无法识别时间起卦所需的地支。");
+function formatFullHexagramName(
+  guaName: string,
+  upperTrigram: TrigramInfo | undefined,
+  lowerTrigram: TrigramInfo | undefined
+) {
+  if (!upperTrigram || !lowerTrigram) {
+    return guaName;
   }
 
-  return number;
+  if (upperTrigram.name === lowerTrigram.name && guaName === upperTrigram.name) {
+    return `${guaName}为${upperTrigram.image}`;
+  }
+
+  return `${upperTrigram.image}${lowerTrigram.image}${guaName}`;
 }
 
-function getRemainderNumber(value: number, divisor: number) {
-  const remainder = value % divisor;
-  return remainder === 0 ? divisor : remainder;
+function createLineInfo({
+  benYao,
+  zhiYao,
+  regularFuShen,
+  fuShen,
+  pangFuShen,
+  includeChanged,
+}: {
+  benYao: YaoData;
+  zhiYao: YaoData;
+  regularFuShen: LiuyaoHiddenGodInfo | null;
+  fuShen: LiuyaoHiddenGodInfo | null;
+  pangFuShen: LiuyaoHiddenGodInfo | null;
+  includeChanged: boolean;
+}): LiuyaoLineInfo {
+  const type = yaoTypeFromValue(benYao.yaoValue);
+  const fallbackFuShen = fuShen ?? createHiddenGodFromYao(benYao);
+
+  return {
+    position: benYao.position,
+    label: YAO_NAMES[benYao.position - 1],
+    yaoValue: benYao.yaoValue,
+    labelValue: YAO_VALUE_LABELS[benYao.yaoValue],
+    type,
+    moving: benYao.isMoving,
+    movingSymbol: benYao.isMoving ? (type === "阳" ? "○" : "×") : "",
+    role: normalizeShiYing(benYao.shiYing),
+    deity: benYao.liuShou,
+    relation: benYao.liuQin,
+    stem: getStem(benYao.naJia),
+    branch: getBranch(benYao.naJia),
+    element: benYao.wuXing,
+    naYin: benYao.naYin ?? "",
+    xingXiu: benYao.xingXiu ?? "",
+    suoBo: benYao.suoBo ?? "",
+    suiXian: formatSuiXian(benYao),
+    hiddenGods: regularFuShen ? [regularFuShen] : [],
+    huozhulinHiddenGod: fallbackFuShen,
+    regularFuShen,
+    fuShen,
+    pangFuShen,
+    changed: includeChanged ? createChangedLineInfo(zhiYao) : null,
+  };
 }
 
-function calculateGuaBody(hexagram: LiuyaoHexagramInfo, lines: LiuyaoLineInfo[]) {
-  const worldLine = lines[hexagram.worldPosition - 1];
-  const startBranch = worldLine.type === "阳" ? "子" : "午";
-  const startBranchIndex = EARTHLY_BRANCH_ORDER.indexOf(startBranch);
-  return EARTHLY_BRANCH_ORDER[
-    (startBranchIndex + hexagram.worldPosition - 1) % EARTHLY_BRANCH_ORDER.length
-  ];
+function createChangedLineInfo(yao: YaoData): LiuyaoChangedLineInfo {
+  return {
+    type: yaoTypeFromValue(yao.yaoValue),
+    yaoValue: yao.yaoValue,
+    moving: yao.isMoving,
+    relation: yao.liuQin,
+    stem: getStem(yao.naJia),
+    branch: getBranch(yao.naJia),
+    element: yao.wuXing,
+    naYin: yao.naYin ?? "",
+    role: normalizeShiYing(yao.shiYing),
+    xingXiu: yao.xingXiu ?? "",
+    suoBo: yao.suoBo ?? "",
+    suiXian: formatSuiXian(yao),
+  };
 }
 
-function calculateWorldBody(hexagram: LiuyaoHexagramInfo, lines: LiuyaoLineInfo[]) {
-  const worldLine = lines[hexagram.worldPosition - 1];
-  const bodyPosition = (EARTHLY_BRANCH_ORDER.indexOf(worldLine.branch) % 6) + 1;
+function createInputYaosFromYaoString(yaoString: YaoString): LiuyaoInputYao[] {
+  return yaoString.split("").map((char) => {
+    const value = Number(char) as YaoValue;
 
-  return lines[bodyPosition - 1].branch;
+    return {
+      type: yaoTypeFromValue(value),
+      moving: value === 6 || value === 9,
+    };
+  });
 }
 
-function formatVoidBranches(pillar: { getExtraEarthBranches(): Array<{ getName(): string }> }) {
-  return pillar
-    .getExtraEarthBranches()
-    .map((branch) => branch.getName())
+function formatYaoString(yaos: LiuyaoInputYao[]): YaoString {
+  return yaos
+    .map((yao) => {
+      if (yao.type === "阳") {
+        return yao.moving ? "9" : "7";
+      }
+
+      return yao.moving ? "6" : "8";
+    })
     .join("");
+}
+
+function formatGuaYaoString(yaoList: YaoData[]): YaoString {
+  return yaoList.map((yao) => String(yao.yaoValue)).join("");
+}
+
+function mapFuShenList(items: FuShenData[] | undefined): LiuyaoHiddenGodInfo[] {
+  return (items ?? []).map((item) => ({
+    relation: item.fuLiuQin,
+    stem: getStem(item.fuNaJia),
+    branch: getBranch(item.fuNaJia),
+    element: item.fuWuXing,
+    naYin: item.fuNaYin,
+    hostPosition: item.hostPosition,
+  }));
+}
+
+function findHiddenGodByHost(items: LiuyaoHiddenGodInfo[], position: number) {
+  return items.find((item) => item.hostPosition === position) ?? null;
+}
+
+function filterRegularFuShen(yaoList: YaoData[], fuShen: LiuyaoHiddenGodInfo[]) {
+  const presentRelatives = new Set(yaoList.map((yao) => yao.liuQin));
+
+  return fuShen.filter((hiddenGod) => !presentRelatives.has(hiddenGod.relation));
+}
+
+function createHiddenGodFromYao(yao: YaoData): LiuyaoHiddenGodInfo {
+  return {
+    relation: yao.liuQin,
+    stem: getStem(yao.naJia),
+    branch: getBranch(yao.naJia),
+    element: yao.wuXing,
+    naYin: yao.naYin ?? "",
+    hostPosition: yao.position,
+  };
+}
+
+function createShenshas(pan: PanResult): LiuyaoShenshaInfo[] {
+  const shenshas = Object.entries(pan.shenSha).map(([name, branches]) => ({
+    name,
+    branches: [...branches],
+  }));
+
+  if (pan.dayKong) {
+    shenshas.push({ name: "日空", branches: splitBranches(pan.dayKong) });
+  }
+
+  if (pan.hourKong) {
+    shenshas.push({ name: "时空", branches: splitBranches(pan.hourKong) });
+  }
+
+  return shenshas.filter((shensha) => shensha.branches.length > 0);
+}
+
+function formatSolarTime(options: ReturnType<typeof createDivinationOptions>) {
+  return `${options.year}年${pad(options.month)}月${pad(options.day)}日 ${pad(options.hour)}:${pad(options.minute ?? 0)}`;
+}
+
+function formatLunarDate(pan: PanResult) {
+  const { lunarDate } = pan;
+
+  return `${lunarDate.year}年${lunarDate.isLeap ? "闰" : ""}${lunarDate.month}月${lunarDate.day}日`;
+}
+
+function formatShenYao(gua: GuaPan) {
+  if (!gua.shenYao) {
+    return "-";
+  }
+
+  const yao = gua.yaoList[gua.shenYao - 1];
+
+  return `${YAO_NAMES[gua.shenYao - 1]}${yao ? `（${yao.naJia}）` : ""}`;
+}
+
+function formatWorldYao(gua: GuaPan) {
+  const yao = gua.yaoList.find((item) => item.shiYing === "世");
+
+  if (!yao) {
+    return "-";
+  }
+
+  return `${YAO_NAMES[yao.position - 1]}（${yao.naJia}）`;
+}
+
+function formatSuiXian(yao: YaoData) {
+  return yao.suiXian ? `${yao.suiXian.startAge}-${yao.suiXian.endAge}岁` : "";
+}
+
+function normalizeShiYing(value: string): "" | "世" | "应" {
+  if (value === "世" || value === "应") {
+    return value;
+  }
+
+  return "";
+}
+
+function findShiYingPosition(yaoList: YaoData[], mark: "世" | "应") {
+  return yaoList.find((yao) => yao.shiYing === mark)?.position ?? 0;
+}
+
+function yaoTypeFromValue(value: YaoValue): YaoType {
+  return value === 7 || value === 9 ? "阳" : "阴";
+}
+
+function normalizeStaticYaoString(yaoString: string) {
+  return yaoString.replace(/9/g, "7").replace(/6/g, "8");
+}
+
+function toBinaryCode(yaoString: string) {
+  return yaoString
+    .split("")
+    .map((char) => (char === "7" || char === "9" ? "1" : "0"))
+    .join("");
+}
+
+function splitBranches(value: string) {
+  return value.split("").filter(Boolean);
+}
+
+function getStem(naJia: string) {
+  return naJia.slice(0, 1);
+}
+
+function getBranch(naJia: string) {
+  return naJia.slice(1, 2);
 }
 
 function parseTime(time: string) {
@@ -664,146 +556,6 @@ function parseTime(time: string) {
   }
 
   return { hour, minute, second };
-}
-
-function getNajia(code: string, lineIndex: number) {
-  const isInner = lineIndex < 3;
-  const trigramCode = isInner ? code.slice(0, 3) : code.slice(3, 6);
-  const trigram = trigramKeyFromCode(trigramCode);
-  const najia = NAJIA[trigram];
-  const branchIndex = isInner ? lineIndex : lineIndex - 3;
-
-  return {
-    stem: isInner ? najia.innerStem : najia.outerStem,
-    branch: isInner
-      ? najia.innerBranches[branchIndex]
-      : najia.outerBranches[branchIndex],
-  };
-}
-
-function relationFor(palaceElement: ElementName, lineElement: ElementName): SixRelative {
-  if (palaceElement === lineElement) return "兄弟";
-  if (GENERATES[palaceElement] === lineElement) return "子孙";
-  if (GENERATES[lineElement] === palaceElement) return "父母";
-  if (CONTROLS[palaceElement] === lineElement) return "妻财";
-  return "官鬼";
-}
-
-function roleForPosition(
-  position: number,
-  hexagram: Pick<LiuyaoHexagramInfo, "worldPosition" | "responsePosition">
-) {
-  if (position === hexagram.worldPosition) return "世";
-  if (position === hexagram.responsePosition) return "应";
-  return "";
-}
-
-function calculateHiddenGods(
-  lines: Array<Pick<LiuyaoLineInfo, "position" | "relation">>,
-  huozhulinHiddenGods: LiuyaoHiddenGodInfo[]
-) {
-  const presentRelatives = new Set(lines.map((line) => line.relation));
-  const hiddenGods = new Map<number, LiuyaoHiddenGodInfo[]>();
-
-  huozhulinHiddenGods.forEach((hiddenGod, index) => {
-    const { relation } = hiddenGod;
-
-    if (!presentRelatives.has(relation)) {
-      const position = index + 1;
-
-      hiddenGods.set(position, [
-        ...(hiddenGods.get(position) ?? []),
-        hiddenGod,
-      ]);
-    }
-  });
-
-  return hiddenGods;
-}
-
-function calculateHuozhulinHiddenGods(hexagram: LiuyaoHexagramInfo) {
-  const palace = PALACE_BY_CODE[hexagram.code];
-  const palaceCode = TRIGRAMS[palace.trigramKey].code.repeat(2);
-
-  return YAO_NAMES.map((_, index) => {
-    const najia = getNajia(palaceCode, index);
-
-    return {
-      relation: relationFor(hexagram.palaceElement, BRANCH_ELEMENTS[najia.branch]),
-      stem: najia.stem,
-      branch: najia.branch,
-    };
-  });
-}
-
-function sixDeitiesForDayStem(dayStem: string) {
-  const start = SIX_DEITY_START_BY_DAY_STEM[dayStem] ?? 0;
-
-  return Array.from(
-    { length: 6 },
-    (_, index) => SIX_DEITIES[(start + index) % SIX_DEITIES.length]
-  );
-}
-
-function buildPalaceLookup() {
-  const lookup: Record<string, PalaceLookupItem> = {};
-
-  for (const trigramKey of PALACE_ORDER) {
-    const palaceTrigram = TRIGRAMS[trigramKey];
-    const sequence = palaceSequence(palaceTrigram.code);
-
-    sequence.forEach((code, index) => {
-      const worldPosition = WORLD_POSITIONS[index];
-
-      lookup[code] = {
-        trigramKey,
-        stage: PALACE_STAGES[index],
-        worldPosition,
-        responsePosition: worldPosition > 3 ? worldPosition - 3 : worldPosition + 3,
-      };
-    });
-  }
-
-  return lookup;
-}
-
-function palaceSequence(trigramCode: string) {
-  let code = `${trigramCode}${trigramCode}`;
-  const sequence = [code];
-
-  for (let lineIndex = 0; lineIndex < 5; lineIndex += 1) {
-    code = flipLine(code, lineIndex);
-    sequence.push(code);
-  }
-
-  code = flipLine(code, 3);
-  sequence.push(code);
-
-  code = [0, 1, 2].reduce((current, lineIndex) => flipLine(current, lineIndex), code);
-  sequence.push(code);
-
-  return sequence;
-}
-
-function trigramKeyFromCode(code: string): TrigramKey {
-  const trigram = TRIGRAM_BY_CODE[code];
-
-  if (!trigram) {
-    throw new Error("无法识别三爻卦。");
-  }
-
-  return trigram;
-}
-
-function flipLine(code: string, lineIndex: number) {
-  return code
-    .split("")
-    .map((bit, index) => (index === lineIndex ? flipBit(bit) : bit))
-    .join("");
-}
-
-function flipBit(bit: string) {
-  return bit === "1" ? "0" : "1";
 }
 
 function pad(value: number) {

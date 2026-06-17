@@ -54,6 +54,7 @@ import {
 } from "@/features/liuyao/history";
 import {
   buildLiuyaoPaipan,
+  createLiuyaoRandomYaos,
   createLiuyaoTimeCastingYaos,
   YAO_NAMES,
   type LiuyaoInputYao,
@@ -411,12 +412,6 @@ function createManualYaoSelectionState(selected: boolean) {
   return Array.from({ length: ONLINE_CASTING_LINE_COUNT }, () => selected);
 }
 
-function createRandomLiuyaoYaos(): LiuyaoInputYao[] {
-  return Array.from({ length: ONLINE_CASTING_LINE_COUNT }, () =>
-    createLiuyaoYaoFromCoinScore(getRandomCoinScore())
-  );
-}
-
 function createRandomCoinThrow(): OnlineCoinSide[] {
   return Array.from({ length: 3 }, () => (getRandomBit() === 1 ? "front" : "back"));
 }
@@ -716,7 +711,7 @@ export default function Liuyao() {
     try {
       const submittedYaos =
         castingMethod === "random"
-          ? createRandomLiuyaoYaos()
+          ? createLiuyaoRandomYaos()
           : castingMethod === "time"
             ? createLiuyaoTimeCastingYaos(date, time)
             : yaos;
@@ -2252,54 +2247,117 @@ async function copyTextToClipboard(text: string) {
 }
 
 function formatLiuyaoCopyMarkdown(result: LiuyaoPaipan) {
-  const changed = result.changed ?? result.primary;
   const movingLines = result.lines.filter((line) => line.moving);
 
   return joinCopySections([
     [
-      `所问之事：${result.question}`,
-      `时间：${result.solar}`,
-      `干支:${result.pillars.year}年 ${result.pillars.month}月 ${result.pillars.day}日 ${result.pillars.hour}时`,
-      `空亡：年空亡${result.pillarVoids.year} 月空亡${result.pillarVoids.month} 日空亡${result.pillarVoids.day} 时空亡${result.pillarVoids.hour}`,
-      `卦身：${result.guaBody}；世身：${result.worldBody}`,
-      `动爻：${movingLines.length > 0 ? movingLines.map((line) => line.label).join("、") : "无（静卦）"}`,
+      `所问之事：${result.question}  `,
+      `时间：${result.solar}  `,
+      `农历：${result.lunar}  `,
+      `节气：${result.solarTerm || "-"}  `,
+      `月建：${result.monthJian}  `,
+      `干支:${result.pillars.year}年 ${result.pillars.month}月 ${result.pillars.day}日 ${result.pillars.hour}时  `,
+      `空亡：年空亡${result.pillarVoids.year} 月空亡${result.pillarVoids.month} 日空亡${result.pillarVoids.day} 时空亡${result.pillarVoids.hour}  `,
+      `身爻：${result.guaBody}；世爻：${result.worldBody}  `,
+      `动爻：${movingLines.length > 0 ? movingLines.map((line) => line.label).join("、") : "无（静卦）"}  `,
     ].join("\n"),
-    formatLiuyaoCopyCombinedTable(result, changed),
+    // 暂不放入系统提示词，后续需要时再恢复。
+    // formatLiuyaoCopyGuaOverview(result),
+    formatLiuyaoCopyCombinedTable(result),
+    // 暂不放入系统提示词，后续需要时再恢复。
+    // formatLiuyaoCopyGuaTexts(result),
   ]);
 }
 
-function formatLiuyaoCopyCombinedTable(
-  result: LiuyaoPaipan,
-  changed: LiuyaoPaipan["primary"]
-) {
-  const primary = result.primary;
+function formatLiuyaoCopyGuaOverview(result: LiuyaoPaipan) {
+  const zhiHexagram = result.changed ?? result.primary;
 
   return joinCopySections([
-    `主卦/变卦：${primary.name} → ${changed.name}（主卦${primary.palace}${primary.palaceElement}，${primary.stage}，世在${YAO_NAMES[primary.worldPosition - 1]}，应在${YAO_NAMES[primary.responsePosition - 1]}；变卦六亲沿用主卦卦宫五行）`,
+    "## 三卦概览",
     copyMdTable(
-      ["爻位", "六神", "世应", "主卦六亲", "主卦干支", "伏神", "火珠林伏神", "是否变卦", "主卦神煞", "主卦长生", "变卦六亲", "变卦干支", "变卦神煞", "变卦长生"],
+      ["项目", "本卦", "之卦", "互卦"],
+      [
+        ["卦名", formatHexagramName(result.primary), formatHexagramName(zhiHexagram), formatHexagramName(result.mutual)],
+        ["卦宫", result.primary.palace, zhiHexagram.palace, result.mutual.palace],
+        ["宫五行", result.primary.palaceElement, zhiHexagram.palaceElement, result.mutual.palaceElement],
+        ["宫位", result.primary.stage, zhiHexagram.stage, result.mutual.stage],
+        ["上下卦", `${result.primary.upperTrigram}上${result.primary.lowerTrigram}下`, `${zhiHexagram.upperTrigram}上${zhiHexagram.lowerTrigram}下`, `${result.mutual.upperTrigram}上${result.mutual.lowerTrigram}下`],
+        ["五星", result.primary.wuXingStar, zhiHexagram.wuXingStar, result.mutual.wuXingStar],
+        ["身爻", result.guaBody, formatCopyRawShenYao(result.raw.zhiGua), formatCopyRawShenYao(result.raw.huGua)],
+        ["卦辞", result.primary.guaCi, zhiHexagram.guaCi, result.mutual.guaCi],
+        ["彖辞", result.primary.tuanCi, zhiHexagram.tuanCi, result.mutual.tuanCi],
+      ]
+    ),
+  ]);
+}
+
+function formatLiuyaoCopyCombinedTable(result: LiuyaoPaipan) {
+  const primary = result.primary;
+  const zhiHexagram = result.changed ?? result.primary;
+
+  return joinCopySections([
+    `## 六爻明细\n主卦/之卦：${formatHexagramName(primary)} → ${formatHexagramName(zhiHexagram)}（主卦${primary.palace}${primary.palaceElement}，${primary.stage}，世在${YAO_NAMES[primary.worldPosition - 1]}，应在${YAO_NAMES[primary.responsePosition - 1]}；之卦六亲沿用本卦卦宫五行）\n伏神说明：常规伏神=本卦中缺少的六亲；完整伏神=本宫纯卦逐爻排入的伏神；旁伏神=对宫纯卦体系排出的伏神。`,
+    copyMdTable(
+      ["爻位", "本卦爻", "六兽", "世应", "本卦六亲", "本卦纳甲", "本卦纳音", "本卦五行", "星宿/锁泊", "岁限", "常规伏神", "完整伏神", "旁伏神", "是否动爻", "本卦神煞辅助", "本卦长生", "之卦爻", "之卦世应", "之卦六亲", "之卦纳甲", "之卦纳音", "之卦五行", "之卦星宿/锁泊", "之卦岁限", "之卦神煞辅助", "之卦长生"],
       [...result.lines]
         .sort((a, b) => b.position - a.position)
         .map((line) => {
-          const changedLine = line.changed ?? line;
+          const changedLine = line.changed;
 
           return [
-            `${line.label} ${line.type === "阳" ? "━━━ 阳" : "━ ━ 阴"}`,
+            line.label,
+            formatCopyYao(line),
             line.deity,
             line.role,
             line.relation,
             formatCopyStemBranch(line),
-            formatCopyHiddenGods(line.hiddenGods),
-            formatCopyHiddenGod(line.huozhulinHiddenGod),
+            line.naYin,
+            line.element,
+            formatCopyXingXiu(line),
+            line.suiXian,
+            formatCopyHiddenGod(line.regularFuShen),
+            formatCopyHiddenGod(line.fuShen),
+            formatCopyHiddenGod(line.pangFuShen),
             line.moving ? "是" : "-",
-            formatCopyLineShensha(result, line),
+            formatCopyAllLineShensha(result, line),
             formatCopyLineChangsheng(result, line.element),
-            copyRelationFor(primary.palaceElement, changedLine.element),
-            formatCopyStemBranch(changedLine),
-            formatCopyLineShensha(result, changedLine),
-            formatCopyLineChangsheng(result, changedLine.element),
+            changedLine ? formatCopyChangedYao(changedLine) : "-",
+            changedLine?.role ?? "-",
+            changedLine?.relation ?? "-",
+            changedLine ? formatCopyStemBranch(changedLine) : "-",
+            changedLine?.naYin ?? "-",
+            changedLine?.element ?? "-",
+            changedLine ? formatCopyXingXiu(changedLine) : "-",
+            changedLine?.suiXian ?? "-",
+            changedLine ? formatCopyAllLineShensha(result, changedLine) : "-",
+            changedLine ? formatCopyLineChangsheng(result, changedLine.element) : "-",
           ];
         })
+    ),
+  ]);
+}
+
+function formatLiuyaoCopyGuaTexts(result: LiuyaoPaipan) {
+  return joinCopySections([
+    "## 卦爻辞",
+    formatCopyGuaText("本卦", result.raw.benGua, result.primary),
+    formatCopyGuaText("之卦", result.raw.zhiGua, result.changed ?? result.primary),
+    formatCopyGuaText("互卦", result.raw.huGua, result.mutual),
+  ]);
+}
+
+function formatCopyGuaText(
+  title: string,
+  gua: LiuyaoPaipan["raw"]["benGua"],
+  hexagram: LiuyaoPaipan["primary"]
+) {
+  return joinCopySections([
+    `### ${title}：${formatHexagramName(hexagram)}`,
+    `卦辞：${gua.guaCi || "-"}`,
+    `彖辞：${gua.tuanCi || "-"}`,
+    copyMdTable(
+      ["爻位", "爻辞"],
+      gua.yaoCi.map((text, index) => [YAO_NAMES[index], text || "-"])
     ),
   ]);
 }
@@ -2308,14 +2366,63 @@ function formatCopyStemBranch(line: Pick<LiuyaoLineInfo, "stem" | "branch" | "el
   return `${line.stem}${line.branch}（${line.element}）`;
 }
 
-function formatCopyHiddenGod(hiddenGod: LiuyaoLineInfo["huozhulinHiddenGod"]) {
-  return `${hiddenGod.relation}${hiddenGod.stem}${hiddenGod.branch}${COPY_BRANCH_ELEMENTS[hiddenGod.branch] ?? ""}`;
+function formatCopyHiddenGod(hiddenGod: LiuyaoLineInfo["fuShen"]) {
+  if (!hiddenGod) {
+    return "-";
+  }
+
+  const host = YAO_NAMES[hiddenGod.hostPosition - 1] ?? `${hiddenGod.hostPosition}爻`;
+
+  return `${hiddenGod.relation}${hiddenGod.stem}${hiddenGod.branch}（${hiddenGod.element}，${hiddenGod.naYin}，伏于${host}）`;
 }
 
 function formatCopyHiddenGods(hiddenGods: LiuyaoLineInfo["hiddenGods"]) {
   return hiddenGods.length > 0
     ? hiddenGods.map(formatCopyHiddenGod).join("、")
     : "-";
+}
+
+function formatCopyYao(line: Pick<LiuyaoLineInfo, "type" | "yaoValue" | "labelValue" | "moving">) {
+  return `${line.labelValue}${line.type === "阳" ? " ━━━" : " ━ ━"}${line.moving ? "（动）" : ""}（${line.yaoValue}）`;
+}
+
+function formatCopyChangedYao(line: NonNullable<LiuyaoLineInfo["changed"]>) {
+  return `${formatCopyYaoValue(line.yaoValue)}${line.type === "阳" ? " ━━━" : " ━ ━"}（${line.yaoValue}）`;
+}
+
+function formatCopyYaoValue(value: number) {
+  if (value === 6) return "老阴";
+  if (value === 7) return "少阳";
+  if (value === 8) return "少阴";
+  if (value === 9) return "老阳";
+
+  return String(value);
+}
+
+function formatCopyXingXiu(line: Pick<LiuyaoLineInfo, "xingXiu" | "suoBo"> | NonNullable<LiuyaoLineInfo["changed"]>) {
+  return [line.xingXiu, line.suoBo ? `锁泊:${line.suoBo}` : ""].filter(Boolean).join("；") || "-";
+}
+
+function formatCopyAllLineShensha(result: LiuyaoPaipan, line: Pick<LiuyaoLineInfo, "stem" | "branch">) {
+  const libraryHits = result.shenshas
+    .filter((item) => item.branches.includes(line.branch))
+    .map((item) => item.name);
+  const helperHits = formatCopyLineShensha(result, line);
+
+  return [
+    ...libraryHits,
+    ...(helperHits === "-" ? [] : helperHits.split("、")),
+  ].filter((item, index, list) => item && list.indexOf(item) === index).join("、") || "-";
+}
+
+function formatCopyRawShenYao(gua: LiuyaoPaipan["raw"]["benGua"]) {
+  if (!gua.shenYao) {
+    return "-";
+  }
+
+  const yao = gua.yaoList[gua.shenYao - 1];
+
+  return `${YAO_NAMES[gua.shenYao - 1]}${yao ? `（${yao.naJia}）` : ""}`;
 }
 
 function formatCopyLineShensha(result: LiuyaoPaipan, line: Pick<LiuyaoLineInfo, "stem" | "branch">) {
@@ -2572,8 +2679,8 @@ function BodySummary({
 }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-xs leading-tight sm:text-sm">
-      <BodySummaryItem label="卦身" value={result.guaBody} />
-      <BodySummaryItem label="世身" value={result.worldBody} />
+      <BodySummaryItem label="身爻" value={result.guaBody} />
+      <BodySummaryItem label="世爻" value={result.worldBody} />
     </div>
   );
 }
@@ -2600,7 +2707,7 @@ function PaipanLineRow({
   line: LiuyaoLineInfo;
   showChangedColumns: boolean;
 }) {
-  const hiddenGodsText = formatHiddenGods(line.hiddenGods);
+  const regularFuShenText = formatRegularFuShen(line.regularFuShen);
 
   return (
     <>
@@ -2638,12 +2745,12 @@ function PaipanLineRow({
           <span
             className={cn(
               "inline-flex shrink-0 items-center whitespace-nowrap",
-              !hiddenGodsText && "invisible"
+              !regularFuShenText && "invisible"
             )}
-            aria-hidden={!hiddenGodsText}
+            aria-hidden={!regularFuShenText}
           >
             <CornerLeftUpIcon className="size-[1em] shrink-0" aria-hidden="true" />
-            {hiddenGodsText || "占位"}
+            {regularFuShenText || "占位"}
           </span>
         </td>
         <td className="px-[var(--liuyao-cell-x)] pb-0.5 pt-0 sm:pb-1" aria-hidden="true" />
@@ -2696,10 +2803,8 @@ function LineRelativeCell({
   );
 }
 
-function formatHiddenGods(hiddenGods: LiuyaoLineInfo["hiddenGods"]) {
-  return hiddenGods
-    .map((hiddenGod) => `${hiddenGod.relation}·${hiddenGod.stem}${hiddenGod.branch}`)
-    .join("、");
+function formatRegularFuShen(hiddenGod: LiuyaoLineInfo["regularFuShen"]) {
+  return hiddenGod ? `${hiddenGod.relation}·${hiddenGod.stem}${hiddenGod.branch}` : "";
 }
 
 function formatHexagramName(hexagram: Pick<LiuyaoPaipan["primary"], "name" | "pattern">) {

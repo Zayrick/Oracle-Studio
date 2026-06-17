@@ -5,7 +5,7 @@ import { cloudflareContext } from "@/lib/cloudflare-context";
 const OPENROUTER_CHAT_COMPLETIONS_URL = "https://us.oxio.uno/fetch/openrouter.ai/api/v1/chat/completions";
 const DEFAULT_LIUYAO_OPENROUTER_MODEL = "deepseek/deepseek-chat-v3.1";
 const DEFAULT_LIUYAO_OPENROUTER_APP_NAME = "Oracle Studio";
-const MAX_BASE64_PAYLOAD_LENGTH = 90_000;
+const MAX_BASE64_PAYLOAD_LENGTH = 240_000;
 const MAX_OPENROUTER_ERROR_LENGTH = 2_000;
 const MAX_LIUYAO_SESSION_ID_LENGTH = 256;
 const MAX_LIUYAO_CONTEXT_MESSAGES = 12;
