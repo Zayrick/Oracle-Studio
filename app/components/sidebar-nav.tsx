@@ -1,6 +1,5 @@
 import {
   CircleUserRoundIcon,
-  Clock3Icon,
   HomeIcon,
   ScrollTextIcon,
   SettingsIcon,
@@ -10,6 +9,7 @@ import {
 } from "lucide-react";
 import { NavLink } from "react-router";
 
+import { SidebarHistorySection } from "@/components/sidebar-history-section";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
@@ -55,18 +55,7 @@ export function SidebarNav() {
 
         <Separator className="my-4 bg-sidebar-border" />
 
-        <section className="flex min-h-0 flex-1 flex-col gap-2" aria-labelledby="sidebar-history-heading">
-          <div
-            id="sidebar-history-heading"
-            className="px-2 text-xs font-medium text-muted-foreground"
-          >
-            历史记录
-          </div>
-          <div className="flex min-h-0 flex-1 items-start gap-2 rounded-md px-2 py-2 text-xs text-muted-foreground [&_svg]:size-4 [&_svg]:shrink-0">
-            <Clock3Icon aria-hidden="true" />
-            <span className="truncate">暂无历史记录</span>
-          </div>
-        </section>
+        <SidebarHistorySection />
 
         <Separator className="my-3 bg-sidebar-border" />
 

@@ -1,15 +1,23 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
-import { Link } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { format } from "date-fns";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowLeftIcon, ArrowUpIcon, CheckIcon, CopyIcon, CornerLeftUpIcon, PlusIcon, SparklesIcon, SquareIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowUpIcon, CheckIcon, CopyIcon, CornerLeftUpIcon, HistoryIcon, PlusIcon, SparklesIcon, SquareIcon } from "lucide-react";
 import { Marked, type RendererObject } from "marked";
 import type { Route } from "./+types/liuyao";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -21,6 +29,29 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { DateTimeWheelPicker } from "@/components/date-time-wheel-picker";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
+  activateLiuyaoAIHistorySession,
+  createEmptyLiuyaoAIHistoryState,
+  createLiuyaoAISessionId,
+  createLiuyaoHistoryRecord,
+  getLiuyaoHistoryRecord,
+  getLiuyaoAIHistorySession,
+  restoreLiuyaoHistoryRecord,
+  updateLiuyaoHistoryRecordAI,
+  upsertLiuyaoAIHistorySession,
+  type LiuyaoAIHistoryState,
+  type LiuyaoAIHistorySession,
+  type LiuyaoAIMessage as AIDivinationMessage,
+  type LiuyaoCastingMethod,
+  type LiuyaoHistoryRecord,
+} from "@/features/liuyao/history";
 import {
   buildLiuyaoPaipan,
   createLiuyaoTimeCastingYaos,
@@ -42,7 +73,6 @@ export function meta({}: Route.MetaArgs) {
 const YAO_INDEXES_TOP_DOWN = [5, 4, 3, 2, 1, 0];
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-type LiuyaoCastingMethod = "manual" | "random" | "online" | "time";
 type OnlineCoinSide = "front" | "back";
 type OnlineCoinState = {
   side: OnlineCoinSide;
@@ -56,13 +86,6 @@ type CopyStemBasis = "yearStem" | "dayStem";
 type CopyBranchBasis = "yearBranch" | "dayBranch";
 type CopyTargetToken = { type: "stem" | "branch"; name: string };
 type CopyStatus = "idle" | "copied" | "error";
-type AIDivinationMessage = {
-  id: number;
-  role: "user" | "assistant";
-  content: string;
-  status?: "streaming" | "complete" | "stopped" | "error";
-};
-
 const LIUYAO_AI_ENDPOINT = "/api/liuyao/ai";
 const MAX_LIUYAO_AI_CONTEXT_MESSAGES = 12;
 const MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH = 4_000;
@@ -477,6 +500,9 @@ function getRandomInt(maxExclusive: number) {
 }
 
 export default function Liuyao() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const historyId = searchParams.get("history");
   const [question, setQuestion] = useState("");
   const [date, setDate] = useState<Date>(new Date());
   const [time, setTime] = useState(format(new Date(), "HH:mm"));
@@ -491,11 +517,16 @@ export default function Liuyao() {
   const [onlineRolling, setOnlineRolling] = useState(false);
   const [result, setResult] = useState<LiuyaoPaipan | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+  const [aiHistory, setAiHistory] = useState<LiuyaoAIHistoryState>(() =>
+    createEmptyLiuyaoAIHistoryState()
+  );
   const [error, setError] = useState("");
   const { copyStatus, copyResult, resetCopyStatus } = useLiuyaoResultCopy(result);
   const reduceMotion = useReducedMotion();
   const onlineRollingRef = useRef(false);
   const onlineRollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiHistoryRef = useRef(aiHistory);
 
   useEffect(() => {
     return () => {
@@ -504,6 +535,52 @@ export default function Liuyao() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    aiHistoryRef.current = aiHistory;
+  }, [aiHistory]);
+
+  useEffect(() => {
+    if (!historyId) {
+      if (activeHistoryId) {
+        clearOnlineRollingTimeout();
+        onlineRollingRef.current = false;
+        runLiuyaoViewTransition(() => {
+          resetCopyStatus();
+          setResult(null);
+          setActiveHistoryId(null);
+          setAiHistory(createEmptyLiuyaoAIHistoryState());
+          setAiPanelOpen(false);
+          setError("");
+          setOnlineRolling(false);
+        });
+      }
+      return;
+    }
+
+    if (historyId === activeHistoryId) {
+      return;
+    }
+
+    const record = getLiuyaoHistoryRecord(historyId);
+
+    if (!record) {
+      clearOnlineRollingTimeout();
+      onlineRollingRef.current = false;
+      runLiuyaoViewTransition(() => {
+        resetCopyStatus();
+        setResult(null);
+        setActiveHistoryId(null);
+        setAiHistory(createEmptyLiuyaoAIHistoryState());
+        setAiPanelOpen(false);
+        setError("历史记录不存在或已删除。");
+        setOnlineRolling(false);
+      });
+      return;
+    }
+
+    handleRestoreHistoryRecord(record);
+  }, [historyId]);
 
   const handleSetNow = () => {
     const now = new Date();
@@ -644,6 +721,22 @@ export default function Liuyao() {
             ? createLiuyaoTimeCastingYaos(date, time)
             : yaos;
       const nextResult = buildLiuyaoPaipan({ question, date, time, yaos: submittedYaos });
+      const nextAiHistory = createEmptyLiuyaoAIHistoryState();
+      let nextHistoryRecord: LiuyaoHistoryRecord | null = null;
+
+      try {
+        nextHistoryRecord = createLiuyaoHistoryRecord({
+          question: nextResult.question,
+          date,
+          time,
+          castingMethod,
+          yaos: submittedYaos,
+          result: nextResult,
+          ai: nextAiHistory,
+        }) ?? null;
+      } catch {
+        nextHistoryRecord = null;
+      }
 
       runLiuyaoViewTransition(() => {
         resetCopyStatus();
@@ -652,8 +745,14 @@ export default function Liuyao() {
           setManualYaoSelections(createManualYaoSelectionState(true));
         }
         setResult(nextResult);
+        setActiveHistoryId(nextHistoryRecord?.id ?? null);
+        setAiHistory(nextAiHistory);
         setAiPanelOpen(false);
       });
+
+      if (nextHistoryRecord) {
+        navigate(`/liuyao?history=${encodeURIComponent(nextHistoryRecord.id)}`, { replace: true });
+      }
     } catch (err) {
       resetCopyStatus();
       setResult(null);
@@ -666,12 +765,58 @@ export default function Liuyao() {
     runLiuyaoViewTransition(() => {
       resetCopyStatus();
       setResult(null);
+      setActiveHistoryId(null);
+      setAiHistory(createEmptyLiuyaoAIHistoryState());
       setAiPanelOpen(false);
       setError("");
       if (castingMethod === "online") {
         resetOnlineCastingState();
       }
     });
+    navigate("/liuyao", { replace: true });
+  };
+
+  const handleRestoreHistoryRecord = (record: LiuyaoHistoryRecord) => {
+    try {
+      const restored = restoreLiuyaoHistoryRecord(record);
+
+      clearOnlineRollingTimeout();
+      onlineRollingRef.current = false;
+      runLiuyaoViewTransition(() => {
+        resetCopyStatus();
+        setQuestion(restored.question);
+        setDate(restored.date);
+        setTime(restored.time);
+        setCastingMethod(restored.castingMethod);
+        setYaos(restored.yaos);
+        setManualYaoSelections(createManualYaoSelectionState(true));
+        setOnlineCoins(createInitialOnlineCoins());
+        setOnlineCastCount(restored.castingMethod === "online" ? ONLINE_CASTING_LINE_COUNT : 0);
+        setOnlineLastCoinScore(null);
+        setOnlineRolling(false);
+        setResult(restored.result);
+        setActiveHistoryId(record.id);
+        setAiHistory(restored.ai);
+        setAiPanelOpen(false);
+        setError("");
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "历史记录恢复失败。");
+    }
+  };
+
+  const handleAIHistoryChange = (
+    updater: (current: LiuyaoAIHistoryState) => LiuyaoAIHistoryState,
+    options?: { touch?: boolean }
+  ) => {
+    const next = updater(aiHistoryRef.current);
+
+    aiHistoryRef.current = next;
+    setAiHistory(next);
+
+    if (activeHistoryId) {
+      updateLiuyaoHistoryRecordAI(activeHistoryId, next, options);
+    }
   };
 
   const onlineCastingComplete = onlineCastCount >= ONLINE_CASTING_LINE_COUNT;
@@ -716,10 +861,13 @@ export default function Liuyao() {
             result={result}
             copyStatus={copyStatus}
             aiPanelOpen={aiPanelOpen}
+            activeHistoryId={activeHistoryId}
+            aiHistory={aiHistory}
             onCopy={copyResult}
             onStartOver={handleStartOver}
             onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
             onCloseAi={() => setAiPanelOpen(false)}
+            onAIHistoryChange={handleAIHistoryChange}
           />
         ) : (
           <div className="liuyao-transition-content">
@@ -907,18 +1055,27 @@ function LiuyaoResultWorkspace({
   result,
   copyStatus,
   aiPanelOpen,
+  activeHistoryId,
+  aiHistory,
   onCopy,
   onStartOver,
   onToggleAiPanel,
   onCloseAi,
+  onAIHistoryChange,
 }: {
   result: LiuyaoPaipan;
   copyStatus: CopyStatus;
   aiPanelOpen: boolean;
+  activeHistoryId: string | null;
+  aiHistory: LiuyaoAIHistoryState;
   onCopy: () => void;
   onStartOver: () => void;
   onToggleAiPanel: () => void;
   onCloseAi: () => void;
+  onAIHistoryChange: (
+    updater: (current: LiuyaoAIHistoryState) => LiuyaoAIHistoryState,
+    options?: { touch?: boolean }
+  ) => void;
 }) {
   return (
     <section
@@ -970,7 +1127,10 @@ function LiuyaoResultWorkspace({
           <AIDivinationPanel
             open={aiPanelOpen}
             result={result}
+            historyRecordId={activeHistoryId}
+            aiHistory={aiHistory}
             onClose={onCloseAi}
+            onAIHistoryChange={onAIHistoryChange}
           />
         </div>
       </div>
@@ -1287,20 +1447,87 @@ function PaipanResult({
 function AIDivinationPanel({
   open,
   result,
+  historyRecordId,
+  aiHistory,
   onClose,
+  onAIHistoryChange,
 }: {
   open: boolean;
   result: LiuyaoPaipan;
+  historyRecordId: string | null;
+  aiHistory: LiuyaoAIHistoryState;
   onClose: () => void;
+  onAIHistoryChange: (
+    updater: (current: LiuyaoAIHistoryState) => LiuyaoAIHistoryState,
+    options?: { touch?: boolean }
+  ) => void;
 }) {
+  const activeSession = getLiuyaoAIHistorySession(aiHistory, aiHistory.activeSessionId);
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<AIDivinationMessage[]>([]);
-  const [sessionId, setSessionId] = useState(createLiuyaoAISessionId);
+  const [messages, setMessagesState] = useState<AIDivinationMessage[]>(
+    () => activeSession?.messages ?? []
+  );
+  const [sessionId, setSessionIdState] = useState(aiHistory.activeSessionId);
   const [isSending, setIsSending] = useState(false);
-  const nextMessageIdRef = useRef(1);
+  const messagesRef = useRef(messages);
+  const sessionIdRef = useRef(sessionId);
+  const nextMessageIdRef = useRef(getNextAIDivinationMessageId(messages));
   const activeRequestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const mobileTitle = formatHexagramTransition(result);
+
+  const setMessages = (
+    updater:
+      | AIDivinationMessage[]
+      | ((current: AIDivinationMessage[]) => AIDivinationMessage[])
+  ) => {
+    const nextMessages = typeof updater === "function"
+      ? updater(messagesRef.current)
+      : updater;
+
+    messagesRef.current = nextMessages;
+    setMessagesState(nextMessages);
+
+    return nextMessages;
+  };
+
+  const setSessionId = (nextSessionId: string) => {
+    sessionIdRef.current = nextSessionId;
+    setSessionIdState(nextSessionId);
+  };
+
+  const persistSession = (
+    nextMessages: AIDivinationMessage[],
+    options?: { touch?: boolean }
+  ) => {
+    if (nextMessages.length === 0) {
+      return;
+    }
+
+    onAIHistoryChange(
+      (current) =>
+        upsertLiuyaoAIHistorySession(current, {
+          sessionId: sessionIdRef.current,
+          messages: nextMessages,
+        }),
+      options
+    );
+  };
+
+  useEffect(() => {
+    const nextSessionId = aiHistory.activeSessionId || createLiuyaoAISessionId();
+    const nextSession = getLiuyaoAIHistorySession(aiHistory, nextSessionId);
+    const nextMessages = nextSession?.messages ?? [];
+
+    activeRequestIdRef.current += 1;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setMessage("");
+    setMessages(nextMessages);
+    setSessionId(nextSessionId);
+    setIsSending(false);
+    nextMessageIdRef.current = getNextAIDivinationMessageId(nextMessages);
+  }, [aiHistory.activeSessionId, historyRecordId]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -1313,12 +1540,12 @@ function AIDivinationPanel({
 
     const userMessageId = nextMessageIdRef.current++;
     const assistantMessageId = nextMessageIdRef.current++;
-    const requestMessages = buildLiuyaoAIRequestMessages(messages, content);
+    const requestMessages = buildLiuyaoAIRequestMessages(messagesRef.current, content);
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
 
-    setMessages((prev) => [
-      ...prev,
+    const nextMessages = setMessages([
+      ...messagesRef.current,
       {
         id: userMessageId,
         role: "user",
@@ -1331,6 +1558,7 @@ function AIDivinationPanel({
         status: "streaming",
       },
     ]);
+    persistSession(nextMessages);
     setMessage("");
     setIsSending(true);
 
@@ -1397,7 +1625,7 @@ function AIDivinationPanel({
         return;
       }
 
-      setMessages((prev) =>
+      const finalMessages = setMessages((prev) =>
         prev.map((item) => {
           if (item.id !== assistantMessageId) {
             return item;
@@ -1410,13 +1638,14 @@ function AIDivinationPanel({
           };
         })
       );
+      persistSession(finalMessages);
     } catch (err) {
       if (!isActiveRequest()) {
         return;
       }
 
       if (abortController.signal.aborted) {
-        setMessages((prev) =>
+        const stoppedMessages = setMessages((prev) =>
           prev.map((item) =>
             item.id === assistantMessageId
               ? {
@@ -1427,10 +1656,11 @@ function AIDivinationPanel({
               : item
           )
         );
+        persistSession(stoppedMessages);
         return;
       }
 
-      setMessages((prev) =>
+      const errorMessages = setMessages((prev) =>
         prev.map((item) =>
           item.id === assistantMessageId
             ? {
@@ -1441,6 +1671,7 @@ function AIDivinationPanel({
             : item
         )
       );
+      persistSession(errorMessages);
     } finally {
       if (abortControllerRef.current === abortController) {
         abortControllerRef.current = null;
@@ -1463,13 +1694,46 @@ function AIDivinationPanel({
   };
 
   const handleNewSession = () => {
+    const stoppedMessages = markStreamingMessagesStopped(messagesRef.current);
+
+    if (stoppedMessages !== messagesRef.current) {
+      persistSession(stoppedMessages);
+    }
+
+    const nextSessionId = createLiuyaoAISessionId();
     activeRequestIdRef.current += 1;
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     setMessage("");
     setMessages([]);
     setIsSending(false);
-    setSessionId(createLiuyaoAISessionId());
+    setSessionId(nextSessionId);
+    nextMessageIdRef.current = 1;
+    onAIHistoryChange(
+      (current) => activateLiuyaoAIHistorySession(current, nextSessionId),
+      { touch: false }
+    );
+  };
+
+  const handleRestoreSession = (restoredSessionId: string) => {
+    const session = getLiuyaoAIHistorySession(aiHistory, restoredSessionId);
+
+    if (!session) {
+      return;
+    }
+
+    activeRequestIdRef.current += 1;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setMessage("");
+    setMessages(session.messages);
+    setSessionId(session.sessionId);
+    setIsSending(false);
+    nextMessageIdRef.current = getNextAIDivinationMessageId(session.messages);
+    onAIHistoryChange(
+      (current) => activateLiuyaoAIHistorySession(current, session.sessionId),
+      { touch: false }
+    );
   };
 
   useEffect(() => {
@@ -1502,9 +1766,12 @@ function AIDivinationPanel({
       >
         <AIDivinationPanelContent
           isSending={isSending}
+          aiSessions={aiHistory.sessions}
+          activeSessionId={sessionId}
           message={message}
           messages={messages}
           onNewSession={handleNewSession}
+          onRestoreSession={handleRestoreSession}
           onMessageChange={setMessage}
           onStop={handleStop}
           onSubmit={handleSubmit}
@@ -1523,9 +1790,12 @@ function AIDivinationPanel({
       >
         <AIDivinationPanelContent
           isSending={isSending}
+          aiSessions={aiHistory.sessions}
+          activeSessionId={sessionId}
           message={message}
           messages={messages}
           onNewSession={handleNewSession}
+          onRestoreSession={handleRestoreSession}
           onMessageChange={setMessage}
           onStop={handleStop}
           onSubmit={handleSubmit}
@@ -1540,9 +1810,12 @@ function AIDivinationPanel({
 
 function AIDivinationPanelContent({
   isSending,
+  aiSessions,
+  activeSessionId,
   message,
   messages,
   onNewSession,
+  onRestoreSession,
   onMessageChange,
   onStop,
   onSubmit,
@@ -1551,9 +1824,12 @@ function AIDivinationPanelContent({
   variant,
 }: {
   isSending: boolean;
+  aiSessions: LiuyaoAIHistorySession[];
+  activeSessionId: string;
   message: string;
   messages: AIDivinationMessage[];
   onNewSession: () => void;
+  onRestoreSession: (sessionId: string) => void;
   onMessageChange: (value: string) => void;
   onStop: () => void;
   onSubmit: (event: FormEvent) => void;
@@ -1618,6 +1894,14 @@ function AIDivinationPanelContent({
         <div className={cn("min-w-0 flex-1 truncate font-medium", mobile ? "text-xs text-muted-foreground" : "text-sm")}>
           {title}
         </div>
+        {!mobile ? (
+          <AIDivinationHistoryPopover
+            sessions={aiSessions}
+            activeSessionId={activeSessionId}
+            tabIndex={tabIndex}
+            onRestoreSession={onRestoreSession}
+          />
+        ) : null}
         <Button
           type="button"
           variant="ghost"
@@ -1671,6 +1955,100 @@ function AIDivinationPanelContent({
       </form>
     </div>
   );
+}
+
+function AIDivinationHistoryPopover({
+  sessions,
+  activeSessionId,
+  tabIndex,
+  onRestoreSession,
+}: {
+  sessions: LiuyaoAIHistorySession[];
+  activeSessionId: string;
+  tabIndex: 0 | -1;
+  onRestoreSession: (sessionId: string) => void;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="询问AI历史"
+            tabIndex={tabIndex}
+          />
+        }
+      >
+        <HistoryIcon />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] gap-3">
+        <PopoverHeader>
+          <PopoverTitle>AI 历史</PopoverTitle>
+          <PopoverDescription>
+            恢复此卦中过去的询问会话。
+          </PopoverDescription>
+        </PopoverHeader>
+
+        {sessions.length === 0 ? (
+          <Empty className="rounded-lg border-0 bg-muted/40 px-3 py-6">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <HistoryIcon aria-hidden="true" />
+              </EmptyMedia>
+              <EmptyTitle>暂无 AI 会话</EmptyTitle>
+              <EmptyDescription>
+                此卦还没有保存过询问会话。
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <ScrollArea className="max-h-72 pr-2">
+            <div className="flex flex-col gap-1">
+              {sessions.map((session) => {
+                const active = session.sessionId === activeSessionId;
+
+                return (
+                  <button
+                    key={session.sessionId}
+                    type="button"
+                    className={cn(
+                      "rounded-lg px-3 py-2 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30",
+                      active && "bg-muted"
+                    )}
+                    onClick={() => onRestoreSession(session.sessionId)}
+                  >
+                    <div className="truncate text-sm font-medium">
+                      {session.title}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <span>{formatHistoryDateTime(session.updatedAt)}</span>
+                      <span>{formatAIMessageCount(session.messages)}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function formatAIMessageCount(messages: LiuyaoAIHistorySession["messages"]) {
+  return `${messages.length} 条消息`;
+}
+
+function formatHistoryDateTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "时间未知";
+  }
+
+  return format(date, "yyyy-MM-dd HH:mm");
 }
 
 function getAIDivinationMessageClass(message: AIDivinationMessage) {
@@ -1769,6 +2147,28 @@ function appendToMessage(messages: AIDivinationMessage[], messageId: number, chu
   );
 }
 
+function markStreamingMessagesStopped(messages: AIDivinationMessage[]) {
+  let changed = false;
+  const nextMessages = messages.map((message) => {
+    if (message.status !== "streaming") {
+      return message;
+    }
+
+    changed = true;
+    return {
+      ...message,
+      content: message.content || "已停止。",
+      status: "stopped" as const,
+    };
+  });
+
+  return changed ? nextMessages : messages;
+}
+
+function getNextAIDivinationMessageId(messages: AIDivinationMessage[]) {
+  return messages.reduce((nextId, message) => Math.max(nextId, message.id + 1), 1);
+}
+
 function buildLiuyaoAIRequestMessages(messages: AIDivinationMessage[], currentContent: string) {
   const history = messages
     .flatMap((item): Array<Pick<AIDivinationMessage, "role" | "content">> => {
@@ -1794,14 +2194,6 @@ function buildLiuyaoAIRequestMessages(messages: AIDivinationMessage[], currentCo
       content: currentContent.slice(0, MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH),
     },
   ];
-}
-
-function createLiuyaoAISessionId() {
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return `liuyao-${globalThis.crypto.randomUUID()}`;
-  }
-
-  return `liuyao-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function encodeBase64Json(value: unknown) {
