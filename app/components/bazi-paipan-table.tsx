@@ -10,10 +10,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type {
+  BaziDayunDisplay,
   BaziFlowDayDisplay,
   BaziFlowHourDisplay,
   BaziFlowItemDisplay,
   BaziFlowMonthDisplay,
+  BaziFlowYearDisplay,
   BaziGender,
   BaziHiddenStemDisplay,
   BaziPaipan,
@@ -55,8 +57,13 @@ interface BaziPaipanTableProps {
   paipan: BaziPaipan;
 }
 
+function getDefaultDayunStartYear(paipan: BaziPaipan) {
+  return paipan.fortune.dayun?.startYear ?? paipan.fortune.dayuns[0]?.startYear ?? null;
+}
+
 export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
   const [isShenShaExpanded, setIsShenShaExpanded] = useState(false);
+  const [selectedDayunStartYear, setSelectedDayunStartYear] = useState<number | null>(null);
   const [selectedFlowYear, setSelectedFlowYear] = useState<number | null>(null);
   const [selectedFlowMonth, setSelectedFlowMonth] = useState<number | null>(null);
   const [selectedFlowDay, setSelectedFlowDay] = useState<string | null>(null);
@@ -72,6 +79,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
 
   useEffect(() => {
     setIsShenShaExpanded(false);
+    setSelectedDayunStartYear(getDefaultDayunStartYear(paipan));
     setSelectedFlowYear(null);
     setSelectedFlowMonth(null);
     setSelectedFlowDay(null);
@@ -89,10 +97,17 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
     setIsShenShaExpanded((isExpanded) => !isExpanded);
   };
 
+  const selectedDayunKey = selectedDayunStartYear ?? getDefaultDayunStartYear(paipan);
+  const activeDayun =
+    selectedDayunKey == null
+      ? null
+      : paipan.fortune.dayuns.find((dayun) => dayun.startYear === selectedDayunKey) ??
+        paipan.fortune.dayun;
+  const activeFlowYears = activeDayun?.years ?? paipan.fortune.years;
   const activeFlowYear =
     selectedFlowYear == null
       ? null
-      : paipan.fortune.years.find((year) => year.year === selectedFlowYear) ?? null;
+      : activeFlowYears.find((year) => year.year === selectedFlowYear) ?? null;
   const activeFlowMonth =
     selectedFlowMonth == null
       ? null
@@ -104,6 +119,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
       ? null
       : flowHours.find((hour) => hour.key === selectedFlowHour) ?? null;
   const activeFlowColumns = [
+    activeDayun,
     activeFlowYear,
     activeFlowMonth,
     activeFlowDay,
@@ -114,6 +130,17 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
   );
   const shenShaPreviewLimit =
     isShenShaCollapsible && !isShenShaExpanded ? SHEN_SHA_PREVIEW_COUNT : undefined;
+
+  const handleSelectDayun = (dayun: BaziDayunDisplay) => {
+    setSelectedDayunStartYear(dayun.startYear);
+    setSelectedFlowYear(null);
+    setSelectedFlowMonth(null);
+    setSelectedFlowDay(null);
+    setSelectedFlowHour(null);
+    setFlowMonths([]);
+    setFlowDays([]);
+    setFlowHours([]);
+  };
 
   const handleSelectFlowYear = async (year: number) => {
     if (selectedFlowYear === year) {
@@ -216,17 +243,17 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
         </div>
       ) : null}
 
-      <div className="overflow-x-auto border-y bg-background md:rounded-lg md:border-x">
-        <Table className="min-w-[760px] table-fixed text-[13px] md:text-sm">
+      <div className="overflow-hidden border-y bg-background md:rounded-lg md:border-x">
+        <Table className="min-w-0 table-fixed text-[11px] leading-tight sm:text-xs md:text-sm md:leading-normal">
           <TableHeader>
             <TableRow>
-              <TableHead className="h-8 w-10 px-1 py-1 text-center text-[11px] leading-4 sm:w-14 md:h-12 md:w-24 md:px-3 md:text-sm">
+              <TableHead className="h-7 w-8 px-0.5 py-1 text-center text-[10px] leading-3 sm:w-10 sm:text-[11px] md:h-12 md:w-24 md:px-3 md:text-sm md:leading-4">
                 <span className="sr-only">项目</span>
               </TableHead>
               {paipan.pillars.map((pillar) => (
                 <TableHead
                   key={pillar.key}
-                  className="h-8 px-1 py-1 text-center text-[11px] leading-4 md:h-12 md:px-3 md:text-sm"
+                  className="h-7 px-0.5 py-1 text-center text-[10px] leading-3 sm:text-[11px] md:h-12 md:px-3 md:text-sm md:leading-4"
                 >
                   {pillar.label}
                 </TableHead>
@@ -235,7 +262,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
                 <TableHead
                   key={column.key}
                   className={cn(
-                    "h-8 bg-muted/30 px-1 py-1 text-center text-[11px] leading-4 text-primary md:h-12 md:px-3 md:text-sm",
+                    "h-7 bg-muted/30 px-0.5 py-1 text-center text-[10px] leading-3 text-primary sm:text-[11px] md:h-12 md:px-3 md:text-sm md:leading-4",
                     index === 0 && "border-l"
                   )}
                 >
@@ -257,7 +284,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
                   )}
                   onClick={isInteractiveShenShaRow ? toggleShenShaRow : undefined}
                 >
-                  <TableCell className="px-1 py-1.5 text-center text-xs font-medium leading-5 text-muted-foreground md:p-3 md:text-sm">
+                  <TableCell className="px-0.5 py-1 text-center text-[10px] font-medium leading-3 text-muted-foreground sm:text-xs sm:leading-4 md:p-3 md:text-sm md:leading-5">
                     {isInteractiveShenShaRow ? (
                       <button
                         type="button"
@@ -285,7 +312,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
                   {paipan.pillars.map((pillar) => (
                     <TableCell
                       key={`${row.key}-${pillar.key}`}
-                      className="whitespace-normal px-1 py-1.5 text-center align-top leading-4 md:p-3 md:leading-6"
+                      className="whitespace-normal break-words px-0.5 py-1 text-center align-top leading-3 sm:leading-4 md:p-3 md:leading-6"
                     >
                       {renderPillarValue(row.key, pillar, { shenShaPreviewLimit })}
                     </TableCell>
@@ -294,7 +321,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
                     <TableCell
                       key={`${row.key}-${column.key}`}
                       className={cn(
-                        "whitespace-normal bg-muted/20 px-1 py-1.5 text-center align-top leading-4 md:p-3 md:leading-6",
+                        "whitespace-normal break-words bg-muted/20 px-0.5 py-1 text-center align-top leading-3 sm:leading-4 md:p-3 md:leading-6",
                         index === 0 && "border-l"
                       )}
                     >
@@ -325,9 +352,11 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
         </div>
       </div>
 
-      {paipan.fortune.years.length > 0 ? (
+      {paipan.fortune.dayuns.length > 0 ? (
         <FlowFortuneSection
           paipan={paipan}
+          activeDayun={activeDayun}
+          activeFlowYears={activeFlowYears}
           flowMonths={flowMonths}
           flowDays={flowDays}
           flowHours={flowHours}
@@ -335,6 +364,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
           selectedFlowMonth={selectedFlowMonth}
           selectedFlowDay={selectedFlowDay}
           selectedFlowHour={selectedFlowHour}
+          onSelectDayun={handleSelectDayun}
           onSelectFlowYear={(year) => {
             void handleSelectFlowYear(year);
           }}
@@ -377,7 +407,12 @@ function renderPillarValue(
   const isStemOrBranch = rowKey === "stem" || rowKey === "branch";
 
   return (
-    <span className={cn(isStemOrBranch && "text-base font-semibold leading-5 md:text-lg md:leading-6")}>
+    <span
+      className={cn(
+        isStemOrBranch &&
+          "text-sm font-semibold leading-4 sm:text-base sm:leading-5 md:text-lg md:leading-6"
+      )}
+    >
       {value || "—"}
     </span>
   );
@@ -409,7 +444,12 @@ function renderFlowPillarValue(
   const isStemOrBranch = rowKey === "stem" || rowKey === "branch";
 
   return (
-    <span className={cn(isStemOrBranch && "text-base font-semibold leading-5 md:text-lg md:leading-6")}>
+    <span
+      className={cn(
+        isStemOrBranch &&
+          "text-sm font-semibold leading-4 sm:text-base sm:leading-5 md:text-lg md:leading-6"
+      )}
+    >
       {value || "—"}
     </span>
   );
@@ -417,6 +457,8 @@ function renderFlowPillarValue(
 
 function FlowFortuneSection({
   paipan,
+  activeDayun,
+  activeFlowYears,
   flowMonths,
   flowDays,
   flowHours,
@@ -424,12 +466,15 @@ function FlowFortuneSection({
   selectedFlowMonth,
   selectedFlowDay,
   selectedFlowHour,
+  onSelectDayun,
   onSelectFlowYear,
   onSelectFlowMonth,
   onSelectFlowDay,
   onSelectFlowHour,
 }: {
   paipan: BaziPaipan;
+  activeDayun: BaziDayunDisplay | null;
+  activeFlowYears: BaziFlowYearDisplay[];
   flowMonths: BaziFlowMonthDisplay[];
   flowDays: BaziFlowDayDisplay[];
   flowHours: BaziFlowHourDisplay[];
@@ -437,39 +482,59 @@ function FlowFortuneSection({
   selectedFlowMonth: number | null;
   selectedFlowDay: string | null;
   selectedFlowHour: string | null;
+  onSelectDayun: (dayun: BaziDayunDisplay) => void;
   onSelectFlowYear: (year: number) => void;
   onSelectFlowMonth: (month: BaziFlowMonthDisplay) => void;
   onSelectFlowDay: (day: BaziFlowDayDisplay) => void;
   onSelectFlowHour: (hour: BaziFlowHourDisplay) => void;
 }) {
-  const dayunText = paipan.fortune.dayun
-    ? `${paipan.fortune.dayun.startYear}年起 ${paipan.fortune.dayun.ganZhi}`
+  const dayunText = activeDayun
+    ? `${activeDayun.startYear}年起 ${activeDayun.name}`
     : `${paipan.fortune.currentYear}年`;
 
   return (
     <div className="overflow-hidden border-y bg-background md:rounded-lg md:border-x">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-3 md:px-6">
         <h3 className="text-sm font-semibold tracking-tight">流运</h3>
-        <span className="text-xs text-muted-foreground">当前大运 {dayunText}</span>
+        <span className="text-xs text-muted-foreground">已选大运 {dayunText}</span>
       </div>
 
       <div>
-        <FlowTimelineRow label="流年">
-          {paipan.fortune.years.map((year) => (
+        <FlowTimelineRow label="大运">
+          {paipan.fortune.dayuns.map((dayun) => (
             <FlowItemButton
-              key={year.key}
-              ariaLabel={`${year.year}年${year.name}`}
-              eyebrow={String(year.year)}
-              caption={`${year.age}岁`}
-              stem={year.stem}
-              branch={year.branch}
-              footer={year.tenGod}
-              isSelected={selectedFlowYear === year.year}
+              key={dayun.key}
+              ariaLabel={`${dayun.startYear}年起${dayun.name}大运`}
+              eyebrow={`${dayun.startYear}起`}
+              caption={`${dayun.startAge}岁`}
+              stem={dayun.stem}
+              branch={dayun.branch}
+              footer={dayun.tenGod}
+              isSelected={activeDayun?.startYear === dayun.startYear}
               className="w-16"
-              onClick={() => onSelectFlowYear(year.year)}
+              onClick={() => onSelectDayun(dayun)}
             />
           ))}
         </FlowTimelineRow>
+
+        {activeFlowYears.length > 0 ? (
+          <FlowTimelineRow label="流年">
+            {activeFlowYears.map((year) => (
+              <FlowItemButton
+                key={year.key}
+                ariaLabel={`${year.year}年${year.name}`}
+                eyebrow={String(year.year)}
+                caption={`${year.age}岁`}
+                stem={year.stem}
+                branch={year.branch}
+                footer={year.tenGod}
+                isSelected={selectedFlowYear === year.year}
+                className="w-16"
+                onClick={() => onSelectFlowYear(year.year)}
+              />
+            ))}
+          </FlowTimelineRow>
+        ) : null}
 
         {flowMonths.length > 0 ? (
           <FlowTimelineRow label="流月">
@@ -603,10 +668,12 @@ function HiddenStemStack({ items }: { items: BaziHiddenStemDisplay[] }) {
       {items.map((item) => (
         <span
           key={`${item.stem}-${item.qiType}-${item.tenGod}`}
-          className="inline-flex items-baseline justify-center leading-4 md:leading-5"
+          className="inline-flex items-baseline justify-center leading-3 sm:leading-4 md:leading-5"
         >
           <span>{item.stem}</span>
-          <span className="text-[10px] leading-none md:text-xs">{item.tenGod}</span>
+          <span className="text-[9px] leading-none sm:text-[10px] md:text-xs">
+            {item.tenGod}
+          </span>
         </span>
       ))}
     </div>

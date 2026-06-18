@@ -97,17 +97,18 @@ export interface BaziFlowHourDisplay extends BaziFlowItemDisplay {
   timeRange: string;
 }
 
+export interface BaziDayunDisplay extends BaziFlowItemDisplay {
+  startYear: number;
+  endYear: number;
+  startAge: number;
+  years: BaziFlowYearDisplay[];
+}
+
 export interface BaziFortuneDisplay {
   currentYear: number;
   context: BaziFortuneContext;
-  dayun: {
-    startYear: number;
-    startAge: number;
-    ganZhi: string;
-    stem: string;
-    branch: string;
-    tenGod: string;
-  } | null;
+  dayuns: BaziDayunDisplay[];
+  dayun: BaziDayunDisplay | null;
   years: BaziFlowYearDisplay[];
 }
 
@@ -392,38 +393,66 @@ function buildFortuneDisplay(
 
       return dayun.startYear <= currentYear && (!nextDayun || currentYear < nextDayun.startYear);
     }) ?? dayunOutput.list[0];
+  const dayuns = dayunOutput.list.map((dayun, index) =>
+    buildDayunDisplay(dayun, dayunOutput.list[index + 1])
+  );
+  const activeDayunDisplay =
+    activeDayun == null
+      ? null
+      : dayuns.find((dayun) => dayun.startYear === activeDayun.startYear) ?? null;
 
   return {
     currentYear,
     context,
-    dayun: activeDayun
-      ? {
-          startYear: activeDayun.startYear,
-          startAge: activeDayun.startAge,
-          ganZhi: activeDayun.ganZhi,
-          stem: activeDayun.stem,
-          branch: activeDayun.branch,
-          tenGod: activeDayun.tenGod,
-        }
-      : null,
-    years:
-      activeDayun?.liunianList.map((year) => ({
-        key: `year-${year.year}`,
-        label: "流年",
-        year: year.year,
-        age: year.age,
-        name: year.ganZhi,
-        stem: year.gan,
-        branch: year.zhi,
-        tenGod: year.tenGod,
-        hiddenStems: buildHiddenStemDisplayFromCore(year.hiddenStems),
-        starFortune: year.diShi,
-        selfSitting: buildFlowSelfSitting(year.gan, year.zhi),
-        kongWang: formatCoreKongWang(year.gan, year.zhi),
-        naYin: year.nayin,
-        shenSha: year.shenSha,
-        taiSui: year.taiSui,
-      })) ?? [],
+    dayuns,
+    dayun: activeDayunDisplay,
+    years: activeDayunDisplay?.years ?? [],
+  };
+}
+
+function buildDayunDisplay(
+  dayun: ReturnType<typeof calculateBaziDayun>["list"][number],
+  nextDayun: ReturnType<typeof calculateBaziDayun>["list"][number] | undefined
+): BaziDayunDisplay {
+  return {
+    key: `dayun-${dayun.startYear}`,
+    label: "大运",
+    startYear: dayun.startYear,
+    endYear: nextDayun ? nextDayun.startYear - 1 : dayun.startYear + 9,
+    startAge: dayun.startAge,
+    name: dayun.ganZhi,
+    stem: dayun.stem,
+    branch: dayun.branch,
+    tenGod: dayun.tenGod,
+    hiddenStems: buildHiddenStemDisplayFromCore(dayun.hiddenStems),
+    starFortune: dayun.diShi,
+    selfSitting: buildFlowSelfSitting(dayun.stem, dayun.branch),
+    kongWang: formatCoreKongWang(dayun.stem, dayun.branch),
+    naYin: dayun.naYin,
+    shenSha: dayun.shenSha,
+    years: dayun.liunianList.map(buildFlowYearDisplay),
+  };
+}
+
+function buildFlowYearDisplay(
+  year: ReturnType<typeof calculateBaziDayun>["list"][number]["liunianList"][number]
+): BaziFlowYearDisplay {
+  return {
+    key: `year-${year.year}`,
+    label: "流年",
+    year: year.year,
+    age: year.age,
+    name: year.ganZhi,
+    stem: year.gan,
+    branch: year.zhi,
+    tenGod: year.tenGod,
+    hiddenStems: buildHiddenStemDisplayFromCore(year.hiddenStems),
+    starFortune: year.diShi,
+    selfSitting: buildFlowSelfSitting(year.gan, year.zhi),
+    kongWang: formatCoreKongWang(year.gan, year.zhi),
+    naYin: year.nayin,
+    shenSha: year.shenSha,
+    taiSui: year.taiSui,
   };
 }
 
