@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { format } from "date-fns";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowUpIcon, SparklesIcon } from "lucide-react";
 import { Link } from "react-router";
 import type { Route } from "./+types/bazi";
 
@@ -9,6 +9,8 @@ import { DateTimeWheelPicker } from "@/components/date-time-wheel-picker";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { BaziGender, BaziPaipan } from "@/features/bazi/paipan";
 import { cn } from "@/lib/utils";
@@ -34,9 +36,11 @@ export default function Bazi() {
   const [calculationError, setCalculationError] = useState("");
   const [isCalculating, setIsCalculating] = useState(false);
   const [paipan, setPaipan] = useState<BaziPaipan | null>(null);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
 
   const handleBackToForm = () => {
     setPaipan(null);
+    setAiPanelOpen(false);
     setCalculationError("");
   };
 
@@ -74,10 +78,12 @@ export default function Bazi() {
       setIsCalculating(true);
       const { buildBaziPaipan } = await import("@/features/bazi/paipan");
       setPaipan(buildBaziPaipan({ name, gender, date, time }));
+      setAiPanelOpen(false);
       setCalculationError("");
     } catch (error) {
       console.error(error);
       setPaipan(null);
+      setAiPanelOpen(false);
       setCalculationError("排盘失败，请检查出生时间后重试。");
     } finally {
       setIsCalculating(false);
@@ -88,12 +94,25 @@ export default function Bazi() {
     <div
       className={cn(
         paipan
-          ? "relative mx-auto flex min-h-svh w-full px-0 pb-10 pt-20 md:px-6 md:pt-24 lg:px-8"
+          ? "relative mx-auto flex h-svh min-h-0 w-full overflow-hidden px-4 pb-0 pt-16 md:px-0 md:pt-0"
           : "container relative mx-auto flex min-h-svh items-center px-4 py-16 md:py-20 lg:py-10"
       )}
     >
       {paipan ? (
-        <BaziResultPage paipan={paipan} onBack={handleBackToForm} />
+        <>
+          <BaziMobileResultActions
+            aiPanelOpen={aiPanelOpen}
+            onBack={handleBackToForm}
+            onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
+          />
+          <BaziResultWorkspace
+            paipan={paipan}
+            aiPanelOpen={aiPanelOpen}
+            onBack={handleBackToForm}
+            onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
+            onCloseAi={() => setAiPanelOpen(false)}
+          />
+        </>
       ) : (
         <>
           <Link
@@ -203,27 +222,252 @@ export default function Bazi() {
   );
 }
 
-function BaziResultPage({
-  paipan,
+function BaziMobileResultActions({
+  aiPanelOpen,
   onBack,
+  onToggleAiPanel,
 }: {
-  paipan: BaziPaipan;
+  aiPanelOpen: boolean;
   onBack: () => void;
+  onToggleAiPanel: () => void;
 }) {
   return (
-    <section className="flex w-full flex-col" aria-label="八字排盘结果">
-      <div className="fixed inset-x-0 top-0 z-20 h-16 border-b bg-background/95 backdrop-blur md:left-[224px]">
-        <div className="mx-auto flex h-full w-full max-w-6xl items-center px-4 md:px-6 lg:px-8">
-          <Button type="button" variant="outline" onClick={onBack}>
-            <ArrowLeftIcon data-icon="inline-start" />
-            返回填写
-          </Button>
+    <div className="fixed left-4 right-4 top-4 z-20 md:hidden">
+      <BaziResultActions
+        layout="mobile"
+        aiPanelOpen={aiPanelOpen}
+        onBack={onBack}
+        onToggleAiPanel={onToggleAiPanel}
+      />
+    </div>
+  );
+}
+
+function BaziResultWorkspace({
+  paipan,
+  aiPanelOpen,
+  onBack,
+  onToggleAiPanel,
+  onCloseAi,
+}: {
+  paipan: BaziPaipan;
+  aiPanelOpen: boolean;
+  onBack: () => void;
+  onToggleAiPanel: () => void;
+  onCloseAi: () => void;
+}) {
+  return (
+    <section className="flex h-full min-h-0 w-full flex-col" aria-label="八字排盘结果">
+      <div className="fixed inset-x-0 top-0 z-20 hidden h-16 border-b bg-background/95 backdrop-blur md:left-[224px] md:flex md:items-center">
+        <div className="mx-auto flex w-full max-w-[96rem] px-6 lg:px-8">
+          <BaziResultActions
+            layout="desktop"
+            aiPanelOpen={aiPanelOpen}
+            onBack={onBack}
+            onToggleAiPanel={onToggleAiPanel}
+          />
         </div>
       </div>
 
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col">
-        <BaziPaipanTable paipan={paipan} />
+      <div className="flex h-full min-h-0 w-full flex-1 flex-col md:pt-16">
+        <div
+          className={cn(
+            "mx-auto flex w-full flex-1 flex-col max-lg:relative max-lg:h-full max-lg:min-h-0 max-lg:overflow-hidden lg:h-full lg:min-h-0 lg:overflow-hidden",
+            aiPanelOpen
+              ? "liuyao-result-grid-open max-lg:h-full max-lg:min-h-0 lg:grid lg:max-w-[96rem]"
+              : "liuyao-result-grid-closed lg:grid lg:max-w-[96rem]"
+          )}
+        >
+          <div
+            className={cn(
+              "liuyao-mobile-result-page min-w-0 max-lg:absolute max-lg:inset-0 max-lg:overflow-y-auto max-lg:pb-6 lg:flex lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-8 lg:py-8",
+              aiPanelOpen ? "liuyao-mobile-result-page-open" : "liuyao-mobile-result-page-closed",
+              !aiPanelOpen && "lg:w-full"
+            )}
+          >
+            <div className="w-full lg:mx-auto lg:max-w-6xl">
+              <BaziPaipanTable paipan={paipan} />
+            </div>
+          </div>
+
+          <Separator
+            orientation="vertical"
+            className={cn(
+              "liuyao-result-divider hidden",
+              aiPanelOpen ? "liuyao-result-divider-open lg:block" : "liuyao-result-divider-closed lg:block"
+            )}
+          />
+
+          <BaziAIPanel open={aiPanelOpen} paipan={paipan} onClose={onCloseAi} />
+        </div>
       </div>
     </section>
   );
+}
+
+function BaziResultActions({
+  layout,
+  aiPanelOpen,
+  onBack,
+  onToggleAiPanel,
+}: {
+  layout: "mobile" | "desktop";
+  aiPanelOpen: boolean;
+  onBack: () => void;
+  onToggleAiPanel: () => void;
+}) {
+  const compact = layout === "mobile";
+
+  return (
+    <div
+      className={cn(
+        "flex w-full max-w-full items-center gap-2",
+        compact ? "justify-between" : "justify-between gap-3"
+      )}
+    >
+      <Button
+        type="button"
+        variant="outline"
+        size={compact ? "sm" : "default"}
+        onClick={onBack}
+      >
+        <ArrowLeftIcon data-icon="inline-start" />
+        返回填写
+      </Button>
+      <Button
+        type="button"
+        size={compact ? "sm" : "default"}
+        aria-expanded={aiPanelOpen}
+        onClick={onToggleAiPanel}
+      >
+        <SparklesIcon data-icon="inline-start" />
+        {aiPanelOpen ? "收起AI" : "询问AI"}
+      </Button>
+    </div>
+  );
+}
+
+function BaziAIPanel({
+  open,
+  paipan,
+  onClose,
+}: {
+  open: boolean;
+  paipan: BaziPaipan;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose, open]);
+
+  return (
+    <>
+      <aside
+        aria-hidden={!open}
+        aria-label="询问AI"
+        className={cn(
+          "liuyao-ai-pane hidden min-h-0 overflow-hidden bg-background lg:flex lg:h-full lg:flex-col",
+          open ? "liuyao-ai-pane-open" : "liuyao-ai-pane-closed"
+        )}
+      >
+        <BaziAIPanelContent
+          title="AI 解盘"
+          tabIndex={open ? 0 : -1}
+          variant="desktop"
+        />
+      </aside>
+      <section
+        aria-hidden={!open}
+        aria-label="询问AI"
+        className={cn(
+          "liuyao-mobile-ai-page min-h-0 w-full overflow-hidden bg-background max-lg:absolute max-lg:inset-0 max-lg:flex max-lg:flex-col lg:hidden",
+          open ? "liuyao-mobile-ai-page-open" : "liuyao-mobile-ai-page-closed"
+        )}
+      >
+        <BaziAIPanelContent
+          title={formatBaziAITitle(paipan)}
+          tabIndex={open ? 0 : -1}
+          variant="mobile"
+        />
+      </section>
+    </>
+  );
+}
+
+function BaziAIPanelContent({
+  title,
+  tabIndex,
+  variant,
+}: {
+  title: string;
+  tabIndex: 0 | -1;
+  variant: "desktop" | "mobile";
+}) {
+  const mobile = variant === "mobile";
+  const messageInputId = mobile ? "bazi-ai-message-mobile" : "bazi-ai-message-desktop";
+
+  return (
+    <div
+      className={cn(
+        "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden",
+        mobile && "flex-1"
+      )}
+    >
+      <div className={cn("flex items-center justify-between gap-2", mobile ? "border-b px-0 py-2" : "px-5 pb-2 pt-5")}>
+        <div className={cn("min-w-0 flex-1 truncate font-medium", mobile ? "text-xs text-muted-foreground" : "text-sm")}>
+          {title}
+        </div>
+      </div>
+
+      <div className="h-full min-h-0">
+        <ScrollArea className="h-full min-h-0" aria-live="polite" aria-label="询问AI消息">
+          <div className={cn("flex min-h-full flex-col justify-end gap-3 py-4", mobile ? "px-0" : "px-5")} />
+        </ScrollArea>
+      </div>
+
+      <form
+        className={cn(mobile ? "border-t py-3" : "px-5 pb-5 pt-3")}
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <FieldGroup className="gap-0">
+          <Field orientation="horizontal" className="items-center gap-2">
+            <FieldLabel htmlFor={messageInputId} className="sr-only">追问内容</FieldLabel>
+            <Input
+              id={messageInputId}
+              disabled
+              tabIndex={tabIndex}
+              placeholder="AI 解盘暂未接入"
+            />
+            <Button
+              type="button"
+              size="icon"
+              aria-label="发送追问"
+              disabled
+              tabIndex={tabIndex}
+            >
+              <ArrowUpIcon />
+            </Button>
+          </Field>
+        </FieldGroup>
+      </form>
+    </div>
+  );
+}
+
+function formatBaziAITitle(paipan: BaziPaipan) {
+  return `${paipan.name || "未署名"} · ${paipan.tymeEightChar}`;
 }
