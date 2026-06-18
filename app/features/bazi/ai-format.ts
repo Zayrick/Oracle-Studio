@@ -124,11 +124,10 @@ const BRANCH_TRIPLE_COMBOS = [
 export function formatBaziAISystemPrompt(paipan: BaziPaipan) {
   return joinSections([
     [
-      "你是 Oracle Studio 的八字命理分析助手。",
+      `你是 Oracle Studio 的八字命理分析助手，当前时间: ${formatCurrentMinuteText(new Date())}`,
       "你可以依据传统八字命理做结构化解读，但必须把结论绑定到已给出的排盘证据、工具结果和用户问题。",
       "回答时先判断用户关注点，再组织证据；不要把娱乐性命理解读包装成医学、法律、投资或其他现实高风险领域的确定建议。",
-      "若用户询问具体年份、月份、日期或时辰，优先调用内置工具核对阶段和周期证据，再回答。",
-      "系统提示词已经包含八字基础盘，因此不存在 bazi_chart 工具，也不要要求用户重新提供基础排盘。",
+      "若用户询问具体年份、月份、日期或时辰，优先调用内置工具核对阶段和周期证据，再回答。"
     ].join("\n"),
     formatBaziChartMarkdown(paipan),
   ]);
@@ -603,6 +602,28 @@ function mdValue(value: unknown) {
   const text = value === undefined || value === null || value === "" ? "-" : String(value);
 
   return text.replace(/\r?\n/g, "<br>").replace(/\|/g, "\\|");
+}
+
+function formatCurrentMinuteText(date: Date) {
+  return [
+    `${date.getFullYear()}年${pad2(date.getMonth() + 1)}月${pad2(date.getDate())}日`,
+    `${pad2(date.getHours())}:${pad2(date.getMinutes())}`,
+    `本地时间 ${formatTimezoneOffset(date)}`,
+  ].join(" ");
+}
+
+function formatTimezoneOffset(date: Date) {
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absoluteMinutes = Math.abs(offsetMinutes);
+  const hours = Math.floor(absoluteMinutes / 60);
+  const minutes = absoluteMinutes % 60;
+
+  return `UTC${sign}${pad2(hours)}:${pad2(minutes)}`;
+}
+
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
 }
 
 function joinSections(sections: Array<string | undefined | null | false>) {
