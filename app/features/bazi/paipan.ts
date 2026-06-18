@@ -1,6 +1,5 @@
 import { calculateBazi, type BaziOutput } from "taibu-core/bazi";
-import { calculateTenGod, getDiShi } from "taibu-core/utils";
-import { SolarTime, type SixtyCycle } from "tyme4ts";
+import { HideHeavenStemType, SolarTime, type HeavenStem, type SixtyCycle } from "tyme4ts";
 
 export type BaziGender = "male" | "female";
 export type BaziPillarKey = "year" | "month" | "day" | "hour";
@@ -53,12 +52,12 @@ type DateTimeParts = {
 };
 
 type TymePillar = {
+  cycle: SixtyCycle;
   name: string;
   stem: string;
   branch: string;
   naYin: string;
 };
-type BaziPillarInfo = BaziOutput["fourPillars"][BaziPillarKey];
 
 const PILLAR_META = [
   { key: "year", label: "年柱" },
@@ -87,6 +86,7 @@ export function buildBaziPaipan(input: BaziPaipanInput): BaziPaipan {
     0
   );
   const eightChar = solarTime.getLunarHour().getEightChar();
+  const dayHeavenStem = eightChar.getDay().getHeavenStem();
   const tymePillars = {
     year: buildTymePillar(eightChar.getYear()),
     month: buildTymePillar(eightChar.getMonth()),
@@ -103,10 +103,10 @@ export function buildBaziPaipan(input: BaziPaipanInput): BaziPaipan {
     calendarType: "solar",
   });
 
-  const dayMaster = chart.dayMaster;
+  const dayMaster = dayHeavenStem.getName();
   const warnings = buildPillarConsistencyWarnings(chart, tymePillars);
   const pillars = PILLAR_META.map(({ key, label }) =>
-    buildPillarDisplay(key, label, chart, tymePillars[key])
+    buildPillarDisplay(key, label, chart, tymePillars[key], dayHeavenStem)
   );
 
   return {
@@ -114,7 +114,7 @@ export function buildBaziPaipan(input: BaziPaipanInput): BaziPaipan {
     gender: input.gender,
     solarText: formatDateTimeParts(parts),
     dayMaster,
-    kongWangText: `${chart.kongWang.xun} ${chart.kongWang.kongZhi.join("、")}空`,
+    kongWangText: formatPillarKongWangText(eightChar.getDay()),
     tymeEightChar: eightChar.getName(),
     pillars,
     warnings,
@@ -125,34 +125,36 @@ function buildPillarDisplay(
   key: BaziPillarKey,
   label: string,
   chart: BaziOutput,
-  tymePillar: TymePillar
+  tymePillar: TymePillar,
+  dayHeavenStem: HeavenStem
 ): BaziPillarDisplay {
   const pillar = chart.fourPillars[key];
-  const stem = pillar.stem || tymePillar.stem;
-  const branch = pillar.branch || tymePillar.branch;
+  const pillarHeavenStem = tymePillar.cycle.getHeavenStem();
+  const pillarEarthBranch = tymePillar.cycle.getEarthBranch();
 
   return {
     key,
     label,
-    name: `${stem}${branch}`,
-    mainStar: getMainStar(key, chart.dayMaster, pillar),
-    stem,
-    branch,
-    hiddenStems: pillar.hiddenStems.map((hiddenStem) => ({
-      stem: hiddenStem.stem,
-      qiType: hiddenStem.qiType,
-      tenGod: hiddenStem.tenGod,
+    name: tymePillar.name,
+    mainStar: getMainStar(key, dayHeavenStem, pillarHeavenStem),
+    stem: tymePillar.stem,
+    branch: tymePillar.branch,
+    hiddenStems: pillarEarthBranch.getHideHeavenStems().map((hiddenStem) => ({
+      stem: hiddenStem.getName(),
+      qiType: getHiddenStemQiType(hiddenStem.getType()),
+      tenGod: dayHeavenStem.getTenStar(hiddenStem.getHeavenStem()).getName(),
     })),
-    starFortune: pillar.diShi || getDiShi(chart.dayMaster, branch),
-    selfSitting: getDiShi(stem, branch),
-    kongWang: chart.kongWang.kongZhi.join(""),
-    naYin: pillar.naYin || tymePillar.naYin,
+    starFortune: dayHeavenStem.getTerrain(pillarEarthBranch).getName(),
+    selfSitting: pillarHeavenStem.getTerrain(pillarEarthBranch).getName(),
+    kongWang: formatExtraEarthBranches(tymePillar.cycle),
+    naYin: tymePillar.naYin,
     shenSha: pillar.shenSha,
   };
 }
 
 function buildTymePillar(pillar: SixtyCycle): TymePillar {
   return {
+    cycle: pillar,
     name: pillar.getName(),
     stem: pillar.getHeavenStem().getName(),
     branch: pillar.getEarthBranch().getName(),
@@ -178,12 +180,34 @@ function buildPillarConsistencyWarnings(
   return [`tyme4ts 四柱 ${tymeNames.join(" ")} 与 taibu-core 四柱 ${taibuNames.join(" ")} 不一致。`];
 }
 
-function getMainStar(key: BaziPillarKey, dayMaster: string, pillar: BaziPillarInfo) {
+function getMainStar(key: BaziPillarKey, dayHeavenStem: HeavenStem, pillarHeavenStem: HeavenStem) {
   if (key === "day") {
     return "日主";
   }
 
-  return pillar.tenGod || calculateTenGod(dayMaster, pillar.stem);
+  return dayHeavenStem.getTenStar(pillarHeavenStem).getName();
+}
+
+function getHiddenStemQiType(type: HideHeavenStemType) {
+  switch (type) {
+    case HideHeavenStemType.MAIN:
+      return "本气";
+    case HideHeavenStemType.MIDDLE:
+      return "中气";
+    case HideHeavenStemType.RESIDUAL:
+      return "余气";
+  }
+}
+
+function formatPillarKongWangText(pillar: SixtyCycle) {
+  return `${pillar.getTen().getName()}旬 ${formatExtraEarthBranches(pillar, "、")}空`;
+}
+
+function formatExtraEarthBranches(pillar: SixtyCycle, separator = "") {
+  return pillar
+    .getExtraEarthBranches()
+    .map((branch) => branch.getName())
+    .join(separator);
 }
 
 function getDateTimeParts(date: Date, time: string): DateTimeParts {
