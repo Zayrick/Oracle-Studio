@@ -493,14 +493,14 @@ function FlowFortuneSection({
     : `${paipan.fortune.currentYear}年`;
 
   return (
-    <div className="overflow-hidden border-y bg-background md:rounded-lg md:border-x">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-3 md:px-6">
+    <div className="overflow-hidden border-y bg-background md:border-x">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-2 py-2 sm:px-3">
         <h3 className="text-sm font-semibold tracking-tight">流运</h3>
         <span className="text-xs text-muted-foreground">已选大运 {dayunText}</span>
       </div>
 
-      <div>
-        <FlowTimelineRow label="大运">
+      <div className="divide-y">
+        <FlowGridRow label="大运">
           {paipan.fortune.dayuns.map((dayun) => (
             <FlowItemButton
               key={dayun.key}
@@ -511,14 +511,14 @@ function FlowFortuneSection({
               branch={dayun.branch}
               footer={dayun.tenGod}
               isSelected={activeDayun?.startYear === dayun.startYear}
-              className="w-16"
+              className="w-14"
               onClick={() => onSelectDayun(dayun)}
             />
           ))}
-        </FlowTimelineRow>
+        </FlowGridRow>
 
         {activeFlowYears.length > 0 ? (
-          <FlowTimelineRow label="流年">
+          <FlowGridRow label="流年">
             {activeFlowYears.map((year) => (
               <FlowItemButton
                 key={year.key}
@@ -529,15 +529,15 @@ function FlowFortuneSection({
                 branch={year.branch}
                 footer={year.tenGod}
                 isSelected={selectedFlowYear === year.year}
-                className="w-16"
+                className="w-14"
                 onClick={() => onSelectFlowYear(year.year)}
               />
             ))}
-          </FlowTimelineRow>
+          </FlowGridRow>
         ) : null}
 
         {flowMonths.length > 0 ? (
-          <FlowTimelineRow label="流月">
+          <FlowGridRow label="流月">
             {flowMonths.map((month) => (
               <FlowItemButton
                 key={month.key}
@@ -548,15 +548,15 @@ function FlowFortuneSection({
                 branch={month.branch}
                 footer={month.tenGod}
                 isSelected={selectedFlowMonth === month.month}
-                className="w-16"
+                className="w-14"
                 onClick={() => onSelectFlowMonth(month)}
               />
             ))}
-          </FlowTimelineRow>
+          </FlowGridRow>
         ) : null}
 
         {flowDays.length > 0 ? (
-          <FlowTimelineRow label="流日">
+          <FlowGridRow label="流日">
             {flowDays.map((day) => (
               <FlowItemButton
                 key={day.key}
@@ -567,15 +567,15 @@ function FlowFortuneSection({
                 branch={day.branch}
                 footer={day.tenGod}
                 isSelected={selectedFlowDay === day.date}
-                className="w-14"
+                className="w-12"
                 onClick={() => onSelectFlowDay(day)}
               />
             ))}
-          </FlowTimelineRow>
+          </FlowGridRow>
         ) : null}
 
         {flowHours.length > 0 ? (
-          <FlowTimelineRow label="流时">
+          <FlowGridRow label="流时">
             {flowHours.map((hour) => (
               <FlowItemButton
                 key={hour.key}
@@ -586,25 +586,25 @@ function FlowFortuneSection({
                 branch={hour.branch}
                 footer={hour.tenGod}
                 isSelected={selectedFlowHour === hour.key}
-                className="w-16"
+                className="w-14"
                 onClick={() => onSelectFlowHour(hour)}
               />
             ))}
-          </FlowTimelineRow>
+          </FlowGridRow>
         ) : null}
       </div>
     </div>
   );
 }
 
-function FlowTimelineRow({ label, children }: { label: string; children: ReactNode }) {
+function FlowGridRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] border-b last:border-b-0 md:grid-cols-[4.5rem_minmax(0,1fr)]">
-      <div className="flex items-center justify-center border-r bg-muted/30 px-2 text-center text-xs font-medium text-muted-foreground">
+    <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] sm:grid-cols-[3rem_minmax(0,1fr)]">
+      <div className="flex items-center justify-center border-r bg-muted/30 px-1 py-1 text-center text-xs font-medium text-muted-foreground">
         {label}
       </div>
-      <div className="min-w-0 overflow-x-auto overscroll-x-contain px-3 py-3 md:px-4">
-        <div className="flex w-max gap-2">{children}</div>
+      <div className="min-w-0 overflow-x-auto overscroll-x-contain">
+        <div className="flex w-max items-stretch [&>*:last-child]:border-r-0">{children}</div>
       </div>
     </div>
   );
@@ -638,8 +638,10 @@ function FlowItemButton({
       aria-pressed={isSelected}
       onClick={onClick}
       className={cn(
-        "flex h-24 shrink-0 flex-col items-center justify-between rounded-md border bg-background px-2 py-2 text-center text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        isSelected ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted/60",
+        "flex min-h-20 w-14 shrink-0 flex-col items-center justify-center gap-0.5 border-r bg-background px-1 py-1.5 text-center text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        isSelected
+          ? "bg-primary/10 text-primary ring-1 ring-inset ring-primary"
+          : "hover:bg-muted/60",
         className
       )}
     >
@@ -649,11 +651,13 @@ function FlowItemButton({
       <span className="max-w-full truncate text-[10px] leading-3 text-muted-foreground">
         {caption}
       </span>
-      <span className="flex flex-col items-center gap-0.5 leading-none">
-        <span className="text-base font-semibold leading-none">{stem || "—"}</span>
-        <span className="text-base font-semibold leading-none">{branch || "—"}</span>
+      <span className="flex flex-col items-center gap-0.5">
+        <span className="text-base font-semibold leading-5">{stem || "—"}</span>
+        <span className="text-base font-semibold leading-5">{branch || "—"}</span>
       </span>
-      <span className="max-w-full truncate text-[10px] font-medium leading-3">{footer || "—"}</span>
+      <span className="max-w-full truncate text-[10px] font-medium leading-3">
+        {footer || "—"}
+      </span>
     </button>
   );
 }
