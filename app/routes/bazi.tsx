@@ -88,7 +88,7 @@ export default function Bazi() {
     <div
       className={cn(
         paipan
-          ? "relative mx-auto flex min-h-svh w-full px-4 pb-10 pt-20 md:px-6 md:pt-24 lg:px-8"
+          ? "relative mx-auto flex min-h-svh w-full px-0 pb-10 pt-20 md:px-6 md:pt-24 lg:px-8"
           : "container relative mx-auto flex min-h-svh items-center px-4 py-16 md:py-20 lg:py-10"
       )}
     >

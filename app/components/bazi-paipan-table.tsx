@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import { ChevronDownIcon } from "lucide-react";
+
 import {
   Table,
   TableBody,
@@ -37,23 +40,43 @@ const GENDER_LABELS: Record<BaziGender, string> = {
   female: "女",
 };
 
+const SHEN_SHA_PREVIEW_COUNT = 2;
+
 interface BaziPaipanTableProps {
   paipan: BaziPaipan;
 }
 
 export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
+  const [isShenShaExpanded, setIsShenShaExpanded] = useState(false);
   const displayName = paipan.name || "未署名";
   const summaryItems = [
     GENDER_LABELS[paipan.gender],
     paipan.solarText,
   ];
+  const isShenShaCollapsible = paipan.pillars.some(
+    (pillar) => pillar.shenSha.length > SHEN_SHA_PREVIEW_COUNT
+  );
+  const shenShaPreviewLimit =
+    isShenShaCollapsible && !isShenShaExpanded ? SHEN_SHA_PREVIEW_COUNT : undefined;
+
+  useEffect(() => {
+    setIsShenShaExpanded(false);
+  }, [paipan]);
+
+  const toggleShenShaRow = () => {
+    if (!isShenShaCollapsible) {
+      return;
+    }
+
+    setIsShenShaExpanded((isExpanded) => !isExpanded);
+  };
 
   return (
     <section
       aria-labelledby="bazi-paipan-heading"
-      className="flex w-full flex-col gap-4 animate-in fade-in-0 slide-in-from-bottom-3 duration-300"
+      className="flex w-full flex-col gap-3 animate-in fade-in-0 slide-in-from-bottom-3 duration-300 md:gap-4"
     >
-      <div className="flex flex-col gap-2 text-center">
+      <div className="flex flex-col gap-1.5 px-4 text-center md:gap-2 md:px-0">
         <h2 id="bazi-paipan-heading" className="text-xl font-semibold tracking-tight">
           {displayName}
         </h2>
@@ -65,41 +88,77 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
       </div>
 
       {paipan.warnings.length > 0 ? (
-        <div className="rounded-md border border-destructive/50 px-3 py-2 text-sm text-destructive">
+        <div className="mx-4 rounded-md border border-destructive/50 px-3 py-2 text-sm text-destructive md:mx-0">
           {paipan.warnings.join(" ")}
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-lg border bg-background">
-        <Table className="min-w-[760px] table-fixed">
+      <div className="overflow-hidden border-y bg-background md:rounded-lg md:border-x">
+        <Table className="table-fixed text-[13px] md:min-w-[760px] md:text-sm">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-24 text-center">
+              <TableHead className="h-8 w-10 px-1 py-1 text-center text-[11px] leading-4 sm:w-14 md:h-12 md:w-24 md:px-3 md:text-sm">
                 <span className="sr-only">项目</span>
               </TableHead>
               {paipan.pillars.map((pillar) => (
-                <TableHead key={pillar.key} className="text-center">
+                <TableHead
+                  key={pillar.key}
+                  className="h-8 px-1 py-1 text-center text-[11px] leading-4 md:h-12 md:px-3 md:text-sm"
+                >
                   {pillar.label}
                 </TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {BAZI_TABLE_ROWS.map((row) => (
-              <TableRow key={row.key}>
-                <TableCell className="text-center font-medium text-muted-foreground">
-                  {row.label}
-                </TableCell>
-                {paipan.pillars.map((pillar) => (
-                  <TableCell
-                    key={`${row.key}-${pillar.key}`}
-                    className="whitespace-normal text-center align-top leading-6"
-                  >
-                    {renderPillarValue(row.key, pillar)}
+            {BAZI_TABLE_ROWS.map((row) => {
+              const isInteractiveShenShaRow = row.key === "shenSha" && isShenShaCollapsible;
+
+              return (
+                <TableRow
+                  key={row.key}
+                  className={cn(
+                    isInteractiveShenShaRow &&
+                      "cursor-pointer select-none focus-visible:bg-muted/50 focus-visible:outline-none"
+                  )}
+                  onClick={isInteractiveShenShaRow ? toggleShenShaRow : undefined}
+                >
+                  <TableCell className="px-1 py-1.5 text-center text-xs font-medium leading-5 text-muted-foreground md:p-3 md:text-sm">
+                    {isInteractiveShenShaRow ? (
+                      <button
+                        type="button"
+                        aria-expanded={isShenShaExpanded}
+                        aria-label={isShenShaExpanded ? "收起神煞" : "展开全部神煞"}
+                        className="inline-flex appearance-none flex-col items-center gap-0.5 rounded-sm border-0 bg-transparent p-0 text-inherit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleShenShaRow();
+                        }}
+                      >
+                        <span>{row.label}</span>
+                        <ChevronDownIcon
+                          aria-hidden="true"
+                          className={cn(
+                            "size-3 transition-transform md:size-3.5",
+                            isShenShaExpanded && "rotate-180"
+                          )}
+                        />
+                      </button>
+                    ) : (
+                      row.label
+                    )}
                   </TableCell>
-                ))}
-              </TableRow>
-            ))}
+                  {paipan.pillars.map((pillar) => (
+                    <TableCell
+                      key={`${row.key}-${pillar.key}`}
+                      className="whitespace-normal px-1 py-1.5 text-center align-top leading-4 md:p-3 md:leading-6"
+                    >
+                      {renderPillarValue(row.key, pillar, { shenShaPreviewLimit })}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
@@ -107,28 +166,55 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
   );
 }
 
-function renderPillarValue(rowKey: BaziPaipanRowKey, pillar: BaziPillarDisplay) {
+function renderPillarValue(
+  rowKey: BaziPaipanRowKey,
+  pillar: BaziPillarDisplay,
+  options: { shenShaPreviewLimit?: number } = {}
+) {
   if (rowKey === "hiddenStems") {
-    return (
-      <ValueStack
-        items={pillar.hiddenStems.map(
-          (hiddenStem) => `${hiddenStem.stem}（${hiddenStem.qiType}·${hiddenStem.tenGod}）`
-        )}
-      />
-    );
+    return <HiddenStemStack items={pillar.hiddenStems} />;
   }
 
   if (rowKey === "shenSha") {
-    return <ValueStack items={pillar.shenSha} compact />;
+    return (
+      <ValueStack
+        items={
+          options.shenShaPreviewLimit
+            ? pillar.shenSha.slice(0, options.shenShaPreviewLimit)
+            : pillar.shenSha
+        }
+        compact
+      />
+    );
   }
 
   const value = pillar[rowKey];
   const isStemOrBranch = rowKey === "stem" || rowKey === "branch";
 
   return (
-    <span className={cn(isStemOrBranch && "text-lg font-semibold")}>
+    <span className={cn(isStemOrBranch && "text-base font-semibold leading-5 md:text-lg md:leading-6")}>
       {value || "—"}
     </span>
+  );
+}
+
+function HiddenStemStack({ items }: { items: BaziPillarDisplay["hiddenStems"] }) {
+  if (items.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5 md:gap-1">
+      {items.map((item) => (
+        <span
+          key={`${item.stem}-${item.qiType}-${item.tenGod}`}
+          className="inline-flex items-baseline justify-center leading-4 md:leading-5"
+        >
+          <span>{item.stem}</span>
+          <span className="text-[10px] leading-none md:text-xs">{item.tenGod}</span>
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -138,7 +224,7 @@ function ValueStack({ items, compact = false }: { items: string[]; compact?: boo
   }
 
   return (
-    <div className={cn("flex flex-col", compact ? "gap-0.5" : "gap-1")}>
+    <div className={cn("flex flex-col", compact ? "gap-0 md:gap-0.5" : "gap-0.5 md:gap-1")}>
       {items.map((item) => (
         <span key={item}>{item}</span>
       ))}

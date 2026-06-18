@@ -145,9 +145,7 @@ function buildPillarDisplay(
     })),
     starFortune: pillar.diShi || getDiShi(chart.dayMaster, branch),
     selfSitting: getDiShi(stem, branch),
-    kongWang: pillar.kongWang.isKong
-      ? `是（${chart.kongWang.kongZhi.join("、")}）`
-      : `否（${chart.kongWang.kongZhi.join("、")}）`,
+    kongWang: chart.kongWang.kongZhi.join(""),
     naYin: pillar.naYin || tymePillar.naYin,
     shenSha: pillar.shenSha,
   };
