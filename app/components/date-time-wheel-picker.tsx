@@ -32,9 +32,7 @@ interface DateTimeWheelPickerProps {
   maxYear?: number;
 }
 
-const CURRENT_YEAR = new Date().getFullYear();
-const DEFAULT_MIN_YEAR = CURRENT_YEAR - 100;
-const DEFAULT_MAX_YEAR = CURRENT_YEAR + 50;
+const YEAR_OPTION_RADIUS = 120;
 const MONTH_OPTIONS = buildNumberOptions(1, 12);
 const HOUR_OPTIONS = buildNumberOptions(0, 23);
 const MINUTE_OPTIONS = buildNumberOptions(0, 59);
@@ -56,7 +54,13 @@ function buildNumberOptions(start: number, end: number): WheelPickerOption[] {
   });
 }
 
-function buildYearOptions(start: number, end: number): WheelPickerOption[] {
+function buildYearOptions(
+  centerYear: number,
+  minYear?: number,
+  maxYear?: number
+): WheelPickerOption[] {
+  const { start, end } = getYearOptionRange(centerYear, minYear, maxYear);
+
   return Array.from({ length: end - start + 1 }, (_, index) => {
     const value = String(start + index);
 
@@ -68,8 +72,51 @@ function buildYearOptions(start: number, end: number): WheelPickerOption[] {
   });
 }
 
+function getYearOptionRange(
+  centerYear: number,
+  minYear?: number,
+  maxYear?: number
+) {
+  let minBound = toFiniteInteger(minYear);
+  let maxBound = toFiniteInteger(maxYear);
+
+  if (minBound !== undefined && maxBound !== undefined && minBound > maxBound) {
+    [minBound, maxBound] = [maxBound, minBound];
+  }
+
+  let start = centerYear - YEAR_OPTION_RADIUS;
+  let end = centerYear + YEAR_OPTION_RADIUS;
+
+  if (minBound !== undefined) {
+    start = Math.max(start, minBound);
+  }
+
+  if (maxBound !== undefined) {
+    end = Math.min(end, maxBound);
+  }
+
+  start = Math.min(start, centerYear);
+  end = Math.max(end, centerYear);
+
+  if (start > end) {
+    return { start: centerYear, end: centerYear };
+  }
+
+  return { start, end };
+}
+
+function toFiniteInteger(value: number | undefined) {
+  return value === undefined || !Number.isFinite(value)
+    ? undefined
+    : Math.trunc(value);
+}
+
 function getDaysInMonth(year: number, month: number) {
-  return new Date(year, month, 0).getDate();
+  const date = new Date(0);
+  date.setFullYear(year, month, 0);
+  date.setHours(0, 0, 0, 0);
+
+  return date.getDate();
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -131,28 +178,40 @@ function formatDateTimeLabel(parts: DateTimeParts) {
   return `${parts.year}年${padTimeUnit(parts.month)}月${padTimeUnit(parts.day)}日 ${formatTime(parts)}`;
 }
 
+function createDateFromParts(
+  parts: Pick<DateTimeParts, "year" | "month" | "day">
+) {
+  const date = new Date(0);
+  date.setFullYear(parts.year, parts.month - 1, parts.day);
+  date.setHours(0, 0, 0, 0);
+
+  return date;
+}
+
 export function DateTimeWheelPicker({
   date,
   time,
   onChange,
   id,
   className,
-  minYear = DEFAULT_MIN_YEAR,
-  maxYear = DEFAULT_MAX_YEAR,
+  minYear,
+  maxYear,
 }: DateTimeWheelPickerProps) {
   const [open, setOpen] = useState(false);
   const selectedParts = useMemo(
     () => normalizeDateTimeParts(date, time),
     [date, time]
   );
-  const yearStart = Math.min(minYear, selectedParts.year);
-  const yearEnd = Math.max(maxYear, selectedParts.year);
   const yearOptions = useMemo(
-    () => buildYearOptions(yearStart, yearEnd),
-    [yearStart, yearEnd]
+    () => buildYearOptions(selectedParts.year, minYear, maxYear),
+    [selectedParts.year, minYear, maxYear]
   );
   const dayOptions = useMemo(
-    () => buildNumberOptions(1, getDaysInMonth(selectedParts.year, selectedParts.month)),
+    () =>
+      buildNumberOptions(
+        1,
+        getDaysInMonth(selectedParts.year, selectedParts.month)
+      ),
     [selectedParts.year, selectedParts.month]
   );
   const displayValue = formatDateTimeLabel(selectedParts);
@@ -161,11 +220,7 @@ export function DateTimeWheelPicker({
     const normalizedParts = normalizeParts(nextParts);
 
     onChange({
-      date: new Date(
-        normalizedParts.year,
-        normalizedParts.month - 1,
-        normalizedParts.day
-      ),
+      date: createDateFromParts(normalizedParts),
       time: formatTime(normalizedParts),
     });
   };
@@ -173,13 +228,14 @@ export function DateTimeWheelPicker({
   const renderWheel = (
     options: WheelPickerOption[],
     value: number,
-    onValueChange: (value: number) => void
+    onValueChange: (value: number) => void,
+    infinite = true
   ) => (
     <WheelPicker
       options={options}
       value={String(value)}
       onValueChange={(nextValue) => onValueChange(Number(nextValue))}
-      infinite
+      infinite={infinite}
       visibleCount={20}
       optionItemHeight={30}
       classNames={NUMBER_WHEEL_CLASS_NAMES}
@@ -211,8 +267,11 @@ export function DateTimeWheelPicker({
           <span>分</span>
         </div>
         <WheelPickerWrapper className="w-full">
-          {renderWheel(yearOptions, selectedParts.year, (year) =>
-            updateParts({ ...selectedParts, year })
+          {renderWheel(
+            yearOptions,
+            selectedParts.year,
+            (year) => updateParts({ ...selectedParts, year }),
+            false
           )}
           {renderWheel(MONTH_OPTIONS, selectedParts.month, (month) =>
             updateParts({ ...selectedParts, month })
