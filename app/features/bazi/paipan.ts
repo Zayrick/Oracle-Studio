@@ -1,4 +1,12 @@
-import { calculateBazi, type BaziOutput } from "taibu-core/bazi";
+import {
+  calculateBazi,
+  calculateBaziLiuRiData,
+  calculateBaziLiuYueData,
+  type BaziOutput,
+} from "taibu-core/bazi";
+import { calculateBaziDayun } from "taibu-core/bazi-dayun";
+import { HIDDEN_STEM_DETAILS, NA_YIN_TABLE } from "taibu-core/data/shensha";
+import { calculateTenGod, DI_ZHI, getDiShi, getKongWang, TIAN_GAN } from "taibu-core/utils";
 import {
   ChildLimit,
   Gender as TymeGender,
@@ -45,6 +53,64 @@ export interface BaziAuxiliaryPillarDisplay {
   value: string;
 }
 
+export interface BaziFortuneContext {
+  dayStem: string;
+  dayBranch: string;
+  yearBranch: string;
+}
+
+export interface BaziFlowItemDisplay {
+  key: string;
+  label: string;
+  name: string;
+  stem: string;
+  branch: string;
+  tenGod: string;
+  hiddenStems: BaziHiddenStemDisplay[];
+  starFortune: string;
+  selfSitting: string;
+  kongWang: string;
+  naYin: string;
+  shenSha: string[];
+}
+
+export interface BaziFlowYearDisplay extends BaziFlowItemDisplay {
+  year: number;
+  age: number;
+  taiSui: string[];
+}
+
+export interface BaziFlowMonthDisplay extends BaziFlowItemDisplay {
+  month: number;
+  jieQi: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface BaziFlowDayDisplay extends BaziFlowItemDisplay {
+  date: string;
+  day: number;
+}
+
+export interface BaziFlowHourDisplay extends BaziFlowItemDisplay {
+  branchTime: string;
+  timeRange: string;
+}
+
+export interface BaziFortuneDisplay {
+  currentYear: number;
+  context: BaziFortuneContext;
+  dayun: {
+    startYear: number;
+    startAge: number;
+    ganZhi: string;
+    stem: string;
+    branch: string;
+    tenGod: string;
+  } | null;
+  years: BaziFlowYearDisplay[];
+}
+
 export interface BaziPaipan {
   name: string;
   gender: BaziGender;
@@ -56,6 +122,7 @@ export interface BaziPaipan {
   auxiliaryPillars: BaziAuxiliaryPillarDisplay[];
   commanderText: string;
   fortuneStartText: string;
+  fortune: BaziFortuneDisplay;
   warnings: string[];
 }
 
@@ -75,6 +142,12 @@ type TymePillar = {
   naYin: string;
 };
 
+type CoreHiddenStem = {
+  stem: string;
+  qiType?: string;
+  tenGod?: string;
+};
+
 const PILLAR_META = [
   { key: "year", label: "年柱" },
   { key: "month", label: "月柱" },
@@ -86,6 +159,21 @@ const GENDER_LABELS: Record<BaziGender, string> = {
   male: "男",
   female: "女",
 };
+
+const HOUR_BRANCH_RANGES = [
+  "23:00-00:59",
+  "01:00-02:59",
+  "03:00-04:59",
+  "05:00-06:59",
+  "07:00-08:59",
+  "09:00-10:59",
+  "11:00-12:59",
+  "13:00-14:59",
+  "15:00-16:59",
+  "17:00-18:59",
+  "19:00-20:59",
+  "21:00-22:59",
+];
 
 export function getBaziGenderLabel(gender: BaziGender) {
   return GENDER_LABELS[gender];
@@ -125,6 +213,7 @@ export function buildBaziPaipan(input: BaziPaipanInput): BaziPaipan {
     buildPillarDisplay(key, label, chart, tymePillars[key], dayHeavenStem)
   );
   const childLimit = ChildLimit.fromSolarTime(solarTime, getTymeGender(input.gender));
+  const fortuneContext = buildFortuneContext(chart);
 
   return {
     name: input.name?.trim() ?? "",
@@ -142,8 +231,95 @@ export function buildBaziPaipan(input: BaziPaipanInput): BaziPaipan {
     ],
     commanderText: formatCommanderText(solarTime),
     fortuneStartText: formatChildLimitText(childLimit),
+    fortune: buildFortuneDisplay(parts, input.gender, fortuneContext),
     warnings,
   };
+}
+
+export function buildBaziFlowMonths(
+  year: number,
+  context: BaziFortuneContext
+): BaziFlowMonthDisplay[] {
+  return calculateBaziLiuYueData(year, context).map((month) => {
+    const stem = month.gan ?? "";
+    const branch = month.zhi ?? "";
+
+    return {
+      key: `month-${year}-${month.month}`,
+      label: "流月",
+      month: month.month,
+      jieQi: month.jieQi,
+      startDate: month.startDate,
+      endDate: month.endDate,
+      name: month.ganZhi,
+      stem,
+      branch,
+      tenGod: month.tenGod ?? "",
+      hiddenStems: buildHiddenStemDisplayFromCore(month.hiddenStems),
+      starFortune: month.diShi ?? "",
+      selfSitting: buildFlowSelfSitting(stem, branch),
+      kongWang: formatCoreKongWang(stem, branch),
+      naYin: month.naYin ?? "",
+      shenSha: month.shenSha ?? [],
+    };
+  });
+}
+
+export function buildBaziFlowDays(
+  month: Pick<BaziFlowMonthDisplay, "startDate" | "endDate">,
+  context: BaziFortuneContext
+): BaziFlowDayDisplay[] {
+  return calculateBaziLiuRiData(month.startDate, month.endDate, context).map((day) => ({
+    key: `day-${day.date}`,
+    label: "流日",
+    date: day.date,
+    day: day.day,
+    name: day.ganZhi,
+    stem: day.gan,
+    branch: day.zhi,
+    tenGod: day.tenGod ?? "",
+    hiddenStems: buildHiddenStemDisplayFromCore(day.hiddenStems),
+    starFortune: day.diShi ?? "",
+    selfSitting: buildFlowSelfSitting(day.gan, day.zhi),
+    kongWang: formatCoreKongWang(day.gan, day.zhi),
+    naYin: day.naYin ?? "",
+    shenSha: day.shenSha ?? [],
+  }));
+}
+
+export function buildBaziFlowHours(
+  day: Pick<BaziFlowDayDisplay, "date" | "stem">,
+  context: BaziFortuneContext
+): BaziFlowHourDisplay[] {
+  const dayStemIndex = TIAN_GAN.indexOf(day.stem as (typeof TIAN_GAN)[number]);
+  const startStemIndex = dayStemIndex >= 0 ? (dayStemIndex % 5) * 2 : 0;
+
+  return DI_ZHI.map((branch, branchIndex) => {
+    const stem = TIAN_GAN[(startStemIndex + branchIndex) % TIAN_GAN.length];
+    const name = `${stem}${branch}`;
+
+    return {
+      key: `hour-${day.date}-${branch}`,
+      label: "流时",
+      branchTime: `${branch}时`,
+      timeRange: HOUR_BRANCH_RANGES[branchIndex],
+      name,
+      stem,
+      branch,
+      tenGod: calculateTenGod(context.dayStem, stem),
+      hiddenStems: buildHiddenStemDisplayFromCore(
+        HIDDEN_STEM_DETAILS[branch].map((hiddenStem) => ({
+          ...hiddenStem,
+          tenGod: calculateTenGod(context.dayStem, hiddenStem.stem),
+        }))
+      ),
+      starFortune: getDiShi(context.dayStem, branch),
+      selfSitting: buildFlowSelfSitting(stem, branch),
+      kongWang: formatCoreKongWang(stem, branch),
+      naYin: NA_YIN_TABLE[name] ?? "",
+      shenSha: [],
+    };
+  });
 }
 
 function buildPillarDisplay(
@@ -185,6 +361,92 @@ function buildTymePillar(pillar: SixtyCycle): TymePillar {
     branch: pillar.getEarthBranch().getName(),
     naYin: pillar.getSound().getName(),
   };
+}
+
+function buildFortuneContext(chart: BaziOutput): BaziFortuneContext {
+  return {
+    dayStem: chart.fourPillars.day.stem,
+    dayBranch: chart.fourPillars.day.branch,
+    yearBranch: chart.fourPillars.year.branch,
+  };
+}
+
+function buildFortuneDisplay(
+  parts: DateTimeParts,
+  gender: BaziGender,
+  context: BaziFortuneContext
+): BaziFortuneDisplay {
+  const currentYear = new Date().getFullYear();
+  const dayunOutput = calculateBaziDayun({
+    birthYear: parts.year,
+    birthMonth: parts.month,
+    birthDay: parts.day,
+    birthHour: parts.hour,
+    birthMinute: parts.minute,
+    gender,
+    calendarType: "solar",
+  });
+  const activeDayun =
+    dayunOutput.list.find((dayun, index) => {
+      const nextDayun = dayunOutput.list[index + 1];
+
+      return dayun.startYear <= currentYear && (!nextDayun || currentYear < nextDayun.startYear);
+    }) ?? dayunOutput.list[0];
+
+  return {
+    currentYear,
+    context,
+    dayun: activeDayun
+      ? {
+          startYear: activeDayun.startYear,
+          startAge: activeDayun.startAge,
+          ganZhi: activeDayun.ganZhi,
+          stem: activeDayun.stem,
+          branch: activeDayun.branch,
+          tenGod: activeDayun.tenGod,
+        }
+      : null,
+    years:
+      activeDayun?.liunianList.map((year) => ({
+        key: `year-${year.year}`,
+        label: "流年",
+        year: year.year,
+        age: year.age,
+        name: year.ganZhi,
+        stem: year.gan,
+        branch: year.zhi,
+        tenGod: year.tenGod,
+        hiddenStems: buildHiddenStemDisplayFromCore(year.hiddenStems),
+        starFortune: year.diShi,
+        selfSitting: buildFlowSelfSitting(year.gan, year.zhi),
+        kongWang: formatCoreKongWang(year.gan, year.zhi),
+        naYin: year.nayin,
+        shenSha: year.shenSha,
+        taiSui: year.taiSui,
+      })) ?? [],
+  };
+}
+
+function buildHiddenStemDisplayFromCore(
+  hiddenStems: CoreHiddenStem[] | undefined
+): BaziHiddenStemDisplay[] {
+  return (hiddenStems ?? []).map((hiddenStem) => ({
+    stem: hiddenStem.stem,
+    qiType: hiddenStem.qiType ?? "",
+    tenGod: hiddenStem.tenGod ?? "",
+  }));
+}
+
+function buildFlowSelfSitting(stem: string, branch: string) {
+  return stem && branch ? getDiShi(stem, branch) : "";
+}
+
+function formatCoreKongWang(stem: string, branch: string) {
+  if (!stem || !branch) {
+    return "";
+  }
+
+  return getKongWang(stem, branch).kongZhi.join("");
 }
 
 function buildPillarConsistencyWarnings(

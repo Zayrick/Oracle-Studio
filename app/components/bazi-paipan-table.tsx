@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ChevronDownIcon } from "lucide-react";
 
 import {
@@ -9,7 +9,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { BaziGender, BaziPaipan, BaziPillarDisplay } from "@/features/bazi/paipan";
+import type {
+  BaziFlowDayDisplay,
+  BaziFlowHourDisplay,
+  BaziFlowItemDisplay,
+  BaziFlowMonthDisplay,
+  BaziGender,
+  BaziHiddenStemDisplay,
+  BaziPaipan,
+  BaziPillarDisplay,
+} from "@/features/bazi/paipan";
 import { cn } from "@/lib/utils";
 
 type BaziPaipanRowKey =
@@ -48,19 +57,28 @@ interface BaziPaipanTableProps {
 
 export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
   const [isShenShaExpanded, setIsShenShaExpanded] = useState(false);
+  const [selectedFlowYear, setSelectedFlowYear] = useState<number | null>(null);
+  const [selectedFlowMonth, setSelectedFlowMonth] = useState<number | null>(null);
+  const [selectedFlowDay, setSelectedFlowDay] = useState<string | null>(null);
+  const [selectedFlowHour, setSelectedFlowHour] = useState<string | null>(null);
+  const [flowMonths, setFlowMonths] = useState<BaziFlowMonthDisplay[]>([]);
+  const [flowDays, setFlowDays] = useState<BaziFlowDayDisplay[]>([]);
+  const [flowHours, setFlowHours] = useState<BaziFlowHourDisplay[]>([]);
   const displayName = paipan.name || "未署名";
   const summaryItems = [
     GENDER_LABELS[paipan.gender],
     paipan.solarText,
   ];
-  const isShenShaCollapsible = paipan.pillars.some(
-    (pillar) => pillar.shenSha.length > SHEN_SHA_PREVIEW_COUNT
-  );
-  const shenShaPreviewLimit =
-    isShenShaCollapsible && !isShenShaExpanded ? SHEN_SHA_PREVIEW_COUNT : undefined;
 
   useEffect(() => {
     setIsShenShaExpanded(false);
+    setSelectedFlowYear(null);
+    setSelectedFlowMonth(null);
+    setSelectedFlowDay(null);
+    setSelectedFlowHour(null);
+    setFlowMonths([]);
+    setFlowDays([]);
+    setFlowHours([]);
   }, [paipan]);
 
   const toggleShenShaRow = () => {
@@ -69,6 +87,111 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
     }
 
     setIsShenShaExpanded((isExpanded) => !isExpanded);
+  };
+
+  const activeFlowYear =
+    selectedFlowYear == null
+      ? null
+      : paipan.fortune.years.find((year) => year.year === selectedFlowYear) ?? null;
+  const activeFlowMonth =
+    selectedFlowMonth == null
+      ? null
+      : flowMonths.find((month) => month.month === selectedFlowMonth) ?? null;
+  const activeFlowDay =
+    selectedFlowDay == null ? null : flowDays.find((day) => day.date === selectedFlowDay) ?? null;
+  const activeFlowHour =
+    selectedFlowHour == null
+      ? null
+      : flowHours.find((hour) => hour.key === selectedFlowHour) ?? null;
+  const activeFlowColumns = [
+    activeFlowYear,
+    activeFlowMonth,
+    activeFlowDay,
+    activeFlowHour,
+  ].filter(Boolean) as BaziFlowItemDisplay[];
+  const isShenShaCollapsible = [...activeFlowColumns, ...paipan.pillars].some(
+    (pillar) => pillar.shenSha.length > SHEN_SHA_PREVIEW_COUNT
+  );
+  const shenShaPreviewLimit =
+    isShenShaCollapsible && !isShenShaExpanded ? SHEN_SHA_PREVIEW_COUNT : undefined;
+
+  const handleSelectFlowYear = async (year: number) => {
+    if (selectedFlowYear === year) {
+      setSelectedFlowYear(null);
+      setSelectedFlowMonth(null);
+      setSelectedFlowDay(null);
+      setSelectedFlowHour(null);
+      setFlowMonths([]);
+      setFlowDays([]);
+      setFlowHours([]);
+      return;
+    }
+
+    setSelectedFlowYear(year);
+    setSelectedFlowMonth(null);
+    setSelectedFlowDay(null);
+    setSelectedFlowHour(null);
+    setFlowMonths([]);
+    setFlowDays([]);
+    setFlowHours([]);
+
+    try {
+      const { buildBaziFlowMonths } = await import("@/features/bazi/paipan");
+      setFlowMonths(buildBaziFlowMonths(year, paipan.fortune.context));
+    } catch (error) {
+      console.error(error);
+      setFlowMonths([]);
+    }
+  };
+
+  const handleSelectFlowMonth = async (month: BaziFlowMonthDisplay) => {
+    if (selectedFlowMonth === month.month) {
+      setSelectedFlowMonth(null);
+      setSelectedFlowDay(null);
+      setSelectedFlowHour(null);
+      setFlowDays([]);
+      setFlowHours([]);
+      return;
+    }
+
+    setSelectedFlowMonth(month.month);
+    setSelectedFlowDay(null);
+    setSelectedFlowHour(null);
+    setFlowDays([]);
+    setFlowHours([]);
+
+    try {
+      const { buildBaziFlowDays } = await import("@/features/bazi/paipan");
+      setFlowDays(buildBaziFlowDays(month, paipan.fortune.context));
+    } catch (error) {
+      console.error(error);
+      setFlowDays([]);
+    }
+  };
+
+  const handleSelectFlowDay = async (day: BaziFlowDayDisplay) => {
+    if (selectedFlowDay === day.date) {
+      setSelectedFlowDay(null);
+      setSelectedFlowHour(null);
+      setFlowHours([]);
+      return;
+    }
+
+    setSelectedFlowDay(day.date);
+    setSelectedFlowHour(null);
+    setFlowHours([]);
+
+    try {
+      const { buildBaziFlowHours } = await import("@/features/bazi/paipan");
+      setFlowHours(buildBaziFlowHours(day, paipan.fortune.context));
+    } catch (error) {
+      console.error(error);
+      setFlowHours([]);
+    }
+  };
+
+  const handleSelectFlowHour = (hour: BaziFlowHourDisplay) => {
+    setSelectedFlowHour((selectedHour) => (selectedHour === hour.key ? null : hour.key));
   };
 
   return (
@@ -93,8 +216,8 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
         </div>
       ) : null}
 
-      <div className="overflow-hidden border-y bg-background md:rounded-lg md:border-x">
-        <Table className="table-fixed text-[13px] md:min-w-[760px] md:text-sm">
+      <div className="overflow-x-auto border-y bg-background md:rounded-lg md:border-x">
+        <Table className="min-w-[760px] table-fixed text-[13px] md:text-sm">
           <TableHeader>
             <TableRow>
               <TableHead className="h-8 w-10 px-1 py-1 text-center text-[11px] leading-4 sm:w-14 md:h-12 md:w-24 md:px-3 md:text-sm">
@@ -106,6 +229,17 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
                   className="h-8 px-1 py-1 text-center text-[11px] leading-4 md:h-12 md:px-3 md:text-sm"
                 >
                   {pillar.label}
+                </TableHead>
+              ))}
+              {activeFlowColumns.map((column, index) => (
+                <TableHead
+                  key={column.key}
+                  className={cn(
+                    "h-8 bg-muted/30 px-1 py-1 text-center text-[11px] leading-4 text-primary md:h-12 md:px-3 md:text-sm",
+                    index === 0 && "border-l"
+                  )}
+                >
+                  {column.label}
                 </TableHead>
               ))}
             </TableRow>
@@ -156,6 +290,17 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
                       {renderPillarValue(row.key, pillar, { shenShaPreviewLimit })}
                     </TableCell>
                   ))}
+                  {activeFlowColumns.map((column, index) => (
+                    <TableCell
+                      key={`${row.key}-${column.key}`}
+                      className={cn(
+                        "whitespace-normal bg-muted/20 px-1 py-1.5 text-center align-top leading-4 md:p-3 md:leading-6",
+                        index === 0 && "border-l"
+                      )}
+                    >
+                      {renderFlowPillarValue(row.key, column, { shenShaPreviewLimit })}
+                    </TableCell>
+                  ))}
                 </TableRow>
               );
             })}
@@ -179,6 +324,29 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
           <InfoInline label="司令" value={paipan.commanderText} align="right" />
         </div>
       </div>
+
+      {paipan.fortune.years.length > 0 ? (
+        <FlowFortuneSection
+          paipan={paipan}
+          flowMonths={flowMonths}
+          flowDays={flowDays}
+          flowHours={flowHours}
+          selectedFlowYear={selectedFlowYear}
+          selectedFlowMonth={selectedFlowMonth}
+          selectedFlowDay={selectedFlowDay}
+          selectedFlowHour={selectedFlowHour}
+          onSelectFlowYear={(year) => {
+            void handleSelectFlowYear(year);
+          }}
+          onSelectFlowMonth={(month) => {
+            void handleSelectFlowMonth(month);
+          }}
+          onSelectFlowDay={(day) => {
+            void handleSelectFlowDay(day);
+          }}
+          onSelectFlowHour={handleSelectFlowHour}
+        />
+      ) : null}
     </section>
   );
 }
@@ -215,7 +383,217 @@ function renderPillarValue(
   );
 }
 
-function HiddenStemStack({ items }: { items: BaziPillarDisplay["hiddenStems"] }) {
+function renderFlowPillarValue(
+  rowKey: BaziPaipanRowKey,
+  column: BaziFlowItemDisplay,
+  options: { shenShaPreviewLimit?: number } = {}
+) {
+  if (rowKey === "hiddenStems") {
+    return <HiddenStemStack items={column.hiddenStems} />;
+  }
+
+  if (rowKey === "shenSha") {
+    return (
+      <ValueStack
+        items={
+          options.shenShaPreviewLimit
+            ? column.shenSha.slice(0, options.shenShaPreviewLimit)
+            : column.shenSha
+        }
+        compact
+      />
+    );
+  }
+
+  const value = rowKey === "mainStar" ? column.tenGod : column[rowKey];
+  const isStemOrBranch = rowKey === "stem" || rowKey === "branch";
+
+  return (
+    <span className={cn(isStemOrBranch && "text-base font-semibold leading-5 md:text-lg md:leading-6")}>
+      {value || "—"}
+    </span>
+  );
+}
+
+function FlowFortuneSection({
+  paipan,
+  flowMonths,
+  flowDays,
+  flowHours,
+  selectedFlowYear,
+  selectedFlowMonth,
+  selectedFlowDay,
+  selectedFlowHour,
+  onSelectFlowYear,
+  onSelectFlowMonth,
+  onSelectFlowDay,
+  onSelectFlowHour,
+}: {
+  paipan: BaziPaipan;
+  flowMonths: BaziFlowMonthDisplay[];
+  flowDays: BaziFlowDayDisplay[];
+  flowHours: BaziFlowHourDisplay[];
+  selectedFlowYear: number | null;
+  selectedFlowMonth: number | null;
+  selectedFlowDay: string | null;
+  selectedFlowHour: string | null;
+  onSelectFlowYear: (year: number) => void;
+  onSelectFlowMonth: (month: BaziFlowMonthDisplay) => void;
+  onSelectFlowDay: (day: BaziFlowDayDisplay) => void;
+  onSelectFlowHour: (hour: BaziFlowHourDisplay) => void;
+}) {
+  const dayunText = paipan.fortune.dayun
+    ? `${paipan.fortune.dayun.startYear}年起 ${paipan.fortune.dayun.ganZhi}`
+    : `${paipan.fortune.currentYear}年`;
+
+  return (
+    <div className="overflow-hidden border-y bg-background md:rounded-lg md:border-x">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-3 md:px-6">
+        <h3 className="text-sm font-semibold tracking-tight">流运</h3>
+        <span className="text-xs text-muted-foreground">当前大运 {dayunText}</span>
+      </div>
+
+      <div>
+        <FlowTimelineRow label="流年">
+          {paipan.fortune.years.map((year) => (
+            <FlowItemButton
+              key={year.key}
+              ariaLabel={`${year.year}年${year.name}`}
+              eyebrow={String(year.year)}
+              caption={`${year.age}岁`}
+              stem={year.stem}
+              branch={year.branch}
+              footer={year.tenGod}
+              isSelected={selectedFlowYear === year.year}
+              className="w-16"
+              onClick={() => onSelectFlowYear(year.year)}
+            />
+          ))}
+        </FlowTimelineRow>
+
+        {flowMonths.length > 0 ? (
+          <FlowTimelineRow label="流月">
+            {flowMonths.map((month) => (
+              <FlowItemButton
+                key={month.key}
+                ariaLabel={`${month.jieQi}${month.name}`}
+                eyebrow={month.jieQi}
+                caption={formatShortDate(month.startDate)}
+                stem={month.stem}
+                branch={month.branch}
+                footer={month.tenGod}
+                isSelected={selectedFlowMonth === month.month}
+                className="w-16"
+                onClick={() => onSelectFlowMonth(month)}
+              />
+            ))}
+          </FlowTimelineRow>
+        ) : null}
+
+        {flowDays.length > 0 ? (
+          <FlowTimelineRow label="流日">
+            {flowDays.map((day) => (
+              <FlowItemButton
+                key={day.key}
+                ariaLabel={`${day.date}${day.name}`}
+                eyebrow={formatShortDate(day.date)}
+                caption={`${day.day}日`}
+                stem={day.stem}
+                branch={day.branch}
+                footer={day.tenGod}
+                isSelected={selectedFlowDay === day.date}
+                className="w-14"
+                onClick={() => onSelectFlowDay(day)}
+              />
+            ))}
+          </FlowTimelineRow>
+        ) : null}
+
+        {flowHours.length > 0 ? (
+          <FlowTimelineRow label="流时">
+            {flowHours.map((hour) => (
+              <FlowItemButton
+                key={hour.key}
+                ariaLabel={`${hour.branchTime}${hour.name}`}
+                eyebrow={hour.branchTime}
+                caption={hour.timeRange}
+                stem={hour.stem}
+                branch={hour.branch}
+                footer={hour.tenGod}
+                isSelected={selectedFlowHour === hour.key}
+                className="w-16"
+                onClick={() => onSelectFlowHour(hour)}
+              />
+            ))}
+          </FlowTimelineRow>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function FlowTimelineRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] border-b last:border-b-0 md:grid-cols-[4.5rem_minmax(0,1fr)]">
+      <div className="flex items-center justify-center border-r bg-muted/30 px-2 text-center text-xs font-medium text-muted-foreground">
+        {label}
+      </div>
+      <div className="min-w-0 overflow-x-auto overscroll-x-contain px-3 py-3 md:px-4">
+        <div className="flex w-max gap-2">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function FlowItemButton({
+  ariaLabel,
+  eyebrow,
+  caption,
+  stem,
+  branch,
+  footer,
+  isSelected,
+  className,
+  onClick,
+}: {
+  ariaLabel: string;
+  eyebrow: string;
+  caption: string;
+  stem: string;
+  branch: string;
+  footer: string;
+  isSelected: boolean;
+  className?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      aria-pressed={isSelected}
+      onClick={onClick}
+      className={cn(
+        "flex h-24 shrink-0 flex-col items-center justify-between rounded-md border bg-background px-2 py-2 text-center text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        isSelected ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted/60",
+        className
+      )}
+    >
+      <span className="max-w-full truncate text-[10px] font-medium leading-3 text-muted-foreground">
+        {eyebrow}
+      </span>
+      <span className="max-w-full truncate text-[10px] leading-3 text-muted-foreground">
+        {caption}
+      </span>
+      <span className="flex flex-col items-center gap-0.5 leading-none">
+        <span className="text-base font-semibold leading-none">{stem || "—"}</span>
+        <span className="text-base font-semibold leading-none">{branch || "—"}</span>
+      </span>
+      <span className="max-w-full truncate text-[10px] font-medium leading-3">{footer || "—"}</span>
+    </button>
+  );
+}
+
+function HiddenStemStack({ items }: { items: BaziHiddenStemDisplay[] }) {
   if (items.length === 0) {
     return <span className="text-muted-foreground">—</span>;
   }
@@ -242,11 +620,17 @@ function ValueStack({ items, compact = false }: { items: string[]; compact?: boo
 
   return (
     <div className={cn("flex flex-col", compact ? "gap-0 md:gap-0.5" : "gap-0.5 md:gap-1")}>
-      {items.map((item) => (
-        <span key={item}>{item}</span>
+      {items.map((item, index) => (
+        <span key={`${item}-${index}`}>{item}</span>
       ))}
     </div>
   );
+}
+
+function formatShortDate(date: string) {
+  const [, month, day] = date.split("-");
+
+  return `${Number(month)}/${Number(day)}`;
 }
 
 function InfoPair({
