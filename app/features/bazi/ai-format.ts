@@ -217,10 +217,10 @@ export function formatBaziStructureMarkdown(paipan: BaziPaipan, focus?: string) 
 
 export function formatBaziTimelineMarkdown(paipan: BaziPaipan, startYear: number, count: number) {
   const requestedCount = Number.isFinite(count) && count > 0 ? Math.trunc(count) : 10;
-  const rows = paipan.fortune.dayuns
-    .flatMap((dayun) =>
-      dayun.years.map((year) => ({
-        dayun,
+  const rows = paipan.fortune.periods
+    .flatMap((period) =>
+      period.years.map((year) => ({
+        period,
         year,
       }))
     )
@@ -232,19 +232,20 @@ export function formatBaziTimelineMarkdown(paipan: BaziPaipan, startYear: number
     `出生: ${paipan.solarText}\n四柱: ${paipan.tymeEightChar}\n日主: ${paipan.dayMaster}\n查询: ${startYear} 起 ${requestedCount} 年`,
     rows.length > 0
       ? mdTable(
-          ["年份", "年龄", "大运", "流年", "流年十神", "星运", "纳音", "太岁"],
-          rows.map(({ dayun, year }) => [
+          ["年份", "年龄", "阶段", "流年", "小运", "流年十神", "星运", "纳音", "太岁"],
+          rows.map(({ period, year }) => [
             year.year,
             `${year.age}岁`,
-            `${dayun.name} ${dayun.startYear}-${dayun.endYear}`,
+            formatFortunePeriodLabel(period),
             year.name,
+            year.minorFortune?.name ?? "-",
             year.tenGod,
             year.starFortune,
             year.naYin,
             year.taiSui.join("、") || "-",
           ])
         )
-      : "未在当前排盘的大运流年范围内找到对应年份。",
+      : "未在当前排盘的起运前或大运流年范围内找到对应年份。",
     rows.length > 0
       ? mdTable(
           ["年份", "流年", "与原局四柱关系"],
@@ -343,22 +344,38 @@ function formatPillarsTable(pillars: BaziPillarDisplay[]) {
 }
 
 function formatDayunTable(paipan: BaziPaipan) {
-  if (paipan.fortune.dayuns.length === 0) {
-    return "大运: 无";
+  if (paipan.fortune.periods.length === 0) {
+    return "运限: 无";
   }
 
   return mdTable(
-    ["大运", "干支", "十神", "年龄", "年份", "星运", "纳音"],
-    paipan.fortune.dayuns.map((dayun) => [
-      dayun === paipan.fortune.dayun ? "当前大运" : "大运",
-      dayun.name,
-      dayun.tenGod,
-      `${dayun.startAge}岁起`,
-      `${dayun.startYear}-${dayun.endYear}`,
-      dayun.starFortune,
-      dayun.naYin,
+    ["阶段", "干支", "十神", "年龄", "年份", "星运", "纳音"],
+    paipan.fortune.periods.map((period) => [
+      period.key === paipan.fortune.period?.key
+        ? period.kind === "preFortune"
+          ? "当前起运前"
+          : "当前大运"
+        : period.kind === "preFortune"
+          ? "起运前"
+          : "大运",
+      period.name,
+      period.tenGod,
+      period.kind === "preFortune"
+        ? `${period.startAge}-${period.endAge}岁`
+        : `${period.startAge}岁起`,
+      `${period.startYear}-${period.endYear}`,
+      period.starFortune,
+      period.naYin,
     ])
   );
+}
+
+function formatFortunePeriodLabel(period: BaziPaipan["fortune"]["periods"][number]) {
+  if (period.kind === "preFortune") {
+    return `起运前 ${period.startYear}-${period.endYear}`;
+  }
+
+  return `${period.name} ${period.startYear}-${period.endYear}`;
 }
 
 function formatFlowItemEvidenceTable(item: BaziFlowItemDisplay) {

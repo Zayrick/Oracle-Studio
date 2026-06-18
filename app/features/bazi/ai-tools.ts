@@ -3,6 +3,8 @@ import {
   buildBaziFlowHours,
   buildBaziFlowMonths,
   type BaziFlowMonthDisplay,
+  type BaziFortunePeriodDisplay,
+  type BaziFlowYearDisplay,
   type BaziPaipan,
 } from "@/features/bazi/paipan";
 
@@ -36,7 +38,7 @@ export const BAZI_AI_TOOL_DEFINITIONS = [
     function: {
       name: "bazi_timeline",
       description:
-        "查看当前八字从指定公历年份开始的大运、流年、年龄、太岁和与原局四柱的触发关系。适合回答阶段性趋势和重点年份。",
+        "查看当前八字从指定公历年份开始的起运前、小运、大运、流年、年龄、太岁和与原局四柱的触发关系。适合回答阶段性趋势和重点年份。",
       parameters: {
         type: "object",
         properties: {
@@ -58,7 +60,7 @@ export const BAZI_AI_TOOL_DEFINITIONS = [
     function: {
       name: "bazi_period_detail",
       description:
-        "展开当前八字某一年、干支月、日期或时辰的周期证据，包括十神、藏干、星运、纳音、神煞和与原局关系。适合回答具体时间点。",
+        "展开当前八字某一年、干支月、日期或时辰的周期证据，包括起运前/大运阶段、十神、藏干、星运、纳音、神煞和与原局关系。适合回答具体时间点。",
       parameters: {
         type: "object",
         properties: {
@@ -152,18 +154,23 @@ function formatPeriodDetail(paipan: BaziPaipan, args: ToolArgs) {
 
   if (scope === "year") {
     const year = toInt(args.year, NaN);
-    const item = findFlowYear(paipan, year);
+    const result = findFlowYear(paipan, year);
 
-    if (!item) {
-      throw new Error("scope=year 需要 year，且该年份必须在当前排盘的大运流年范围内。");
+    if (!result) {
+      throw new Error("scope=year 需要 year，且该年份必须在当前排盘的起运前或大运流年范围内。");
     }
+
+    const { item, period } = result;
 
     return formatBaziPeriodDetailMarkdown(paipan, {
       scope,
       label: `${year}年`,
       item,
       extra: [
+        ["阶段", formatFortunePeriodLabel(period)],
         ["年龄", `${item.age}岁`],
+        ["小运", item.minorFortune?.name ?? "-"],
+        ["小运十神", item.minorFortune?.tenGod ?? "-"],
         ["太岁", item.taiSui.join("、") || "-"],
       ],
     });
@@ -242,20 +249,31 @@ function formatPeriodDetail(paipan: BaziPaipan, args: ToolArgs) {
   throw new Error("scope 必须是 year、month、day 或 hour。");
 }
 
-function findFlowYear(paipan: BaziPaipan, year: number) {
+function findFlowYear(
+  paipan: BaziPaipan,
+  year: number
+): { item: BaziFlowYearDisplay; period: BaziFortunePeriodDisplay } | null {
   if (!Number.isFinite(year)) {
     return null;
   }
 
-  for (const dayun of paipan.fortune.dayuns) {
-    const item = dayun.years.find((flowYear) => flowYear.year === year);
+  for (const period of paipan.fortune.periods) {
+    const item = period.years.find((flowYear) => flowYear.year === year);
 
     if (item) {
-      return item;
+      return { item, period };
     }
   }
 
   return null;
+}
+
+function formatFortunePeriodLabel(period: BaziFortunePeriodDisplay) {
+  if (period.kind === "preFortune") {
+    return `起运前 ${period.startYear}-${period.endYear}`;
+  }
+
+  return `${period.name}大运 ${period.startYear}-${period.endYear}`;
 }
 
 function findFlowDay(paipan: BaziPaipan, date: string) {

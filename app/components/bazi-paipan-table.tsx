@@ -10,12 +10,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type {
-  BaziDayunDisplay,
   BaziFlowDayDisplay,
   BaziFlowHourDisplay,
   BaziFlowItemDisplay,
   BaziFlowMonthDisplay,
   BaziFlowYearDisplay,
+  BaziFortunePeriodDisplay,
   BaziGender,
   BaziHiddenStemDisplay,
   BaziPaipan,
@@ -57,13 +57,13 @@ interface BaziPaipanTableProps {
   paipan: BaziPaipan;
 }
 
-function getDefaultDayunStartYear(paipan: BaziPaipan) {
-  return paipan.fortune.dayun?.startYear ?? paipan.fortune.dayuns[0]?.startYear ?? null;
+function getDefaultFortunePeriodKey(paipan: BaziPaipan) {
+  return paipan.fortune.period?.key ?? paipan.fortune.periods[0]?.key ?? null;
 }
 
 export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
   const [isShenShaExpanded, setIsShenShaExpanded] = useState(false);
-  const [selectedDayunStartYear, setSelectedDayunStartYear] = useState<number | null>(null);
+  const [selectedFortunePeriodKey, setSelectedFortunePeriodKey] = useState<string | null>(null);
   const [selectedFlowYear, setSelectedFlowYear] = useState<number | null>(null);
   const [selectedFlowMonth, setSelectedFlowMonth] = useState<number | null>(null);
   const [selectedFlowDay, setSelectedFlowDay] = useState<string | null>(null);
@@ -79,7 +79,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
 
   useEffect(() => {
     setIsShenShaExpanded(false);
-    setSelectedDayunStartYear(getDefaultDayunStartYear(paipan));
+    setSelectedFortunePeriodKey(getDefaultFortunePeriodKey(paipan));
     setSelectedFlowYear(null);
     setSelectedFlowMonth(null);
     setSelectedFlowDay(null);
@@ -97,13 +97,13 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
     setIsShenShaExpanded((isExpanded) => !isExpanded);
   };
 
-  const selectedDayunKey = selectedDayunStartYear ?? getDefaultDayunStartYear(paipan);
-  const activeDayun =
-    selectedDayunKey == null
+  const selectedPeriodKey = selectedFortunePeriodKey ?? getDefaultFortunePeriodKey(paipan);
+  const activePeriod =
+    selectedPeriodKey == null
       ? null
-      : paipan.fortune.dayuns.find((dayun) => dayun.startYear === selectedDayunKey) ??
-        paipan.fortune.dayun;
-  const activeFlowYears = activeDayun?.years ?? paipan.fortune.years;
+      : paipan.fortune.periods.find((period) => period.key === selectedPeriodKey) ??
+        paipan.fortune.period;
+  const activeFlowYears = activePeriod?.years ?? paipan.fortune.years;
   const activeFlowYear =
     selectedFlowYear == null
       ? null
@@ -119,7 +119,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
       ? null
       : flowHours.find((hour) => hour.key === selectedFlowHour) ?? null;
   const activeFlowColumns = [
-    activeDayun,
+    activePeriod,
     activeFlowYear,
     activeFlowMonth,
     activeFlowDay,
@@ -131,8 +131,8 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
   const shenShaPreviewLimit =
     isShenShaCollapsible && !isShenShaExpanded ? SHEN_SHA_PREVIEW_COUNT : undefined;
 
-  const handleSelectDayun = (dayun: BaziDayunDisplay) => {
-    setSelectedDayunStartYear(dayun.startYear);
+  const handleSelectFortunePeriod = (period: BaziFortunePeriodDisplay) => {
+    setSelectedFortunePeriodKey(period.key);
     setSelectedFlowYear(null);
     setSelectedFlowMonth(null);
     setSelectedFlowDay(null);
@@ -355,7 +355,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
       {paipan.fortune.dayuns.length > 0 ? (
         <FlowFortuneSection
           paipan={paipan}
-          activeDayun={activeDayun}
+          activePeriod={activePeriod}
           activeFlowYears={activeFlowYears}
           flowMonths={flowMonths}
           flowDays={flowDays}
@@ -364,7 +364,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
           selectedFlowMonth={selectedFlowMonth}
           selectedFlowDay={selectedFlowDay}
           selectedFlowHour={selectedFlowHour}
-          onSelectDayun={handleSelectDayun}
+          onSelectFortunePeriod={handleSelectFortunePeriod}
           onSelectFlowYear={(year) => {
             void handleSelectFlowYear(year);
           }}
@@ -457,7 +457,7 @@ function renderFlowPillarValue(
 
 function FlowFortuneSection({
   paipan,
-  activeDayun,
+  activePeriod,
   activeFlowYears,
   flowMonths,
   flowDays,
@@ -466,14 +466,14 @@ function FlowFortuneSection({
   selectedFlowMonth,
   selectedFlowDay,
   selectedFlowHour,
-  onSelectDayun,
+  onSelectFortunePeriod,
   onSelectFlowYear,
   onSelectFlowMonth,
   onSelectFlowDay,
   onSelectFlowHour,
 }: {
   paipan: BaziPaipan;
-  activeDayun: BaziDayunDisplay | null;
+  activePeriod: BaziFortunePeriodDisplay | null;
   activeFlowYears: BaziFlowYearDisplay[];
   flowMonths: BaziFlowMonthDisplay[];
   flowDays: BaziFlowDayDisplay[];
@@ -482,37 +482,52 @@ function FlowFortuneSection({
   selectedFlowMonth: number | null;
   selectedFlowDay: string | null;
   selectedFlowHour: string | null;
-  onSelectDayun: (dayun: BaziDayunDisplay) => void;
+  onSelectFortunePeriod: (period: BaziFortunePeriodDisplay) => void;
   onSelectFlowYear: (year: number) => void;
   onSelectFlowMonth: (month: BaziFlowMonthDisplay) => void;
   onSelectFlowDay: (day: BaziFlowDayDisplay) => void;
   onSelectFlowHour: (hour: BaziFlowHourDisplay) => void;
 }) {
-  const dayunText = activeDayun
-    ? `${activeDayun.startYear}年起 ${activeDayun.name}`
+  const periodText = activePeriod
+    ? activePeriod.kind === "preFortune"
+      ? `${activePeriod.startYear}-${activePeriod.endYear}年 起运前`
+      : `${activePeriod.startYear}年起 ${activePeriod.name}`
     : `${paipan.fortune.currentYear}年`;
 
   return (
     <div className="overflow-hidden border-y bg-background md:border-x">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-2 py-2 sm:px-3">
         <h3 className="text-sm font-semibold tracking-tight">流运</h3>
-        <span className="text-xs text-muted-foreground">已选大运 {dayunText}</span>
+        <span className="text-xs text-muted-foreground">已选阶段 {periodText}</span>
       </div>
 
       <div className="divide-y">
-        <FlowGridRow label="大运">
-          {paipan.fortune.dayuns.map((dayun) => (
+        <FlowGridRow label="运限">
+          {paipan.fortune.periods.map((period) => (
             <FlowItemButton
-              key={dayun.key}
-              ariaLabel={`${dayun.startYear}年起${dayun.name}大运`}
-              eyebrow={`${dayun.startYear}起`}
-              caption={`${dayun.startAge}岁`}
-              stem={dayun.stem}
-              branch={dayun.branch}
-              footer={dayun.tenGod}
-              isSelected={activeDayun?.startYear === dayun.startYear}
+              key={period.key}
+              ariaLabel={
+                period.kind === "preFortune"
+                  ? `${period.startYear}年至${period.endYear}年起运前`
+                  : `${period.startYear}年起${period.name}大运`
+              }
+              eyebrow={
+                period.kind === "preFortune"
+                  ? `${period.startYear}-${period.endYear}`
+                  : `${period.startYear}起`
+              }
+              caption={
+                period.kind === "preFortune"
+                  ? `${period.startAge}-${period.endAge}岁`
+                  : `${period.startAge}岁`
+              }
+              stem={period.stem}
+              branch={period.branch}
+              centerLabel={period.kind === "preFortune" ? "起运前" : undefined}
+              footer={period.tenGod}
+              isSelected={activePeriod?.key === period.key}
               className="w-14"
-              onClick={() => onSelectDayun(dayun)}
+              onClick={() => onSelectFortunePeriod(period)}
             />
           ))}
         </FlowGridRow>
@@ -616,6 +631,7 @@ function FlowItemButton({
   caption,
   stem,
   branch,
+  centerLabel,
   footer,
   isSelected,
   className,
@@ -626,6 +642,7 @@ function FlowItemButton({
   caption: string;
   stem: string;
   branch: string;
+  centerLabel?: string;
   footer: string;
   isSelected: boolean;
   className?: string;
@@ -651,10 +668,16 @@ function FlowItemButton({
       <span className="max-w-full truncate text-[10px] leading-3 text-muted-foreground">
         {caption}
       </span>
-      <span className="flex flex-col items-center gap-0.5">
-        <span className="text-base font-semibold leading-5">{stem || "—"}</span>
-        <span className="text-base font-semibold leading-5">{branch || "—"}</span>
-      </span>
+      {centerLabel ? (
+        <span className="flex min-h-10 items-center text-xs font-semibold leading-4">
+          {centerLabel}
+        </span>
+      ) : (
+        <span className="flex flex-col items-center gap-0.5">
+          <span className="text-base font-semibold leading-5">{stem || "—"}</span>
+          <span className="text-base font-semibold leading-5">{branch || "—"}</span>
+        </span>
+      )}
       <span className="max-w-full truncate text-[10px] font-medium leading-3">
         {footer || "—"}
       </span>

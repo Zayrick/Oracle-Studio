@@ -538,7 +538,7 @@ function formatBaziAIToolDisplayName(name: string) {
     case "bazi_structure":
       return "命局结构";
     case "bazi_timeline":
-      return "大运流年";
+      return "运限流年";
     case "bazi_period_detail":
       return "周期详盘";
     case "bazi_shensha":
@@ -587,6 +587,7 @@ function isBaziPaipanPayload(value: unknown): value is BaziPaipan {
     isRecord(value.fortune) &&
     typeof value.fortune.currentYear === "number" &&
     isRecord(value.fortune.context) &&
+    Array.isArray(value.fortune.periods) &&
     Array.isArray(value.fortune.dayuns)
   );
 }
