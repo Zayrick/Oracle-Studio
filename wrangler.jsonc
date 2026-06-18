@@ -9,7 +9,9 @@
 	"main": "./workers/app.ts",
 	"vars": {
 		"liuyao_OPENROUTER_MODEL": "google/gemini-3.5-flash",
-		"liuyao_OPENROUTER_APP_NAME": "Oracle Studio"
+		"liuyao_OPENROUTER_APP_NAME": "Oracle Studio",
+		"bazi_OPENROUTER_MODEL": "google/gemini-3.5-flash",
+		"bazi_OPENROUTER_APP_NAME": "Oracle Studio"
 	},
 	"observability": {
 		"enabled": true
