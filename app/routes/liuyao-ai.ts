@@ -1,5 +1,12 @@
 import type { Route } from "./+types/liuyao-ai";
 
+import {
+  buildOpenRouterReasoningConfig,
+  enqueueAIStreamEvent,
+  parseOpenRouterChunkDeltas,
+  parseOpenRouterSseLine,
+  type OpenRouterReasoningConfig,
+} from "@/features/ai/openrouter-stream";
 import { cloudflareContext } from "@/lib/cloudflare-context";
 
 const OPENROUTER_CHAT_COMPLETIONS_URL = "https://us.oxio.uno/fetch/openrouter.ai/api/v1/chat/completions";
@@ -42,20 +49,7 @@ type OpenRouterChatCompletionRequest = {
   provider?: {
     sort: string;
   };
-  reasoning?: {
-    effort: string;
-  };
-};
-
-type OpenRouterStreamChunk = {
-  choices?: Array<{
-    delta?: {
-      content?: unknown;
-    };
-  }>;
-  error?: {
-    message?: unknown;
-  };
+  reasoning?: OpenRouterReasoningConfig;
 };
 
 export function loader() {
@@ -90,6 +84,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
+      Accept: "text/event-stream",
       "Content-Type": "application/json",
       "HTTP-Referer": new URL(request.url).origin,
       "X-Title": env.liuyao_OPENROUTER_APP_NAME || DEFAULT_LIUYAO_OPENROUTER_APP_NAME,
@@ -106,10 +101,10 @@ export async function action({ request, context }: Route.ActionArgs) {
     return jsonError("OpenRouter 未返回可读取的流。", 502);
   }
 
-  return new Response(streamOpenRouterText(openRouterResponse.body), {
+  return new Response(streamOpenRouterEvents(openRouterResponse.body), {
     headers: {
       "Cache-Control": "no-store, no-transform",
-      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Type": "application/x-ndjson; charset=utf-8",
       "X-Content-Type-Options": "nosniff",
     },
   });
@@ -132,11 +127,7 @@ function buildOpenRouterRequestBody(env: LiuyaoAIEnv, payload: LiuyaoAIDecodedPa
     };
   }
 
-  if (reasoningEffort) {
-    body.reasoning = {
-      effort: reasoningEffort,
-    };
-  }
+  body.reasoning = buildOpenRouterReasoningConfig(reasoningEffort);
 
   return body;
 }
@@ -222,7 +213,7 @@ function normalizeLiuyaoAIMessages(messages: unknown[]) {
     });
 }
 
-function streamOpenRouterText(body: ReadableStream<Uint8Array>) {
+function streamOpenRouterEvents(body: ReadableStream<Uint8Array>) {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -252,6 +243,7 @@ function streamOpenRouterText(body: ReadableStream<Uint8Array>) {
 
         controller.close();
       } catch (error) {
+        await reader.cancel().catch(() => undefined);
         controller.error(error);
       } finally {
         reader.releaseLock();
@@ -283,36 +275,16 @@ function emitOpenRouterSseLine(
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder
 ) {
-  const trimmed = line.trim();
+  const chunk = parseOpenRouterSseLine(line);
 
-  if (!trimmed.startsWith("data:")) {
+  if (!chunk) {
     return;
   }
 
-  const data = trimmed.slice("data:".length).trim();
-
-  if (!data || data === "[DONE]") {
-    return;
-  }
-
-  let chunk: OpenRouterStreamChunk;
-
-  try {
-    chunk = JSON.parse(data) as OpenRouterStreamChunk;
-  } catch {
-    throw new Error("OpenRouter 流式响应解析失败。");
-  }
-
-  const upstreamError = chunk.error?.message;
-
-  if (typeof upstreamError === "string" && upstreamError) {
-    throw new Error(upstreamError);
-  }
-
-  const content = chunk.choices?.[0]?.delta?.content;
-
-  if (typeof content === "string" && content) {
-    controller.enqueue(encoder.encode(content));
+  for (const delta of parseOpenRouterChunkDeltas(chunk)) {
+    for (const event of delta.events) {
+      enqueueAIStreamEvent(controller, encoder, event);
+    }
   }
 }
 

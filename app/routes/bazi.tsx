@@ -5,6 +5,7 @@ import { Marked, type RendererObject } from "marked";
 import { Link } from "react-router";
 import type { Route } from "./+types/bazi";
 
+import { AIMessageTimeline } from "@/components/ai-message-timeline";
 import { BaziPaipanTable } from "@/components/bazi-paipan-table";
 import { DateTimeWheelPicker } from "@/components/date-time-wheel-picker";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -13,6 +14,14 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  appendAIStreamEventToMessage,
+  getAIMessageTextFromParts,
+  readAIStreamEvents,
+  type AIMessagePart,
+  type AIMessageStatus,
+  type AIStreamEvent,
+} from "@/features/ai/timeline";
 import { formatBaziAISystemPrompt } from "@/features/bazi/ai-format";
 import type { BaziGender, BaziPaipan } from "@/features/bazi/paipan";
 import { cn } from "@/lib/utils";
@@ -35,7 +44,8 @@ type BaziAIMessage = {
   id: number;
   role: "user" | "assistant";
   content: string;
-  status?: "streaming" | "complete" | "stopped" | "error";
+  parts?: AIMessagePart[];
+  status?: AIMessageStatus;
 };
 
 const baziMarkdownRenderer: RendererObject = {
@@ -496,32 +506,15 @@ function BaziAIPanel({
         throw new Error(await readAIErrorMessage(response));
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            break;
-          }
-
-          const chunk = decoder.decode(value, { stream: true });
-
-          if (chunk && isActiveRequest()) {
-            setMessages((prev) => appendToBaziMessage(prev, assistantMessageId, chunk));
-          }
+      await readAIStreamEvents(response.body, (event) => {
+        if (event.type === "error") {
+          throw new Error(event.message);
         }
 
-        const rest = decoder.decode();
-
-        if (rest && isActiveRequest()) {
-          setMessages((prev) => appendToBaziMessage(prev, assistantMessageId, rest));
+        if (isActiveRequest()) {
+          setMessages((prev) => appendBaziAIEventToMessage(prev, assistantMessageId, event));
         }
-      } finally {
-        reader.releaseLock();
-      }
+      });
 
       if (!isActiveRequest()) {
         return;
@@ -533,10 +526,12 @@ function BaziAIPanel({
             return item;
           }
 
+          const hasOutput = Boolean(item.content || item.parts?.length);
+
           return {
             ...item,
-            content: item.content || "AI 未返回内容。",
-            status: item.content ? "complete" : "error",
+            content: hasOutput ? item.content : "AI 未返回内容。",
+            status: hasOutput ? "complete" : "error",
           };
         })
       );
@@ -547,15 +542,17 @@ function BaziAIPanel({
 
       if (abortController.signal.aborted) {
         setMessages((prev) =>
-          prev.map((item) =>
-            item.id === assistantMessageId
-              ? {
-                  ...item,
-                  content: item.content || "已停止。",
-                  status: "stopped",
-                }
-              : item
-          )
+          prev.map((item) => {
+            if (item.id !== assistantMessageId) {
+              return item;
+            }
+
+            return {
+              ...item,
+              content: item.content || "已停止。",
+              status: "stopped",
+            };
+          })
         );
         return;
       }
@@ -844,18 +841,18 @@ function getBaziAIMessageClass(message: BaziAIMessage) {
 }
 
 function BaziAIMessageContent({ message }: { message: BaziAIMessage }) {
-  if (!message.content) {
-    return message.status === "streaming" ? "正在解盘..." : null;
-  }
-
   if (message.role === "assistant" && message.status !== "error") {
     return (
-      <div
-        dangerouslySetInnerHTML={{
-          __html: renderBaziMarkdown(message.content),
-        }}
+      <AIMessageTimeline
+        message={message}
+        pendingLabel="正在解盘..."
+        renderMarkdown={renderBaziMarkdown}
       />
     );
+  }
+
+  if (!message.content) {
+    return message.status === "streaming" ? "正在解盘..." : null;
   }
 
   return message.content;
@@ -868,13 +865,14 @@ function renderBaziMarkdown(content: string) {
   );
 }
 
-function appendToBaziMessage(messages: BaziAIMessage[], messageId: number, chunk: string) {
+function appendBaziAIEventToMessage(
+  messages: BaziAIMessage[],
+  messageId: number,
+  event: AIStreamEvent
+) {
   return messages.map((item) =>
     item.id === messageId
-      ? {
-          ...item,
-          content: item.content + chunk,
-        }
+      ? appendAIStreamEventToMessage(item, event)
       : item
   );
 }
@@ -882,7 +880,7 @@ function appendToBaziMessage(messages: BaziAIMessage[], messageId: number, chunk
 function buildBaziAIRequestMessages(messages: BaziAIMessage[], currentContent: string) {
   const history = messages
     .flatMap((item): Array<Pick<BaziAIMessage, "role" | "content">> => {
-      const content = item.content.trim();
+      const content = (item.content || getAIMessageTextFromParts(item.parts)).trim();
 
       if (!content || (item.role === "assistant" && item.status === "error")) {
         return [];

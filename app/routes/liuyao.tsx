@@ -7,6 +7,7 @@ import { ArrowLeftIcon, ArrowUpIcon, CheckIcon, CopyIcon, CornerLeftUpIcon, Hist
 import { Marked, type RendererObject } from "marked";
 import type { Route } from "./+types/liuyao";
 
+import { AIMessageTimeline } from "@/components/ai-message-timeline";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,12 @@ import {
   type LiuyaoCastingMethod,
   type LiuyaoHistoryRecord,
 } from "@/features/liuyao/history";
+import {
+  appendAIStreamEventToMessage,
+  getAIMessageTextFromParts,
+  readAIStreamEvents,
+  type AIStreamEvent,
+} from "@/features/ai/timeline";
 import {
   buildLiuyaoPaipan,
   createLiuyaoRandomYaos,
@@ -1585,36 +1592,15 @@ function AIDivinationPanel({
         throw new Error(await readAIErrorMessage(response));
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            break;
-          }
-
-          const chunk = decoder.decode(value, { stream: true });
-
-          if (!chunk) {
-            continue;
-          }
-
-          if (isActiveRequest()) {
-            setMessages((prev) => appendToMessage(prev, assistantMessageId, chunk));
-          }
+      await readAIStreamEvents(response.body, (event) => {
+        if (event.type === "error") {
+          throw new Error(event.message);
         }
 
-        const rest = decoder.decode();
-
-        if (rest && isActiveRequest()) {
-          setMessages((prev) => appendToMessage(prev, assistantMessageId, rest));
+        if (isActiveRequest()) {
+          setMessages((prev) => appendAIEventToMessage(prev, assistantMessageId, event));
         }
-      } finally {
-        reader.releaseLock();
-      }
+      });
 
       if (!isActiveRequest()) {
         return;
@@ -1626,10 +1612,12 @@ function AIDivinationPanel({
             return item;
           }
 
+          const hasOutput = Boolean(item.content || item.parts?.length);
+
           return {
             ...item,
-            content: item.content || "AI 未返回内容。",
-            status: item.content ? "complete" : "error",
+            content: hasOutput ? item.content : "AI 未返回内容。",
+            status: hasOutput ? "complete" : "error",
           };
         })
       );
@@ -1641,15 +1629,17 @@ function AIDivinationPanel({
 
       if (abortController.signal.aborted) {
         const stoppedMessages = setMessages((prev) =>
-          prev.map((item) =>
-            item.id === assistantMessageId
-              ? {
-                  ...item,
-                  content: item.content || "已停止。",
-                  status: "stopped",
-                }
-              : item
-          )
+          prev.map((item) => {
+            if (item.id !== assistantMessageId) {
+              return item;
+            }
+
+            return {
+              ...item,
+              content: item.content || "已停止。",
+              status: "stopped",
+            };
+          })
         );
         persistSession(stoppedMessages);
         return;
@@ -2061,18 +2051,18 @@ function getAIDivinationMessageClass(message: AIDivinationMessage) {
 }
 
 function AIDivinationMessageContent({ message }: { message: AIDivinationMessage }) {
-  if (!message.content) {
-    return message.status === "streaming" ? "正在解卦..." : null;
-  }
-
   if (message.role === "assistant" && message.status !== "error") {
     return (
-      <div
-        dangerouslySetInnerHTML={{
-          __html: renderLiuyaoMarkdown(message.content),
-        }}
+      <AIMessageTimeline
+        message={message}
+        pendingLabel="正在解卦..."
+        renderMarkdown={renderLiuyaoMarkdown}
       />
     );
+  }
+
+  if (!message.content) {
+    return message.status === "streaming" ? "正在解卦..." : null;
   }
 
   return message.content;
@@ -2131,13 +2121,14 @@ function escapeHtmlAttribute(value: string) {
   return escapeHtml(value);
 }
 
-function appendToMessage(messages: AIDivinationMessage[], messageId: number, chunk: string) {
+function appendAIEventToMessage(
+  messages: AIDivinationMessage[],
+  messageId: number,
+  event: AIStreamEvent
+) {
   return messages.map((item) =>
     item.id === messageId
-      ? {
-          ...item,
-          content: item.content + chunk,
-        }
+      ? appendAIStreamEventToMessage(item, event)
       : item
   );
 }
@@ -2167,7 +2158,7 @@ function getNextAIDivinationMessageId(messages: AIDivinationMessage[]) {
 function buildLiuyaoAIRequestMessages(messages: AIDivinationMessage[], currentContent: string) {
   const history = messages
     .flatMap((item): Array<Pick<AIDivinationMessage, "role" | "content">> => {
-      const content = item.content.trim();
+      const content = (item.content || getAIMessageTextFromParts(item.parts)).trim();
 
       if (!content || (item.role === "assistant" && item.status === "error")) {
         return [];

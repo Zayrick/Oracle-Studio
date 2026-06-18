@@ -1,11 +1,23 @@
 import type { Route } from "./+types/bazi-ai";
 
+import {
+  OpenRouterToolCallAccumulator,
+  buildOpenRouterReasoningConfig,
+  enqueueAIStreamEvent,
+  parseOpenRouterChunkDeltas,
+  parseOpenRouterSseLine,
+  type OpenRouterReasoningConfig,
+  type OpenRouterReasoningDetail,
+  type OpenRouterToolCall,
+} from "@/features/ai/openrouter-stream";
 import type { BaziPaipan } from "@/features/bazi/paipan";
 import { cloudflareContext } from "@/lib/cloudflare-context";
 
 const OPENROUTER_CHAT_COMPLETIONS_URL = "https://us.oxio.uno/fetch/openrouter.ai/api/v1/chat/completions";
 const DEFAULT_BAZI_OPENROUTER_MODEL = "deepseek/deepseek-chat-v3.1";
 const DEFAULT_BAZI_OPENROUTER_APP_NAME = "Oracle Studio";
+const MAX_OPENROUTER_ERROR_LENGTH = 2_000;
+const MAX_BAZI_AGENT_ITERATIONS = 8;
 
 type BaziAIEnv = Env & {
   bazi_OPENROUTER_API_KEY?: string;
@@ -33,17 +45,14 @@ type BaziAIMessage = {
 
 type OpenRouterMessage =
   | { role: "system" | "user"; content: string }
-  | { role: "assistant"; content: string; tool_calls?: OpenRouterToolCall[] }
+  | {
+      role: "assistant";
+      content: string | null;
+      tool_calls?: OpenRouterToolCall[];
+      reasoning?: string;
+      reasoning_details?: OpenRouterReasoningDetail[];
+    }
   | { role: "tool"; tool_call_id: string; content: string };
-
-type OpenRouterToolCall = {
-  id: string;
-  type: "function";
-  function: {
-    name: string;
-    arguments: string;
-  };
-};
 
 type OpenRouterToolDefinition = {
   type: "function";
@@ -57,7 +66,7 @@ type OpenRouterToolDefinition = {
 type OpenRouterChatCompletionRequest = {
   model: string;
   session_id: string;
-  stream: false;
+  stream: true;
   messages: OpenRouterMessage[];
   tools?: readonly OpenRouterToolDefinition[];
   tool_choice?: "auto" | "none";
@@ -65,22 +74,7 @@ type OpenRouterChatCompletionRequest = {
   provider?: {
     sort: string;
   };
-  reasoning?: {
-    effort: string;
-  };
-};
-
-type OpenRouterChatCompletionResponse = {
-  choices?: Array<{
-    message?: {
-      role?: unknown;
-      content?: unknown;
-      tool_calls?: unknown;
-    };
-  }>;
-  error?: {
-    message?: unknown;
-  };
+  reasoning?: OpenRouterReasoningConfig;
 };
 
 export function loader() {
@@ -112,24 +106,61 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const { BAZI_AI_TOOL_DEFINITIONS, executeBaziAITool } = await import("@/features/bazi/ai-tools");
-  const agentResult = await runBaziAgent({
-    apiKey,
-    env,
-    origin: new URL(request.url).origin,
-    payload: decodedPayload.value,
-    toolDefinitions: BAZI_AI_TOOL_DEFINITIONS,
-    executeTool: executeBaziAITool,
-  });
 
-  if (!agentResult.ok) {
-    return jsonError(agentResult.error, agentResult.status);
-  }
+  return new Response(
+    streamBaziAgent({
+      apiKey,
+      env,
+      origin: new URL(request.url).origin,
+      payload: decodedPayload.value,
+      toolDefinitions: BAZI_AI_TOOL_DEFINITIONS,
+      executeTool: executeBaziAITool,
+    }),
+    {
+      headers: {
+        "Cache-Control": "no-store, no-transform",
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+      },
+    }
+  );
+}
 
-  return new Response(streamText(agentResult.content), {
-    headers: {
-      "Cache-Control": "no-store, no-transform",
-      "Content-Type": "text/plain; charset=utf-8",
-      "X-Content-Type-Options": "nosniff",
+function streamBaziAgent(args: {
+  apiKey: string;
+  env: BaziAIEnv;
+  origin: string;
+  payload: BaziAIDecodedPayload;
+  toolDefinitions: readonly OpenRouterToolDefinition[];
+  executeTool: (name: string, args: Record<string, unknown>, chart: BaziPaipan) => string;
+}) {
+  const encoder = new TextEncoder();
+  const abortController = new AbortController();
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        await runBaziAgent({
+          ...args,
+          controller,
+          encoder,
+          signal: abortController.signal,
+        });
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          enqueueAIStreamEvent(controller, encoder, {
+            type: "error",
+            message: error instanceof Error ? error.message : "AI 解盘失败，请稍后再试。",
+          });
+        }
+      } finally {
+        if (!abortController.signal.aborted) {
+          controller.close();
+        }
+      }
+    },
+    cancel() {
+      abortController.abort();
     },
   });
 }
@@ -141,6 +172,9 @@ async function runBaziAgent({
   payload,
   toolDefinitions,
   executeTool,
+  controller,
+  encoder,
+  signal,
 }: {
   apiKey: string;
   env: BaziAIEnv;
@@ -148,81 +182,211 @@ async function runBaziAgent({
   payload: BaziAIDecodedPayload;
   toolDefinitions: readonly OpenRouterToolDefinition[];
   executeTool: (name: string, args: Record<string, unknown>, chart: BaziPaipan) => string;
+  controller: ReadableStreamDefaultController<Uint8Array>;
+  encoder: TextEncoder;
+  signal: AbortSignal;
 }) {
   const messages: OpenRouterMessage[] = [
     { role: "system", content: payload.systemPrompt },
     ...payload.messages,
   ];
 
-  while (true) {
+  for (let iteration = 0; iteration < MAX_BAZI_AGENT_ITERATIONS; iteration += 1) {
     const openRouterResponse = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
+        Accept: "text/event-stream",
         "Content-Type": "application/json",
         "HTTP-Referer": origin,
         "X-Title": env.bazi_OPENROUTER_APP_NAME || DEFAULT_BAZI_OPENROUTER_APP_NAME,
       },
       body: JSON.stringify(buildOpenRouterRequestBody(env, payload, messages, toolDefinitions)),
+      signal,
     });
 
     if (!openRouterResponse.ok) {
-      const upstreamError = await readText(openRouterResponse.body);
-      return {
-        ok: false,
-        status: 502,
-        error: formatUpstreamError(openRouterResponse.status, upstreamError),
-      } as const;
+      const upstreamError = await readBoundedText(openRouterResponse.body);
+      throw new Error(formatUpstreamError(openRouterResponse.status, upstreamError));
     }
 
-    const completion = await readOpenRouterJson(openRouterResponse);
-
-    if (!completion.ok) {
-      return {
-        ok: false,
-        status: 502,
-        error: completion.error,
-      } as const;
+    if (!openRouterResponse.body) {
+      throw new Error("OpenRouter 未返回可读取的流。");
     }
 
-    const assistantMessage = getAssistantMessage(completion.value);
-
-    if (!assistantMessage.ok) {
-      return {
-        ok: false,
-        status: 502,
-        error: assistantMessage.error,
-      } as const;
-    }
-
-    const toolCalls = normalizeToolCalls(assistantMessage.value.tool_calls);
-    const content = typeof assistantMessage.value.content === "string"
-      ? assistantMessage.value.content
-      : "";
+    const assistantMessage = await streamOpenRouterAssistantMessage(
+      openRouterResponse.body,
+      controller,
+      encoder
+    );
+    const toolCalls = assistantMessage.toolCalls;
 
     if (toolCalls.length === 0) {
-      return {
-        ok: true,
-        content: content || "AI 未返回内容。",
-      } as const;
+      if (!assistantMessage.content && !assistantMessage.reasoning) {
+        enqueueAIStreamEvent(controller, encoder, {
+          type: "text",
+          text: "AI 未返回内容。",
+        });
+      }
+
+      return;
     }
 
     messages.push({
       role: "assistant",
-      content,
+      content: assistantMessage.content || null,
       tool_calls: toolCalls,
+      reasoning: assistantMessage.reasoning || undefined,
+      reasoning_details: assistantMessage.reasoningDetails.length > 0
+        ? assistantMessage.reasoningDetails
+        : undefined,
     });
 
     for (const toolCall of toolCalls) {
+      const displayName = formatBaziAIToolDisplayName(toolCall.function.name);
+      enqueueAIStreamEvent(controller, encoder, {
+        type: "tool_call",
+        callId: toolCall.id,
+        name: toolCall.function.name,
+        displayName,
+        arguments: toolCall.function.arguments,
+      });
+      const toolResult = executeTool(
+        toolCall.function.name,
+        parseToolArguments(toolCall.function.arguments),
+        payload.chart
+      );
+
+      enqueueAIStreamEvent(controller, encoder, {
+        type: "tool_result",
+        callId: toolCall.id,
+        name: toolCall.function.name,
+        displayName,
+        result: toolResult,
+        error: toolResult.startsWith("工具错误:") ? toolResult : undefined,
+      });
       messages.push({
         role: "tool",
         tool_call_id: toolCall.id,
-        content: executeTool(
-          toolCall.function.name,
-          parseToolArguments(toolCall.function.arguments),
-          payload.chart
-        ),
+        content: toolResult,
       });
+    }
+  }
+
+  throw new Error("AI 工具调用轮次过多，已停止以避免无限循环。");
+}
+
+async function streamOpenRouterAssistantMessage(
+  body: ReadableStream<Uint8Array>,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder
+) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const toolCallAccumulator = new OpenRouterToolCallAccumulator();
+  const reasoningDetails: OpenRouterReasoningDetail[] = [];
+  let buffer = "";
+  let content = "";
+  let reasoning = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      buffer = handleCompleteOpenRouterSseLines(
+        buffer,
+        controller,
+        encoder,
+        toolCallAccumulator,
+        reasoningDetails,
+        (deltaContent, deltaReasoning) => {
+          content += deltaContent;
+          reasoning += deltaReasoning;
+        }
+      );
+    }
+
+    buffer += decoder.decode();
+
+    if (buffer.trim()) {
+      handleOpenRouterSseLine(
+        buffer,
+        controller,
+        encoder,
+        toolCallAccumulator,
+        reasoningDetails,
+        (deltaContent, deltaReasoning) => {
+          content += deltaContent;
+          reasoning += deltaReasoning;
+        }
+      );
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+
+  return {
+    content,
+    reasoning,
+    reasoningDetails,
+    toolCalls: toolCallAccumulator.toToolCalls(),
+  };
+}
+
+function handleCompleteOpenRouterSseLines(
+  buffer: string,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+  toolCallAccumulator: OpenRouterToolCallAccumulator,
+  reasoningDetails: OpenRouterReasoningDetail[],
+  appendText: (content: string, reasoning: string) => void
+) {
+  const lines = buffer.split(/\r?\n/);
+  const rest = lines.pop() ?? "";
+
+  for (const line of lines) {
+    handleOpenRouterSseLine(
+      line,
+      controller,
+      encoder,
+      toolCallAccumulator,
+      reasoningDetails,
+      appendText
+    );
+  }
+
+  return rest;
+}
+
+function handleOpenRouterSseLine(
+  line: string,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+  toolCallAccumulator: OpenRouterToolCallAccumulator,
+  reasoningDetails: OpenRouterReasoningDetail[],
+  appendText: (content: string, reasoning: string) => void
+) {
+  const chunk = parseOpenRouterSseLine(line);
+
+  if (!chunk) {
+    return;
+  }
+
+  for (const delta of parseOpenRouterChunkDeltas(chunk)) {
+    appendText(delta.content, delta.reasoning);
+    reasoningDetails.push(...delta.reasoningDetails);
+    toolCallAccumulator.append(delta.toolCallDeltas);
+
+    for (const event of delta.events) {
+      enqueueAIStreamEvent(controller, encoder, event);
     }
   }
 }
@@ -239,7 +403,7 @@ function buildOpenRouterRequestBody(
   const body: OpenRouterChatCompletionRequest = {
     model: env.bazi_OPENROUTER_MODEL || DEFAULT_BAZI_OPENROUTER_MODEL,
     session_id: payload.sessionId,
-    stream: false,
+    stream: true,
     messages,
     tools: toolDefinitions,
     tool_choice: "auto",
@@ -252,11 +416,7 @@ function buildOpenRouterRequestBody(
     };
   }
 
-  if (reasoningEffort) {
-    body.reasoning = {
-      effort: reasoningEffort,
-    };
-  }
+  body.reasoning = buildOpenRouterReasoningConfig(reasoningEffort);
 
   return body;
 }
@@ -334,68 +494,6 @@ function normalizeBaziAIMessages(messages: unknown[]) {
     });
 }
 
-async function readOpenRouterJson(response: Response) {
-  let body: unknown;
-
-  try {
-    body = await response.json();
-  } catch {
-    return { ok: false, error: "OpenRouter 响应不是有效 JSON。" } as const;
-  }
-
-  if (!isRecord(body)) {
-    return { ok: false, error: "OpenRouter 响应格式不合法。" } as const;
-  }
-
-  const error = body.error;
-
-  if (isRecord(error) && typeof error.message === "string" && error.message) {
-    return { ok: false, error: error.message } as const;
-  }
-
-  return { ok: true, value: body as OpenRouterChatCompletionResponse } as const;
-}
-
-function getAssistantMessage(response: OpenRouterChatCompletionResponse) {
-  const message = response.choices?.[0]?.message;
-
-  if (!isRecord(message)) {
-    return { ok: false, error: "OpenRouter 未返回有效消息。" } as const;
-  }
-
-  return { ok: true, value: message } as const;
-}
-
-function normalizeToolCalls(value: unknown): OpenRouterToolCall[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((item, index): OpenRouterToolCall[] => {
-    if (!isRecord(item) || item.type !== "function" || !isRecord(item.function)) {
-      return [];
-    }
-
-    const name = item.function.name;
-    const args = item.function.arguments;
-
-    if (typeof name !== "string") {
-      return [];
-    }
-
-    return [
-      {
-        id: typeof item.id === "string" && item.id ? item.id : `tool-call-${index}`,
-        type: "function",
-        function: {
-          name,
-          arguments: typeof args === "string" ? args : "{}",
-        },
-      },
-    ];
-  });
-}
-
 function parseToolArguments(value: string) {
   try {
     const parsed = JSON.parse(value);
@@ -406,18 +504,7 @@ function parseToolArguments(value: string) {
   }
 }
 
-function streamText(text: string) {
-  const encoder = new TextEncoder();
-
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(encoder.encode(text));
-      controller.close();
-    },
-  });
-}
-
-async function readText(body: ReadableStream<Uint8Array> | null) {
+async function readBoundedText(body: ReadableStream<Uint8Array> | null) {
   if (!body) {
     return "";
   }
@@ -427,7 +514,7 @@ async function readText(body: ReadableStream<Uint8Array> | null) {
   let text = "";
 
   try {
-    while (true) {
+    while (text.length < MAX_OPENROUTER_ERROR_LENGTH) {
       const { done, value } = await reader.read();
 
       if (done) {
@@ -443,7 +530,22 @@ async function readText(body: ReadableStream<Uint8Array> | null) {
     reader.releaseLock();
   }
 
-  return text;
+  return text.slice(0, MAX_OPENROUTER_ERROR_LENGTH);
+}
+
+function formatBaziAIToolDisplayName(name: string) {
+  switch (name) {
+    case "bazi_structure":
+      return "命局结构";
+    case "bazi_timeline":
+      return "大运流年";
+    case "bazi_period_detail":
+      return "周期详盘";
+    case "bazi_shensha":
+      return "神煞辅助";
+    default:
+      return name;
+  }
 }
 
 function formatUpstreamError(status: number, errorText: string) {

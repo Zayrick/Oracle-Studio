@@ -5,6 +5,7 @@ import {
   updateHistoryRecord,
   type HistoryRecord,
 } from "@/lib/history-manager";
+import type { AIMessagePart, AIMessageStatus } from "@/features/ai/timeline";
 
 import {
   buildLiuyaoPaipan,
@@ -20,7 +21,8 @@ export type LiuyaoAIMessage = {
   id: number;
   role: "user" | "assistant";
   content: string;
-  status?: "streaming" | "complete" | "stopped" | "error";
+  parts?: AIMessagePart[];
+  status?: AIMessageStatus;
 };
 
 export interface LiuyaoAIHistorySession {
@@ -343,10 +345,23 @@ function normalizeLiuyaoAIMessages(messages: LiuyaoAIMessage[]) {
         id: message.id,
         role: message.role,
         content: message.content,
+        parts: normalizeLiuyaoAIMessageParts(message.parts),
         status: message.status === "streaming" ? "stopped" : message.status,
       },
     ];
   });
+}
+
+function normalizeLiuyaoAIMessageParts(parts: LiuyaoAIMessage["parts"]) {
+  if (!Array.isArray(parts)) {
+    return undefined;
+  }
+
+  const normalizedParts = parts.flatMap((part): AIMessagePart[] =>
+    isLiuyaoAIMessagePart(part) ? [part] : []
+  );
+
+  return normalizedParts.length > 0 ? normalizedParts : undefined;
 }
 
 function isLiuyaoAIHistoryState(
@@ -380,11 +395,33 @@ function isLiuyaoAIMessage(value: unknown): value is LiuyaoAIMessage {
     typeof value.id === "number" &&
     (value.role === "user" || value.role === "assistant") &&
     typeof value.content === "string" &&
+    (value.parts === undefined ||
+      (Array.isArray(value.parts) && value.parts.every(isLiuyaoAIMessagePart))) &&
     (value.status === undefined ||
       value.status === "streaming" ||
       value.status === "complete" ||
       value.status === "stopped" ||
       value.status === "error")
+  );
+}
+
+function isLiuyaoAIMessagePart(value: unknown): value is AIMessagePart {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.type !== "string") {
+    return false;
+  }
+
+  if ((value.type === "reasoning" || value.type === "text") && typeof value.text === "string") {
+    return true;
+  }
+
+  return (
+    value.type === "tool" &&
+    typeof value.callId === "string" &&
+    typeof value.name === "string" &&
+    (value.displayName === undefined || typeof value.displayName === "string") &&
+    typeof value.arguments === "string" &&
+    (value.result === undefined || typeof value.result === "string") &&
+    (value.status === "running" || value.status === "complete" || value.status === "error")
   );
 }
 
