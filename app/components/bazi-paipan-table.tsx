@@ -162,6 +162,23 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      <div className="flex flex-col border-y bg-background text-sm md:rounded-lg md:border-x">
+        <div className="grid grid-cols-4 border-b">
+          {paipan.auxiliaryPillars.map((item, index) => (
+            <InfoPair
+              key={item.key}
+              label={item.label}
+              value={item.value}
+              className={cn(index < 3 && "border-r")}
+            />
+          ))}
+        </div>
+        <div className="flex flex-row items-center justify-between gap-3 px-4 py-3 md:px-6">
+          <InfoInline label="起运" value={paipan.fortuneStartText} />
+          <InfoInline label="司令" value={paipan.commanderText} align="right" />
+        </div>
+      </div>
     </section>
   );
 }
@@ -228,6 +245,45 @@ function ValueStack({ items, compact = false }: { items: string[]; compact?: boo
       {items.map((item) => (
         <span key={item}>{item}</span>
       ))}
+    </div>
+  );
+}
+
+function InfoPair({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex items-baseline justify-center gap-1 px-1.5 py-3 sm:gap-2 sm:px-3", className)}>
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="font-semibold leading-5">{value || "—"}</span>
+    </div>
+  );
+}
+
+function InfoInline({
+  label,
+  value,
+  align = "left",
+}: {
+  label: string;
+  value: string;
+  align?: "left" | "right";
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 items-baseline gap-2 whitespace-nowrap",
+        align === "right" && "md:justify-end md:text-right"
+      )}
+    >
+      <span className="shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="min-w-0 font-semibold leading-5">{value || "—"}</span>
     </div>
   );
 }

@@ -1,5 +1,12 @@
 import { calculateBazi, type BaziOutput } from "taibu-core/bazi";
-import { HideHeavenStemType, SolarTime, type HeavenStem, type SixtyCycle } from "tyme4ts";
+import {
+  ChildLimit,
+  Gender as TymeGender,
+  HideHeavenStemType,
+  SolarTime,
+  type HeavenStem,
+  type SixtyCycle,
+} from "tyme4ts";
 
 export type BaziGender = "male" | "female";
 export type BaziPillarKey = "year" | "month" | "day" | "hour";
@@ -32,6 +39,12 @@ export interface BaziPillarDisplay {
   shenSha: string[];
 }
 
+export interface BaziAuxiliaryPillarDisplay {
+  key: "fetalOrigin" | "fetalBreath" | "ownSign" | "bodySign";
+  label: string;
+  value: string;
+}
+
 export interface BaziPaipan {
   name: string;
   gender: BaziGender;
@@ -40,6 +53,9 @@ export interface BaziPaipan {
   kongWangText: string;
   tymeEightChar: string;
   pillars: BaziPillarDisplay[];
+  auxiliaryPillars: BaziAuxiliaryPillarDisplay[];
+  commanderText: string;
+  fortuneStartText: string;
   warnings: string[];
 }
 
@@ -108,6 +124,7 @@ export function buildBaziPaipan(input: BaziPaipanInput): BaziPaipan {
   const pillars = PILLAR_META.map(({ key, label }) =>
     buildPillarDisplay(key, label, chart, tymePillars[key], dayHeavenStem)
   );
+  const childLimit = ChildLimit.fromSolarTime(solarTime, getTymeGender(input.gender));
 
   return {
     name: input.name?.trim() ?? "",
@@ -117,6 +134,14 @@ export function buildBaziPaipan(input: BaziPaipanInput): BaziPaipan {
     kongWangText: formatPillarKongWangText(eightChar.getDay()),
     tymeEightChar: eightChar.getName(),
     pillars,
+    auxiliaryPillars: [
+      { key: "fetalOrigin", label: "胎元", value: eightChar.getFetalOrigin().getName() },
+      { key: "fetalBreath", label: "胎息", value: eightChar.getFetalBreath().getName() },
+      { key: "ownSign", label: "命宫", value: eightChar.getOwnSign().getName() },
+      { key: "bodySign", label: "身宫", value: eightChar.getBodySign().getName() },
+    ],
+    commanderText: formatCommanderText(solarTime),
+    fortuneStartText: formatChildLimitText(childLimit),
     warnings,
   };
 }
@@ -199,6 +224,10 @@ function getHiddenStemQiType(type: HideHeavenStemType) {
   }
 }
 
+function getTymeGender(gender: BaziGender) {
+  return gender === "male" ? TymeGender.MAN : TymeGender.WOMAN;
+}
+
 function formatPillarKongWangText(pillar: SixtyCycle) {
   return `${pillar.getTen().getName()}旬 ${formatExtraEarthBranches(pillar, "、")}空`;
 }
@@ -208,6 +237,28 @@ function formatExtraEarthBranches(pillar: SixtyCycle, separator = "") {
     .getExtraEarthBranches()
     .map((branch) => branch.getName())
     .join(separator);
+}
+
+function formatCommanderText(solarTime: SolarTime) {
+  const commander = solarTime.getSolarDay().getHideHeavenStemDay();
+
+  return commander.getName();
+}
+
+function formatChildLimitText(childLimit: ReturnType<typeof ChildLimit.fromSolarTime>) {
+  const parts = [
+    { value: childLimit.getYearCount(), unit: "年" },
+    { value: childLimit.getMonthCount(), unit: "个月" },
+    { value: childLimit.getDayCount(), unit: "天" },
+    { value: childLimit.getHourCount(), unit: "小时" },
+    { value: childLimit.getMinuteCount(), unit: "分" },
+  ];
+  const text = parts
+    .filter((part) => part.value > 0)
+    .map((part) => `${part.value}${part.unit}`)
+    .join("");
+
+  return text || "即刻起运";
 }
 
 function getDateTimeParts(date: Date, time: string): DateTimeParts {
