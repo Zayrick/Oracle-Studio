@@ -66,6 +66,17 @@ body {
 }
 
 :root {
+  --mobile-dock-content-height: 3.5rem;
+  --mobile-dock-padding-top: 0.5rem;
+  --mobile-dock-padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+  --mobile-dock-height: calc(
+    var(--mobile-dock-padding-top) +
+    var(--mobile-dock-content-height) +
+    var(--mobile-dock-padding-bottom)
+  );
+  --mobile-dock-gap: 0.25rem;
+  --mobile-dock-offset: calc(var(--mobile-dock-height) + var(--mobile-dock-gap));
+  --mobile-dock-page-offset: calc(var(--mobile-dock-height) + 0.5rem);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -101,6 +112,14 @@ body {
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --mobile-dock-height: 0px;
+    --mobile-dock-offset: 0px;
+    --mobile-dock-page-offset: 0px;
+  }
 }
 
 .dark {
@@ -235,10 +254,19 @@ body {
     display: none;
   }
 
-  .divination-ai-glass-bar {
-    border-color: color-mix(in oklch, var(--border) 70%, transparent);
-    background: color-mix(in oklch, var(--background) 74%, transparent);
-    box-shadow: 0 1px 0 color-mix(in oklch, var(--background) 42%, transparent) inset;
+  .divination-ai-frosted-surface {
+    background: color-mix(in oklch, var(--background) 72%, transparent);
+    box-shadow:
+      0 1px 0 color-mix(in oklch, var(--background) 48%, transparent) inset,
+      0 12px 32px color-mix(in oklch, var(--foreground) 8%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.35);
+    backdrop-filter: blur(18px) saturate(1.35);
+  }
+
+  .divination-ai-frosted-filter {
+    box-shadow:
+      0 1px 0 color-mix(in oklch, var(--background) 42%, transparent) inset,
+      0 10px 28px color-mix(in oklch, var(--foreground) 7%, transparent);
     -webkit-backdrop-filter: blur(18px) saturate(1.35);
     backdrop-filter: blur(18px) saturate(1.35);
   }

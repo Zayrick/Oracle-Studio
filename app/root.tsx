@@ -47,7 +47,7 @@ export default function App() {
   return (
     <div className="min-h-svh bg-background">
       <SidebarNav />
-      <main className="min-h-svh pb-[calc(env(safe-area-inset-bottom)+5rem)] md:pb-0 md:pl-[224px]">
+      <main className="min-h-svh pb-[var(--mobile-dock-page-offset)] md:pb-0 md:pl-[224px]">
         <Outlet />
       </main>
       <MobileDockNav />
@@ -74,7 +74,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   return (
     <div className="min-h-svh bg-background">
       <SidebarNav />
-      <main className="min-h-svh pb-[calc(env(safe-area-inset-bottom)+5rem)] md:pb-0 md:pl-[224px]">
+      <main className="min-h-svh pb-[var(--mobile-dock-page-offset)] md:pb-0 md:pl-[224px]">
         <div className="container mx-auto p-4">
           <h1>{message}</h1>
           <p>{details}</p>

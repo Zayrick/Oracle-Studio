@@ -44,10 +44,10 @@ export function MobileDockNav() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-3 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pt-2 backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-3 pb-[var(--mobile-dock-padding-bottom)] pt-[var(--mobile-dock-padding-top)] backdrop-blur md:hidden"
       aria-label="移动端主导航"
     >
-      <div className="mx-auto grid h-14 max-w-md grid-cols-3 gap-1">
+      <div className="mx-auto grid h-[var(--mobile-dock-content-height)] max-w-md grid-cols-3 gap-1">
         {mobileDockItems.map((item) => (
           <MobileDockNavLink
             key={item.to}

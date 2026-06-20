@@ -82,7 +82,7 @@ export function DivinationPageFrame({
   const aiOpen = Boolean(aiEnabled && result.ai?.open);
 
   return (
-    <div className="relative mx-auto flex h-svh min-h-0 w-full overflow-hidden px-4 pb-0 pt-16 md:px-0 md:pt-0">
+    <div className="relative mx-auto flex h-[calc(100svh-env(safe-area-inset-bottom))] min-h-0 w-full overflow-hidden px-4 pb-0 pt-16 md:h-svh md:px-0 md:pt-0">
       <div className="fixed left-4 right-4 top-4 z-20 md:hidden">
         <DivinationResultActions
           aiOpen={aiOpen}
@@ -95,7 +95,7 @@ export function DivinationPageFrame({
       </div>
 
       <section
-        className="divination-transition-content flex h-full min-h-0 w-full flex-col"
+        className="divination-transition-content flex h-[calc(100svh-env(safe-area-inset-bottom)-4rem)] min-h-0 w-full flex-col md:h-full"
         aria-label={result.ariaLabel}
       >
         <div className="fixed inset-x-0 top-0 z-20 hidden h-16 border-b bg-background/95 backdrop-blur md:left-[224px] md:flex md:items-center">
@@ -122,7 +122,7 @@ export function DivinationPageFrame({
           >
             <div
               className={cn(
-                "divination-mobile-result-page min-w-0 max-lg:absolute max-lg:inset-0 max-lg:overflow-y-auto max-lg:pb-[calc(env(safe-area-inset-bottom)+6rem)] lg:flex lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-8 lg:py-8",
+                "divination-mobile-result-page min-w-0 max-lg:absolute max-lg:inset-0 max-lg:overflow-y-auto max-lg:pb-[calc(env(safe-area-inset-bottom)+1rem)] lg:flex lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-8 lg:py-8",
                 aiOpen ? "divination-mobile-result-page-open" : "divination-mobile-result-page-closed",
                 !aiOpen && "lg:w-full",
                 result.pageClassName
