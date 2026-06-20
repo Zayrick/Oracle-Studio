@@ -74,8 +74,6 @@ body {
     var(--mobile-dock-content-height) +
     var(--mobile-dock-padding-bottom)
   );
-  --mobile-dock-gap: 0.25rem;
-  --mobile-dock-offset: calc(var(--mobile-dock-height) + var(--mobile-dock-gap));
   --mobile-dock-page-offset: calc(var(--mobile-dock-height) + 0.5rem);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -117,7 +115,6 @@ body {
 @media (min-width: 768px) {
   :root {
     --mobile-dock-height: 0px;
-    --mobile-dock-offset: 0px;
     --mobile-dock-page-offset: 0px;
   }
 }
@@ -269,6 +266,14 @@ body {
       0 10px 28px color-mix(in oklch, var(--foreground) 7%, transparent);
     -webkit-backdrop-filter: blur(18px) saturate(1.35);
     backdrop-filter: blur(18px) saturate(1.35);
+  }
+
+  @media (max-width: 1023.98px) {
+    .divination-ai-frosted-filter {
+      box-shadow:
+        0 1px 0 color-mix(in oklch, var(--background) 42%, transparent) inset,
+        0 0 0 1px color-mix(in oklch, var(--border) 72%, transparent);
+    }
   }
 
   .divination-ai-markdown > :first-child,

@@ -67,21 +67,24 @@ export type DivinationAIChatPanelProps<Message extends AIChatMessage = AIChatMes
 const AI_CHAT_LAYOUT = {
   desktop: {
     header: "px-5 pt-4",
-    messages: "px-5 pb-24 pt-[4.5rem]",
+    scrollContent: "px-5 pb-24 pt-[4.5rem]",
+    messageList: "",
     composer: "bottom-0 px-5 pb-5 pt-3",
     title: "px-4 py-2 text-sm",
   },
   mobile: {
     header: "px-0 pt-2",
-    messages: "px-0 pb-[calc(var(--mobile-dock-offset)+5rem)] pt-14",
-    composer: "bottom-[var(--mobile-dock-offset)] py-3",
+    scrollContent: "px-0 pb-[calc(var(--mobile-dock-height)+5rem)] pt-14",
+    messageList: "",
+    composer: "bottom-[var(--mobile-dock-height)] py-3",
     title: "px-3 py-2 text-xs text-muted-foreground",
   },
 } satisfies Record<
   "desktop" | "mobile",
   {
     header: string;
-    messages: string;
+    scrollContent: string;
+    messageList: string;
     composer: string;
     title: string;
   }
@@ -157,6 +160,16 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
   const messageInputId = mobile ? "divination-ai-message-mobile" : "divination-ai-message-desktop";
   const showHistory = history && history.visible !== false;
   const layout = AI_CHAT_LAYOUT[variant];
+  const header = (
+    <AIChatHeader
+      className={layout.header}
+      history={showHistory ? history : undefined}
+      tabIndex={tabIndex}
+      title={title}
+      titleClassName={layout.title}
+      onNewSession={onNewSession}
+    />
+  );
 
   useEffect(() => {
     if (tabIndex === -1) {
@@ -206,21 +219,15 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
         mobile && "flex-1"
       )}
     >
-      <AIChatHeader
-        className={layout.header}
-        history={showHistory ? history : undefined}
-        tabIndex={tabIndex}
-        title={title}
-        titleClassName={layout.title}
-        onNewSession={onNewSession}
-      />
+      {header}
 
       <AIChatMessages
-        className={layout.messages}
+        messageListClassName={layout.messageList}
         messages={messages}
         pendingLabel={pendingLabel}
         renderMarkdown={renderMarkdown}
         scrollContainerRef={scrollContainerRef}
+        scrollContentClassName={layout.scrollContent}
         tabIndex={tabIndex}
       />
 
@@ -297,18 +304,20 @@ function AIChatHeader<Message extends AIChatMessage>({
 }
 
 function AIChatMessages<Message extends AIChatMessage>({
-  className,
+  messageListClassName,
   messages,
   pendingLabel,
   renderMarkdown,
   scrollContainerRef,
+  scrollContentClassName,
   tabIndex,
 }: {
-  className: string;
+  messageListClassName: string;
   messages: Message[];
   pendingLabel: string;
   renderMarkdown: (content: string) => string;
   scrollContainerRef: Ref<HTMLDivElement>;
+  scrollContentClassName: string;
   tabIndex: 0 | -1;
 }) {
   return (
@@ -319,18 +328,20 @@ function AIChatMessages<Message extends AIChatMessage>({
       aria-label="询问AI消息"
       tabIndex={tabIndex}
     >
-      <div className={cn("flex min-h-full flex-col justify-end gap-3", className)}>
-        {messages.map((item) => (
-          <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
-            <div className={getAIChatMessageClass(item)}>
-              <AIChatMessageContent
-                message={item}
-                pendingLabel={pendingLabel}
-                renderMarkdown={renderMarkdown}
-              />
+      <div className={cn("flex min-h-full flex-col", scrollContentClassName)}>
+        <div className={cn("flex flex-1 flex-col justify-end gap-3", messageListClassName)}>
+          {messages.map((item) => (
+            <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
+              <div className={getAIChatMessageClass(item)}>
+                <AIChatMessageContent
+                  message={item}
+                  pendingLabel={pendingLabel}
+                  renderMarkdown={renderMarkdown}
+                />
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
