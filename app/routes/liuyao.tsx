@@ -1,25 +1,16 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { flushSync } from "react-dom";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { format } from "date-fns";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowLeftIcon, ArrowUpIcon, CheckIcon, CopyIcon, CornerLeftUpIcon, HistoryIcon, PlusIcon, SparklesIcon, SquareIcon } from "lucide-react";
+import { CornerLeftUpIcon } from "lucide-react";
 import { Marked, type RendererObject } from "marked";
 import type { Route } from "./+types/liuyao";
 
-import { AIMessageTimeline } from "@/components/ai-message-timeline";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { DivinationAIChatPanel } from "@/components/divination-ai-chat";
+import { DivinationPageFrame } from "@/components/divination-page-frame";
+import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -31,13 +22,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { DateTimeWheelPicker } from "@/components/date-time-wheel-picker";
 import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
-import {
   activateLiuyaoAIHistorySession,
   createEmptyLiuyaoAIHistoryState,
   createLiuyaoAISessionId,
@@ -48,16 +32,20 @@ import {
   updateLiuyaoHistoryRecordAI,
   upsertLiuyaoAIHistorySession,
   type LiuyaoAIHistoryState,
-  type LiuyaoAIHistorySession,
   type LiuyaoAIMessage as AIDivinationMessage,
   type LiuyaoCastingMethod,
   type LiuyaoHistoryRecord,
 } from "@/features/liuyao/history";
 import {
-  appendAIStreamEventToMessage,
-  getAIMessageTextFromParts,
+  appendAIChatEventToMessage,
+  buildAIChatRequestMessages,
+  encodeBase64Json,
+  getNextAIChatMessageId,
+  markStreamingAIChatMessagesStopped,
+  readAIErrorMessage,
+} from "@/features/ai/chat";
+import {
   readAIStreamEvents,
-  type AIStreamEvent,
 } from "@/features/ai/timeline";
 import {
   buildLiuyaoPaipan,
@@ -69,6 +57,7 @@ import {
   type LiuyaoPaipan,
   type YaoType,
 } from "@/features/liuyao/paipan";
+import { runDivinationViewTransition } from "@/lib/divination-view-transition";
 import { cn } from "@/lib/utils";
 
 export function meta({}: Route.MetaArgs) {
@@ -328,34 +317,6 @@ const COPY_MONTH_BRANCH_SHENSHA_RULES: Array<{
   },
 ];
 
-type ViewTransitionDocument = Document & {
-  startViewTransition?: (updateCallback: () => void) => ViewTransition;
-};
-
-function runLiuyaoViewTransition(update: () => void) {
-  if (typeof document === "undefined") {
-    update();
-    return;
-  }
-
-  const viewTransitionDocument = document as ViewTransitionDocument;
-
-  if (!viewTransitionDocument.startViewTransition) {
-    update();
-    return;
-  }
-
-  document.documentElement.dataset.liuyaoTransition = "active";
-
-  const transition = viewTransitionDocument.startViewTransition(() => {
-    flushSync(update);
-  });
-
-  transition.finished.finally(() => {
-    delete document.documentElement.dataset.liuyaoTransition;
-  });
-}
-
 function useLiuyaoResultCopy(result: LiuyaoPaipan | null) {
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
   const resetTimerRef = useRef<number | null>(null);
@@ -547,7 +508,7 @@ export default function Liuyao() {
       if (activeHistoryId) {
         clearOnlineRollingTimeout();
         onlineRollingRef.current = false;
-        runLiuyaoViewTransition(() => {
+        runDivinationViewTransition(() => {
           resetCopyStatus();
           setResult(null);
           setActiveHistoryId(null);
@@ -569,7 +530,7 @@ export default function Liuyao() {
     if (!record) {
       clearOnlineRollingTimeout();
       onlineRollingRef.current = false;
-      runLiuyaoViewTransition(() => {
+      runDivinationViewTransition(() => {
         resetCopyStatus();
         setResult(null);
         setActiveHistoryId(null);
@@ -740,7 +701,7 @@ export default function Liuyao() {
         nextHistoryRecord = null;
       }
 
-      runLiuyaoViewTransition(() => {
+      runDivinationViewTransition(() => {
         resetCopyStatus();
         if (castingMethod === "random" || castingMethod === "time") {
           setYaos(submittedYaos);
@@ -764,7 +725,7 @@ export default function Liuyao() {
   };
 
   const handleStartOver = () => {
-    runLiuyaoViewTransition(() => {
+    runDivinationViewTransition(() => {
       resetCopyStatus();
       setResult(null);
       setActiveHistoryId(null);
@@ -784,7 +745,7 @@ export default function Liuyao() {
 
       clearOnlineRollingTimeout();
       onlineRollingRef.current = false;
-      runLiuyaoViewTransition(() => {
+      runDivinationViewTransition(() => {
         resetCopyStatus();
         setQuestion(restored.question);
         setDate(restored.date);
@@ -825,58 +786,15 @@ export default function Liuyao() {
   const submitDisabled = castingMethod === "online" && (!onlineCastingComplete || onlineRolling);
 
   return (
-    <div
-      className={cn(
-        result
-          ? "relative mx-auto flex h-svh min-h-0 w-full overflow-hidden px-4 pb-0 pt-16 md:px-0 md:pt-0"
-          : "container relative mx-auto flex min-h-svh items-center px-4 py-16 md:py-20 lg:py-10"
-      )}
-    >
-      <LiuyaoMobilePageActions
-        result={result}
-        actions={
-          <LiuyaoResultActions
-            layout="mobile"
-            copyStatus={copyStatus}
-            aiPanelOpen={aiPanelOpen}
-            onCopy={copyResult}
-            onStartOver={handleStartOver}
-            onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
-          />
-        }
-      />
-      <div
-        className={cn(
-          "mx-auto flex w-full flex-col",
-          result ? "h-full min-h-0 max-w-none" : "max-w-6xl gap-6 lg:gap-8"
-        )}
-      >
-        {!result ? (
-          <div className="flex flex-col gap-2 text-center">
-            <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">六爻排盘</h1>
-            <p className="text-sm text-muted-foreground">本卦、变卦、纳甲、六亲、六神与旬空</p>
-          </div>
-        ) : null}
-
-        {result ? (
-          <LiuyaoResultWorkspace
-            result={result}
-            copyStatus={copyStatus}
-            aiPanelOpen={aiPanelOpen}
-            activeHistoryId={activeHistoryId}
-            aiHistory={aiHistory}
-            onCopy={copyResult}
-            onStartOver={handleStartOver}
-            onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
-            onCloseAi={() => setAiPanelOpen(false)}
-            onAIHistoryChange={handleAIHistoryChange}
-          />
-        ) : (
-          <div className="liuyao-transition-content">
-            <form
-              onSubmit={handleSubmit}
-              className="mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 lg:gap-6"
-            >
+    <DivinationPageFrame
+      form={{
+        title: "六爻排盘",
+        description: "本卦、变卦、纳甲、六亲、六神与旬空",
+        content: (
+          <form
+            onSubmit={handleSubmit}
+            className="mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 lg:gap-6"
+          >
             <Field>
               <FieldLabel htmlFor="question">所问之事</FieldLabel>
               <Input
@@ -1016,127 +934,39 @@ export default function Liuyao() {
                 开始排盘
               </Button>
             </div>
-            </form>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function LiuyaoMobilePageActions({
-  result,
-  actions,
-}: {
-  result: LiuyaoPaipan | null;
-  actions: ReactNode;
-}) {
-  if (result) {
-    return (
-      <div className="fixed left-4 right-4 top-4 z-20 md:hidden">
-        {actions}
-      </div>
-    );
-  }
-
-  return (
-    <Link
-      to="/"
-      className={cn(
-        buttonVariants({ variant: "outline", size: "sm" }),
-        "fixed left-4 top-4 z-20 md:hidden"
-      )}
-    >
-      <ArrowLeftIcon data-icon="inline-start" />
-      返回主页
-    </Link>
-  );
-}
-
-function LiuyaoResultWorkspace({
-  result,
-  copyStatus,
-  aiPanelOpen,
-  activeHistoryId,
-  aiHistory,
-  onCopy,
-  onStartOver,
-  onToggleAiPanel,
-  onCloseAi,
-  onAIHistoryChange,
-}: {
-  result: LiuyaoPaipan;
-  copyStatus: CopyStatus;
-  aiPanelOpen: boolean;
-  activeHistoryId: string | null;
-  aiHistory: LiuyaoAIHistoryState;
-  onCopy: () => void;
-  onStartOver: () => void;
-  onToggleAiPanel: () => void;
-  onCloseAi: () => void;
-  onAIHistoryChange: (
-    updater: (current: LiuyaoAIHistoryState) => LiuyaoAIHistoryState,
-    options?: { touch?: boolean }
-  ) => void;
-}) {
-  return (
-    <section
-      className="liuyao-transition-content flex h-full min-h-0 w-full flex-col"
-      aria-label="六爻解卦结果"
-    >
-      <div className="fixed inset-x-0 top-0 z-20 hidden h-16 border-b bg-background/95 backdrop-blur md:left-[224px] md:flex md:items-center">
-        <div className="mx-auto flex w-full max-w-[96rem] px-6 lg:px-8">
-          <LiuyaoResultActions
-            layout="desktop"
-            copyStatus={copyStatus}
-            aiPanelOpen={aiPanelOpen}
-            onCopy={onCopy}
-            onStartOver={onStartOver}
-            onToggleAiPanel={onToggleAiPanel}
-          />
-        </div>
-      </div>
-
-      <div
-        className="flex h-full min-h-0 w-full flex-1 flex-col md:pt-16"
-      >
-        <div
-          className={cn(
-            "mx-auto flex w-full flex-1 flex-col max-lg:relative max-lg:h-full max-lg:min-h-0 max-lg:overflow-hidden lg:h-full lg:min-h-0 lg:overflow-hidden",
-            aiPanelOpen
-              ? "liuyao-result-grid-open max-lg:h-full max-lg:min-h-0 lg:grid lg:max-w-[96rem]"
-              : "liuyao-result-grid-closed lg:grid lg:max-w-[96rem]"
-          )}
-        >
-          <div
-            className={cn(
-              "liuyao-mobile-result-page min-w-0 max-lg:absolute max-lg:inset-0 max-lg:overflow-y-auto max-lg:pb-6 lg:flex lg:h-full lg:min-h-0 lg:items-center lg:justify-center lg:overflow-y-auto lg:px-8 lg:py-8",
-              aiPanelOpen ? "liuyao-mobile-result-page-open" : "liuyao-mobile-result-page-closed",
-              !aiPanelOpen && "lg:w-full"
-            )}
-          >
-            <PaipanResult result={result} />
-          </div>
-
-          <Separator
-            orientation="vertical"
-            className={cn(
-              "liuyao-result-divider hidden",
-              aiPanelOpen ? "liuyao-result-divider-open lg:block" : "liuyao-result-divider-closed lg:block"
-            )}
-          />
-
-          <AIDivinationPanel
-            open={aiPanelOpen}
-            result={result}
-            historyRecordId={activeHistoryId}
-            aiHistory={aiHistory}
-            onClose={onCloseAi}
-            onAIHistoryChange={onAIHistoryChange}
-          />
-        </div>
-      </div>
-    </section>
+          </form>
+        ),
+      }}
+      result={
+        result
+          ? {
+              ariaLabel: "六爻解卦结果",
+              content: <PaipanResult result={result} />,
+              pageClassName: "lg:items-center lg:justify-center",
+              restartLabel: "再起一卦",
+              onRestart: handleStartOver,
+              copy: {
+                status: copyStatus,
+                onCopy: copyResult,
+              },
+              ai: {
+                open: aiPanelOpen,
+                onToggle: () => setAiPanelOpen((open) => !open),
+                panel: (
+                  <AIDivinationPanel
+                    open={aiPanelOpen}
+                    result={result}
+                    historyRecordId={activeHistoryId}
+                    aiHistory={aiHistory}
+                    onClose={() => setAiPanelOpen(false)}
+                    onAIHistoryChange={handleAIHistoryChange}
+                  />
+                ),
+              },
+            }
+          : undefined
+      }
+    />
   );
 }
 
@@ -1299,66 +1129,6 @@ function OnlineCoinButton({
   );
 }
 
-function LiuyaoResultActions({
-  layout,
-  copyStatus,
-  aiPanelOpen,
-  onCopy,
-  onStartOver,
-  onToggleAiPanel,
-}: {
-  layout: "mobile" | "desktop";
-  copyStatus: CopyStatus;
-  aiPanelOpen: boolean;
-  onCopy: () => void;
-  onStartOver: () => void;
-  onToggleAiPanel: () => void;
-}) {
-  const compact = layout === "mobile";
-
-  return (
-    <div
-      className={cn(
-        "flex w-full max-w-full items-center gap-2",
-        compact ? "justify-between" : "justify-between gap-3"
-      )}
-    >
-      <Button
-        type="button"
-        variant="outline"
-        size={compact ? "sm" : "default"}
-        onClick={onStartOver}
-      >
-        <ArrowLeftIcon data-icon="inline-start" />
-        再起一卦
-      </Button>
-      <div className="ml-auto flex items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size={compact ? "icon-sm" : "icon"}
-          aria-label={copyStatus === "copied" ? "已复制排盘结果" : "复制排盘结果"}
-          onClick={onCopy}
-        >
-          {copyStatus === "copied" ? <CheckIcon /> : <CopyIcon />}
-        </Button>
-        {copyStatus === "error" ? (
-          <span className="text-xs text-destructive">复制失败</span>
-        ) : null}
-        <Button
-          type="button"
-          size={compact ? "sm" : "default"}
-          aria-expanded={aiPanelOpen}
-          onClick={onToggleAiPanel}
-        >
-          <SparklesIcon data-icon="inline-start" />
-          {aiPanelOpen ? "收起AI" : "询问AI"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function PaipanResult({
   result,
 }: {
@@ -1473,7 +1243,7 @@ function AIDivinationPanel({
   const [isSending, setIsSending] = useState(false);
   const messagesRef = useRef(messages);
   const sessionIdRef = useRef(sessionId);
-  const nextMessageIdRef = useRef(getNextAIDivinationMessageId(messages));
+  const nextMessageIdRef = useRef(getNextAIChatMessageId(messages));
   const activeRequestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const mobileTitle = formatHexagramTransition(result);
@@ -1528,7 +1298,7 @@ function AIDivinationPanel({
     setMessages(nextMessages);
     setSessionId(nextSessionId);
     setIsSending(false);
-    nextMessageIdRef.current = getNextAIDivinationMessageId(nextMessages);
+    nextMessageIdRef.current = getNextAIChatMessageId(nextMessages);
   }, [aiHistory.activeSessionId, historyRecordId]);
 
   const handleSubmit = async (event: FormEvent) => {
@@ -1542,7 +1312,10 @@ function AIDivinationPanel({
 
     const userMessageId = nextMessageIdRef.current++;
     const assistantMessageId = nextMessageIdRef.current++;
-    const requestMessages = buildLiuyaoAIRequestMessages(messagesRef.current, content);
+    const requestMessages = buildAIChatRequestMessages(messagesRef.current, content, {
+      maxContextMessages: MAX_LIUYAO_AI_CONTEXT_MESSAGES,
+      maxContentLength: MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH,
+    });
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
 
@@ -1589,7 +1362,7 @@ function AIDivinationPanel({
       }
 
       if (!response.ok || !response.body) {
-        throw new Error(await readAIErrorMessage(response));
+        throw new Error(await readAIErrorMessage(response, "AI 解卦失败，请稍后再试。"));
       }
 
       await readAIStreamEvents(response.body, (event) => {
@@ -1598,7 +1371,7 @@ function AIDivinationPanel({
         }
 
         if (isActiveRequest()) {
-          setMessages((prev) => appendAIEventToMessage(prev, assistantMessageId, event));
+          setMessages((prev) => appendAIChatEventToMessage(prev, assistantMessageId, event));
         }
       });
 
@@ -1679,7 +1452,7 @@ function AIDivinationPanel({
   };
 
   const handleNewSession = () => {
-    const stoppedMessages = markStreamingMessagesStopped(messagesRef.current);
+    const stoppedMessages = markStreamingAIChatMessagesStopped(messagesRef.current);
 
     if (stoppedMessages !== messagesRef.current) {
       persistSession(stoppedMessages);
@@ -1714,7 +1487,7 @@ function AIDivinationPanel({
     setMessages(session.messages);
     setSessionId(session.sessionId);
     setIsSending(false);
-    nextMessageIdRef.current = getNextAIDivinationMessageId(session.messages);
+    nextMessageIdRef.current = getNextAIChatMessageId(session.messages);
     onAIHistoryChange(
       (current) => activateLiuyaoAIHistorySession(current, session.sessionId),
       { touch: false }
@@ -1740,341 +1513,28 @@ function AIDivinationPanel({
   }, [onClose, open]);
 
   return (
-    <>
-      <aside
-        aria-hidden={!open}
-        aria-label="询问AI"
-        className={cn(
-          "liuyao-ai-pane hidden min-h-0 overflow-hidden bg-background lg:flex lg:h-full lg:flex-col",
-          open ? "liuyao-ai-pane-open" : "liuyao-ai-pane-closed"
-        )}
-      >
-        <AIDivinationPanelContent
-          isSending={isSending}
-          aiSessions={aiHistory.sessions}
-          activeSessionId={sessionId}
-          message={message}
-          messages={messages}
-          onNewSession={handleNewSession}
-          onRestoreSession={handleRestoreSession}
-          onMessageChange={setMessage}
-          onStop={handleStop}
-          onSubmit={handleSubmit}
-          tabIndex={open ? 0 : -1}
-          title="AI 解卦"
-          variant="desktop"
-        />
-      </aside>
-      <section
-        aria-hidden={!open}
-        aria-label="询问AI"
-        className={cn(
-          "liuyao-mobile-ai-page min-h-0 w-full overflow-hidden bg-background max-lg:absolute max-lg:inset-0 max-lg:flex max-lg:flex-col lg:hidden",
-          open ? "liuyao-mobile-ai-page-open" : "liuyao-mobile-ai-page-closed"
-        )}
-      >
-        <AIDivinationPanelContent
-          isSending={isSending}
-          aiSessions={aiHistory.sessions}
-          activeSessionId={sessionId}
-          message={message}
-          messages={messages}
-          onNewSession={handleNewSession}
-          onRestoreSession={handleRestoreSession}
-          onMessageChange={setMessage}
-          onStop={handleStop}
-          onSubmit={handleSubmit}
-          tabIndex={open ? 0 : -1}
-          title={mobileTitle}
-          variant="mobile"
-        />
-      </section>
-    </>
+    <DivinationAIChatPanel
+      open={open}
+      desktopTitle="AI 解卦"
+      mobileTitle={mobileTitle}
+      pendingLabel="正在解卦..."
+      inputValue={message}
+      messages={messages}
+      isSending={isSending}
+      history={{
+        sessions: aiHistory.sessions,
+        activeSessionId: sessionId,
+        description: "恢复此卦中过去的询问会话。",
+        emptyDescription: "此卦还没有保存过询问会话。",
+        onRestoreSession: handleRestoreSession,
+      }}
+      onInputChange={setMessage}
+      onNewSession={handleNewSession}
+      onStop={handleStop}
+      onSubmit={handleSubmit}
+      renderMarkdown={renderLiuyaoMarkdown}
+    />
   );
-}
-
-function AIDivinationPanelContent({
-  isSending,
-  aiSessions,
-  activeSessionId,
-  message,
-  messages,
-  onNewSession,
-  onRestoreSession,
-  onMessageChange,
-  onStop,
-  onSubmit,
-  tabIndex,
-  title,
-  variant,
-}: {
-  isSending: boolean;
-  aiSessions: LiuyaoAIHistorySession[];
-  activeSessionId: string;
-  message: string;
-  messages: AIDivinationMessage[];
-  onNewSession: () => void;
-  onRestoreSession: (sessionId: string) => void;
-  onMessageChange: (value: string) => void;
-  onStop: () => void;
-  onSubmit: (event: FormEvent) => void;
-  tabIndex: 0 | -1;
-  title: string;
-  variant: "desktop" | "mobile";
-}) {
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const shouldStickToBottomRef = useRef(true);
-  const mobile = variant === "mobile";
-  const messageInputId = mobile ? "liuyao-ai-message-mobile" : "liuyao-ai-message-desktop";
-
-  useEffect(() => {
-    if (tabIndex === -1) {
-      return;
-    }
-
-    const viewport = getScrollAreaViewport(scrollAreaRef.current);
-
-    if (!viewport) {
-      return;
-    }
-
-    const updateShouldStick = () => {
-      shouldStickToBottomRef.current = isScrolledNearBottom(viewport);
-    };
-
-    updateShouldStick();
-    viewport.addEventListener("scroll", updateShouldStick, { passive: true });
-
-    return () => {
-      viewport.removeEventListener("scroll", updateShouldStick);
-    };
-  }, [tabIndex]);
-
-  useEffect(() => {
-    if (tabIndex === -1 || !shouldStickToBottomRef.current) {
-      return;
-    }
-
-    const frameId = window.requestAnimationFrame(() => {
-      const viewport = getScrollAreaViewport(scrollAreaRef.current);
-
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
-      }
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [messages, tabIndex]);
-
-  return (
-    <div
-      className={cn(
-        "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden",
-        mobile && "flex-1"
-      )}
-    >
-      <div className={cn("flex items-center justify-between gap-2", mobile ? "border-b px-0 py-2" : "px-5 pb-2 pt-5")}>
-        <div className={cn("min-w-0 flex-1 truncate font-medium", mobile ? "text-xs text-muted-foreground" : "text-sm")}>
-          {title}
-        </div>
-        {!mobile ? (
-          <AIDivinationHistoryPopover
-            sessions={aiSessions}
-            activeSessionId={activeSessionId}
-            tabIndex={tabIndex}
-            onRestoreSession={onRestoreSession}
-          />
-        ) : null}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="新建询问AI会话"
-          tabIndex={tabIndex}
-          onClick={onNewSession}
-        >
-          <PlusIcon />
-        </Button>
-      </div>
-
-      <div ref={scrollAreaRef} className="h-full min-h-0">
-        <ScrollArea className="h-full min-h-0" aria-live="polite" aria-label="询问AI消息">
-          <div className={cn("flex min-h-full flex-col justify-end gap-3 py-4", mobile ? "px-0" : "px-5")}>
-            {messages.map((item) => (
-              <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
-                <div className={getAIDivinationMessageClass(item)}>
-                  <AIDivinationMessageContent message={item} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-      </div>
-
-      <form className={cn(mobile ? "border-t py-3" : "px-5 pb-5 pt-3")} onSubmit={onSubmit}>
-        <FieldGroup className="gap-0">
-          <Field orientation="horizontal" className="items-center gap-2">
-            <FieldLabel htmlFor={messageInputId} className="sr-only">追问内容</FieldLabel>
-            <Input
-              id={messageInputId}
-              value={message}
-              tabIndex={tabIndex}
-              disabled={isSending}
-              onChange={(event) => onMessageChange(event.target.value)}
-              placeholder="输入你想了解的内容"
-            />
-            <Button
-              type={isSending ? "button" : "submit"}
-              size="icon"
-              aria-label={isSending ? "停止输出" : "发送追问"}
-              tabIndex={tabIndex}
-              disabled={!isSending && !message.trim()}
-              onClick={isSending ? onStop : undefined}
-            >
-              {isSending ? <SquareIcon /> : <ArrowUpIcon />}
-            </Button>
-          </Field>
-        </FieldGroup>
-      </form>
-    </div>
-  );
-}
-
-function AIDivinationHistoryPopover({
-  sessions,
-  activeSessionId,
-  tabIndex,
-  onRestoreSession,
-}: {
-  sessions: LiuyaoAIHistorySession[];
-  activeSessionId: string;
-  tabIndex: 0 | -1;
-  onRestoreSession: (sessionId: string) => void;
-}) {
-  return (
-    <Popover>
-      <PopoverTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="询问AI历史"
-            tabIndex={tabIndex}
-          />
-        }
-      >
-        <HistoryIcon />
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] gap-3">
-        <PopoverHeader>
-          <PopoverTitle>AI 历史</PopoverTitle>
-          <PopoverDescription>
-            恢复此卦中过去的询问会话。
-          </PopoverDescription>
-        </PopoverHeader>
-
-        {sessions.length === 0 ? (
-          <Empty className="rounded-lg border-0 bg-muted/40 px-3 py-6">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <HistoryIcon aria-hidden="true" />
-              </EmptyMedia>
-              <EmptyTitle>暂无 AI 会话</EmptyTitle>
-              <EmptyDescription>
-                此卦还没有保存过询问会话。
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <ScrollArea className="max-h-72 pr-2">
-            <div className="flex flex-col gap-1">
-              {sessions.map((session) => {
-                const active = session.sessionId === activeSessionId;
-
-                return (
-                  <button
-                    key={session.sessionId}
-                    type="button"
-                    className={cn(
-                      "rounded-lg px-3 py-2 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30",
-                      active && "bg-muted"
-                    )}
-                    onClick={() => onRestoreSession(session.sessionId)}
-                  >
-                    <div className="truncate text-sm font-medium">
-                      {session.title}
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                      <span>{formatHistoryDateTime(session.updatedAt)}</span>
-                      <span>{formatAIMessageCount(session.messages)}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </ScrollArea>
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function formatAIMessageCount(messages: LiuyaoAIHistorySession["messages"]) {
-  return `${messages.length} 条消息`;
-}
-
-function formatHistoryDateTime(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "时间未知";
-  }
-
-  return format(date, "yyyy-MM-dd HH:mm");
-}
-
-function getAIDivinationMessageClass(message: AIDivinationMessage) {
-  if (message.role === "user") {
-    return cn(
-      "max-w-[82%] rounded-2xl rounded-br-md bg-primary px-3 py-2 text-sm leading-relaxed text-primary-foreground break-words whitespace-pre-wrap",
-      message.status === "error" && "bg-destructive/10 text-destructive"
-    );
-  }
-
-  return cn(
-    "liuyao-ai-markdown w-full max-w-full py-1 text-sm leading-relaxed text-card-foreground break-words",
-    message.status === "error" && "text-destructive"
-  );
-}
-
-function AIDivinationMessageContent({ message }: { message: AIDivinationMessage }) {
-  if (message.role === "assistant" && message.status !== "error") {
-    return (
-      <AIMessageTimeline
-        message={message}
-        pendingLabel="正在解卦..."
-        renderMarkdown={renderLiuyaoMarkdown}
-      />
-    );
-  }
-
-  if (!message.content) {
-    return message.status === "streaming" ? "正在解卦..." : null;
-  }
-
-  return message.content;
-}
-
-function getScrollAreaViewport(root: HTMLDivElement | null) {
-  return root?.querySelector<HTMLElement>("[data-slot='scroll-area-viewport']") ?? null;
-}
-
-function isScrolledNearBottom(element: HTMLElement) {
-  const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
-  return distanceToBottom < 32;
 }
 
 function renderLiuyaoMarkdown(content: string) {
@@ -2119,97 +1579,6 @@ function escapeHtml(value: string) {
 
 function escapeHtmlAttribute(value: string) {
   return escapeHtml(value);
-}
-
-function appendAIEventToMessage(
-  messages: AIDivinationMessage[],
-  messageId: number,
-  event: AIStreamEvent
-) {
-  return messages.map((item) =>
-    item.id === messageId
-      ? appendAIStreamEventToMessage(item, event)
-      : item
-  );
-}
-
-function markStreamingMessagesStopped(messages: AIDivinationMessage[]) {
-  let changed = false;
-  const nextMessages = messages.map((message) => {
-    if (message.status !== "streaming") {
-      return message;
-    }
-
-    changed = true;
-    return {
-      ...message,
-      content: message.content || "已停止。",
-      status: "stopped" as const,
-    };
-  });
-
-  return changed ? nextMessages : messages;
-}
-
-function getNextAIDivinationMessageId(messages: AIDivinationMessage[]) {
-  return messages.reduce((nextId, message) => Math.max(nextId, message.id + 1), 1);
-}
-
-function buildLiuyaoAIRequestMessages(messages: AIDivinationMessage[], currentContent: string) {
-  const history = messages
-    .flatMap((item): Array<Pick<AIDivinationMessage, "role" | "content">> => {
-      const content = (item.content || getAIMessageTextFromParts(item.parts)).trim();
-
-      if (!content || (item.role === "assistant" && item.status === "error")) {
-        return [];
-      }
-
-      return [
-        {
-          role: item.role,
-          content: content.slice(0, MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH),
-        },
-      ];
-    })
-    .slice(-(MAX_LIUYAO_AI_CONTEXT_MESSAGES - 1));
-
-  return [
-    ...history,
-    {
-      role: "user" as const,
-      content: currentContent.slice(0, MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH),
-    },
-  ];
-}
-
-function encodeBase64Json(value: unknown) {
-  const bytes = new TextEncoder().encode(JSON.stringify(value));
-  let binary = "";
-  const chunkSize = 0x8000;
-
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-  }
-
-  return btoa(binary);
-}
-
-async function readAIErrorMessage(response: Response) {
-  try {
-    const data = await response.json();
-
-    if (isRecord(data) && typeof data.error === "string") {
-      return data.error;
-    }
-  } catch {
-    // Fall through to the generic message below.
-  }
-
-  return "AI 解卦失败，请稍后再试。";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 async function copyTextToClipboard(text: string) {

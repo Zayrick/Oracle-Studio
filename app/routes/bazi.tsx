@@ -1,30 +1,27 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { format } from "date-fns";
-import { ArrowLeftIcon, ArrowUpIcon, PlusIcon, SparklesIcon, SquareIcon } from "lucide-react";
 import { Marked, type RendererObject } from "marked";
-import { Link } from "react-router";
 import type { Route } from "./+types/bazi";
 
-import { AIMessageTimeline } from "@/components/ai-message-timeline";
 import { BaziPaipanTable } from "@/components/bazi-paipan-table";
 import { DateTimeWheelPicker } from "@/components/date-time-wheel-picker";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { DivinationAIChatPanel } from "@/components/divination-ai-chat";
+import { DivinationPageFrame } from "@/components/divination-page-frame";
+import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
-  appendAIStreamEventToMessage,
-  getAIMessageTextFromParts,
-  readAIStreamEvents,
-  type AIMessagePart,
-  type AIMessageStatus,
-  type AIStreamEvent,
-} from "@/features/ai/timeline";
+  appendAIChatEventToMessage,
+  buildAIChatRequestMessages,
+  createAIChatSessionId,
+  encodeBase64Json,
+  readAIErrorMessage,
+  type AIChatMessage,
+} from "@/features/ai/chat";
+import { readAIStreamEvents } from "@/features/ai/timeline";
 import { formatBaziAISystemPrompt } from "@/features/bazi/ai-format";
 import type { BaziGender, BaziPaipan } from "@/features/bazi/paipan";
-import { cn } from "@/lib/utils";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -40,13 +37,7 @@ const BAZI_GENDER_OPTIONS = [
 const BAZI_AI_ENDPOINT = "/api/bazi/ai";
 const MARKDOWN_ZERO_WIDTH_PREFIX_PATTERN = /^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/;
 
-type BaziAIMessage = {
-  id: number;
-  role: "user" | "assistant";
-  content: string;
-  parts?: AIMessagePart[];
-  status?: AIMessageStatus;
-};
+type BaziAIMessage = AIChatMessage;
 
 const baziMarkdownRenderer: RendererObject = {
   html({ text }) {
@@ -141,259 +132,119 @@ export default function Bazi() {
   };
 
   return (
-    <div
-      className={cn(
-        paipan
-          ? "relative mx-auto flex h-svh min-h-0 w-full overflow-hidden px-4 pb-0 pt-16 md:px-0 md:pt-0"
-          : "container relative mx-auto flex min-h-svh items-center px-4 py-16 md:py-20 lg:py-10"
-      )}
-    >
-      {paipan ? (
-        <>
-          <BaziMobileResultActions
-            aiPanelOpen={aiPanelOpen}
-            onBack={handleBackToForm}
-            onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
-          />
-          <BaziResultWorkspace
-            paipan={paipan}
-            aiPanelOpen={aiPanelOpen}
-            onBack={handleBackToForm}
-            onToggleAiPanel={() => setAiPanelOpen((open) => !open)}
-            onCloseAi={() => setAiPanelOpen(false)}
-          />
-        </>
-      ) : (
-        <>
-          <Link
-            to="/"
-            className={cn(
-              buttonVariants({ variant: "outline", size: "sm" }),
-              "fixed left-4 top-4 z-20"
-            )}
+    <DivinationPageFrame
+      form={{
+        title: "八字排盘",
+        description: "填写命主信息与出生时间",
+        content: (
+          <form
+            onSubmit={handleSubmit}
+            className="mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 lg:gap-6"
           >
-            <ArrowLeftIcon data-icon="inline-start" />
-            返回主页
-          </Link>
+            <Field>
+              <FieldLabel htmlFor="bazi-name">命主姓名（可选）</FieldLabel>
+              <Input
+                id="bazi-name"
+                name="name"
+                type="text"
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setCalculationError("");
+                }}
+                placeholder="请输入命主姓名"
+                autoComplete="name"
+              />
+            </Field>
 
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 lg:gap-8">
-            <div className="flex flex-col gap-2 text-center">
-              <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">八字排盘</h1>
-              <p className="text-sm text-muted-foreground">填写命主信息与出生时间</p>
-            </div>
+            <Field data-invalid={Boolean(genderError)}>
+              <FieldLabel id="bazi-gender-label">性别</FieldLabel>
+              <ToggleGroup
+                aria-labelledby="bazi-gender-label"
+                aria-invalid={Boolean(genderError) || undefined}
+                value={gender ? [gender] : []}
+                onValueChange={handleGenderChange}
+                variant="outline"
+                spacing={0}
+                className="w-full"
+              >
+                {BAZI_GENDER_OPTIONS.map((option) => (
+                  <ToggleGroupItem
+                    key={option.value}
+                    value={option.value}
+                    className="flex-1"
+                  >
+                    {option.label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <input type="hidden" name="gender" value={gender} />
+              {genderError ? <FieldError>{genderError}</FieldError> : null}
+            </Field>
 
-            <form
-              onSubmit={handleSubmit}
-              className="mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 lg:gap-6"
-            >
-              <Field>
-                <FieldLabel htmlFor="bazi-name">命主姓名（可选）</FieldLabel>
-                <Input
-                  id="bazi-name"
-                  name="name"
-                  type="text"
-                  value={name}
-                  onChange={(event) => {
-                    setName(event.target.value);
+            <FieldGroup className="flex-row items-end gap-2">
+              <Field className="min-w-0 flex-1">
+                <FieldLabel htmlFor="bazi-date-time-picker">出生时间</FieldLabel>
+                <DateTimeWheelPicker
+                  id="bazi-date-time-picker"
+                  date={date}
+                  time={time}
+                  onChange={(nextValue) => {
+                    setDate(nextValue.date);
+                    setTime(nextValue.time);
                     setCalculationError("");
                   }}
-                  placeholder="请输入命主姓名"
-                  autoComplete="name"
                 />
+                <input type="hidden" name="birthDate" value={format(date, "yyyy-MM-dd")} />
+                <input type="hidden" name="birthTime" value={time} />
               </Field>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSetNow}
+                className="shrink-0"
+              >
+                现在
+              </Button>
+            </FieldGroup>
 
-              <Field data-invalid={Boolean(genderError)}>
-                <FieldLabel id="bazi-gender-label">性别</FieldLabel>
-                <ToggleGroup
-                  aria-labelledby="bazi-gender-label"
-                  aria-invalid={Boolean(genderError) || undefined}
-                  value={gender ? [gender] : []}
-                  onValueChange={handleGenderChange}
-                  variant="outline"
-                  spacing={0}
-                  className="w-full"
-                >
-                  {BAZI_GENDER_OPTIONS.map((option) => (
-                    <ToggleGroupItem
-                      key={option.value}
-                      value={option.value}
-                      className="flex-1"
-                    >
-                      {option.label}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-                <input type="hidden" name="gender" value={gender} />
-                {genderError ? <FieldError>{genderError}</FieldError> : null}
-              </Field>
-
-              <FieldGroup className="flex-row items-end gap-2">
-                <Field className="min-w-0 flex-1">
-                  <FieldLabel htmlFor="bazi-date-time-picker">出生时间</FieldLabel>
-                  <DateTimeWheelPicker
-                    id="bazi-date-time-picker"
-                    date={date}
-                    time={time}
-                    onChange={(nextValue) => {
-                      setDate(nextValue.date);
-                      setTime(nextValue.time);
-                      setCalculationError("");
-                    }}
-                  />
-                  <input type="hidden" name="birthDate" value={format(date, "yyyy-MM-dd")} />
-                  <input type="hidden" name="birthTime" value={time} />
-                </Field>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleSetNow}
-                  className="shrink-0"
-                >
-                  现在
-                </Button>
-              </FieldGroup>
-
-              <div className="flex justify-center pt-1">
-                <Button type="submit" size="lg" disabled={isCalculating} className="w-full max-w-xs">
-                  {isCalculating ? "排盘中..." : "开始排盘"}
-                </Button>
-              </div>
-
-              {calculationError ? (
-                <p role="alert" className="text-center text-sm text-destructive">
-                  {calculationError}
-                </p>
-              ) : null}
-            </form>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function BaziMobileResultActions({
-  aiPanelOpen,
-  onBack,
-  onToggleAiPanel,
-}: {
-  aiPanelOpen: boolean;
-  onBack: () => void;
-  onToggleAiPanel: () => void;
-}) {
-  return (
-    <div className="fixed left-4 right-4 top-4 z-20 md:hidden">
-      <BaziResultActions
-        layout="mobile"
-        aiPanelOpen={aiPanelOpen}
-        onBack={onBack}
-        onToggleAiPanel={onToggleAiPanel}
-      />
-    </div>
-  );
-}
-
-function BaziResultWorkspace({
-  paipan,
-  aiPanelOpen,
-  onBack,
-  onToggleAiPanel,
-  onCloseAi,
-}: {
-  paipan: BaziPaipan;
-  aiPanelOpen: boolean;
-  onBack: () => void;
-  onToggleAiPanel: () => void;
-  onCloseAi: () => void;
-}) {
-  return (
-    <section className="flex h-full min-h-0 w-full flex-col" aria-label="八字排盘结果">
-      <div className="fixed inset-x-0 top-0 z-20 hidden h-16 border-b bg-background/95 backdrop-blur md:left-[224px] md:flex md:items-center">
-        <div className="mx-auto flex w-full max-w-[96rem] px-6 lg:px-8">
-          <BaziResultActions
-            layout="desktop"
-            aiPanelOpen={aiPanelOpen}
-            onBack={onBack}
-            onToggleAiPanel={onToggleAiPanel}
-          />
-        </div>
-      </div>
-
-      <div className="flex h-full min-h-0 w-full flex-1 flex-col md:pt-16">
-        <div
-          className={cn(
-            "mx-auto flex w-full flex-1 flex-col max-lg:relative max-lg:h-full max-lg:min-h-0 max-lg:overflow-hidden lg:h-full lg:min-h-0 lg:overflow-hidden",
-            aiPanelOpen
-              ? "liuyao-result-grid-open max-lg:h-full max-lg:min-h-0 lg:grid lg:max-w-[96rem]"
-              : "liuyao-result-grid-closed lg:grid lg:max-w-[96rem]"
-          )}
-        >
-          <div
-            className={cn(
-              "liuyao-mobile-result-page min-w-0 max-lg:absolute max-lg:inset-0 max-lg:overflow-y-auto max-lg:pb-6 lg:flex lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-8 lg:py-8",
-              aiPanelOpen ? "liuyao-mobile-result-page-open" : "liuyao-mobile-result-page-closed",
-              !aiPanelOpen && "lg:w-full"
-            )}
-          >
-            <div className="w-full lg:mx-auto lg:max-w-6xl">
-              <BaziPaipanTable paipan={paipan} />
+            <div className="flex justify-center pt-1">
+              <Button type="submit" size="lg" disabled={isCalculating} className="w-full max-w-xs">
+                {isCalculating ? "排盘中..." : "开始排盘"}
+              </Button>
             </div>
-          </div>
 
-          <Separator
-            orientation="vertical"
-            className={cn(
-              "liuyao-result-divider hidden",
-              aiPanelOpen ? "liuyao-result-divider-open lg:block" : "liuyao-result-divider-closed lg:block"
-            )}
-          />
-
-          <BaziAIPanel open={aiPanelOpen} paipan={paipan} onClose={onCloseAi} />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function BaziResultActions({
-  layout,
-  aiPanelOpen,
-  onBack,
-  onToggleAiPanel,
-}: {
-  layout: "mobile" | "desktop";
-  aiPanelOpen: boolean;
-  onBack: () => void;
-  onToggleAiPanel: () => void;
-}) {
-  const compact = layout === "mobile";
-
-  return (
-    <div
-      className={cn(
-        "flex w-full max-w-full items-center gap-2",
-        compact ? "justify-between" : "justify-between gap-3"
-      )}
-    >
-      <Button
-        type="button"
-        variant="outline"
-        size={compact ? "sm" : "default"}
-        onClick={onBack}
-      >
-        <ArrowLeftIcon data-icon="inline-start" />
-        返回填写
-      </Button>
-      <Button
-        type="button"
-        size={compact ? "sm" : "default"}
-        aria-expanded={aiPanelOpen}
-        onClick={onToggleAiPanel}
-      >
-        <SparklesIcon data-icon="inline-start" />
-        {aiPanelOpen ? "收起AI" : "询问AI"}
-      </Button>
-    </div>
+            {calculationError ? (
+              <p role="alert" className="text-center text-sm text-destructive">
+                {calculationError}
+              </p>
+            ) : null}
+          </form>
+        ),
+      }}
+      result={
+        paipan
+          ? {
+              ariaLabel: "八字排盘结果",
+              content: <BaziPaipanTable paipan={paipan} />,
+              contentClassName: "lg:mx-auto lg:max-w-6xl",
+              restartLabel: "返回填写",
+              onRestart: handleBackToForm,
+              ai: {
+                open: aiPanelOpen,
+                onToggle: () => setAiPanelOpen((open) => !open),
+                panel: (
+                  <BaziAIPanel
+                    open={aiPanelOpen}
+                    paipan={paipan}
+                    onClose={() => setAiPanelOpen(false)}
+                  />
+                ),
+              },
+            }
+          : undefined
+      }
+    />
   );
 }
 
@@ -408,7 +259,7 @@ function BaziAIPanel({
 }) {
   const [message, setMessage] = useState("");
   const [messages, setMessagesState] = useState<BaziAIMessage[]>([]);
-  const [sessionId, setSessionIdState] = useState(() => createBaziAISessionId());
+  const [sessionId, setSessionIdState] = useState(() => createAIChatSessionId("bazi"));
   const [isSending, setIsSending] = useState(false);
   const messagesRef = useRef(messages);
   const sessionIdRef = useRef(sessionId);
@@ -440,7 +291,7 @@ function BaziAIPanel({
     abortControllerRef.current = null;
     setMessage("");
     setMessages([]);
-    setSessionId(createBaziAISessionId());
+    setSessionId(createAIChatSessionId("bazi"));
     setIsSending(false);
     nextMessageIdRef.current = 1;
   }, [paipan]);
@@ -456,7 +307,7 @@ function BaziAIPanel({
 
     const userMessageId = nextMessageIdRef.current++;
     const assistantMessageId = nextMessageIdRef.current++;
-    const requestMessages = buildBaziAIRequestMessages(messagesRef.current, content);
+    const requestMessages = buildAIChatRequestMessages(messagesRef.current, content);
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
 
@@ -503,7 +354,7 @@ function BaziAIPanel({
       }
 
       if (!response.ok || !response.body) {
-        throw new Error(await readAIErrorMessage(response));
+        throw new Error(await readAIErrorMessage(response, "AI 解盘失败，请稍后再试。"));
       }
 
       await readAIStreamEvents(response.body, (event) => {
@@ -512,7 +363,7 @@ function BaziAIPanel({
         }
 
         if (isActiveRequest()) {
-          setMessages((prev) => appendBaziAIEventToMessage(prev, assistantMessageId, event));
+          setMessages((prev) => appendAIChatEventToMessage(prev, assistantMessageId, event));
         }
       });
 
@@ -596,7 +447,7 @@ function BaziAIPanel({
     setMessage("");
     setMessages([]);
     setIsSending(false);
-    setSessionId(createBaziAISessionId());
+    setSessionId(createAIChatSessionId("bazi"));
     nextMessageIdRef.current = 1;
   };
 
@@ -619,188 +470,20 @@ function BaziAIPanel({
   }, [onClose, open]);
 
   return (
-    <>
-      <aside
-        aria-hidden={!open}
-        aria-label="询问AI"
-        className={cn(
-          "liuyao-ai-pane hidden min-h-0 overflow-hidden bg-background lg:flex lg:h-full lg:flex-col",
-          open ? "liuyao-ai-pane-open" : "liuyao-ai-pane-closed"
-        )}
-      >
-        <BaziAIPanelContent
-          isSending={isSending}
-          message={message}
-          messages={messages}
-          onMessageChange={setMessage}
-          onNewSession={handleNewSession}
-          onStop={handleStop}
-          onSubmit={handleSubmit}
-          title="AI 解盘"
-          tabIndex={open ? 0 : -1}
-          variant="desktop"
-        />
-      </aside>
-      <section
-        aria-hidden={!open}
-        aria-label="询问AI"
-        className={cn(
-          "liuyao-mobile-ai-page min-h-0 w-full overflow-hidden bg-background max-lg:absolute max-lg:inset-0 max-lg:flex max-lg:flex-col lg:hidden",
-          open ? "liuyao-mobile-ai-page-open" : "liuyao-mobile-ai-page-closed"
-        )}
-      >
-        <BaziAIPanelContent
-          isSending={isSending}
-          message={message}
-          messages={messages}
-          onMessageChange={setMessage}
-          onNewSession={handleNewSession}
-          onStop={handleStop}
-          onSubmit={handleSubmit}
-          title={formatBaziAITitle(paipan)}
-          tabIndex={open ? 0 : -1}
-          variant="mobile"
-        />
-      </section>
-    </>
-  );
-}
-
-function BaziAIPanelContent({
-  isSending,
-  message,
-  messages,
-  onMessageChange,
-  onNewSession,
-  onStop,
-  onSubmit,
-  title,
-  tabIndex,
-  variant,
-}: {
-  isSending: boolean;
-  message: string;
-  messages: BaziAIMessage[];
-  onMessageChange: (value: string) => void;
-  onNewSession: () => void;
-  onStop: () => void;
-  onSubmit: (event: FormEvent) => void;
-  title: string;
-  tabIndex: 0 | -1;
-  variant: "desktop" | "mobile";
-}) {
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const shouldStickToBottomRef = useRef(true);
-  const mobile = variant === "mobile";
-  const messageInputId = mobile ? "bazi-ai-message-mobile" : "bazi-ai-message-desktop";
-
-  useEffect(() => {
-    if (tabIndex === -1) {
-      return;
-    }
-
-    const viewport = getScrollAreaViewport(scrollAreaRef.current);
-
-    if (!viewport) {
-      return;
-    }
-
-    const updateShouldStick = () => {
-      shouldStickToBottomRef.current = isScrolledNearBottom(viewport);
-    };
-
-    updateShouldStick();
-    viewport.addEventListener("scroll", updateShouldStick, { passive: true });
-
-    return () => {
-      viewport.removeEventListener("scroll", updateShouldStick);
-    };
-  }, [tabIndex]);
-
-  useEffect(() => {
-    if (tabIndex === -1 || !shouldStickToBottomRef.current) {
-      return;
-    }
-
-    const frameId = window.requestAnimationFrame(() => {
-      const viewport = getScrollAreaViewport(scrollAreaRef.current);
-
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
-      }
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [messages, tabIndex]);
-
-  return (
-    <div
-      className={cn(
-        "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden",
-        mobile && "flex-1"
-      )}
-    >
-      <div className={cn("flex items-center justify-between gap-2", mobile ? "border-b px-0 py-2" : "px-5 pb-2 pt-5")}>
-        <div className={cn("min-w-0 flex-1 truncate font-medium", mobile ? "text-xs text-muted-foreground" : "text-sm")}>
-          {title}
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="新建询问AI会话"
-          tabIndex={tabIndex}
-          onClick={onNewSession}
-        >
-          <PlusIcon />
-        </Button>
-      </div>
-
-      <div ref={scrollAreaRef} className="h-full min-h-0">
-        <ScrollArea className="h-full min-h-0" aria-live="polite" aria-label="询问AI消息">
-          <div className={cn("flex min-h-full flex-col justify-end gap-3 py-4", mobile ? "px-0" : "px-5")}>
-            {messages.map((item) => (
-              <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
-                <div className={getBaziAIMessageClass(item)}>
-                  <BaziAIMessageContent message={item} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-      </div>
-
-      <form
-        className={cn(mobile ? "border-t py-3" : "px-5 pb-5 pt-3")}
-        onSubmit={onSubmit}
-      >
-        <FieldGroup className="gap-0">
-          <Field orientation="horizontal" className="items-center gap-2">
-            <FieldLabel htmlFor={messageInputId} className="sr-only">追问内容</FieldLabel>
-            <Input
-              id={messageInputId}
-              value={message}
-              disabled={isSending}
-              tabIndex={tabIndex}
-              onChange={(event) => onMessageChange(event.target.value)}
-              placeholder="输入你想了解的内容"
-            />
-            <Button
-              type={isSending ? "button" : "submit"}
-              size="icon"
-              aria-label={isSending ? "停止输出" : "发送追问"}
-              disabled={!isSending && !message.trim()}
-              tabIndex={tabIndex}
-              onClick={isSending ? onStop : undefined}
-            >
-              {isSending ? <SquareIcon /> : <ArrowUpIcon />}
-            </Button>
-          </Field>
-        </FieldGroup>
-      </form>
-    </div>
+    <DivinationAIChatPanel
+      open={open}
+      desktopTitle="AI 解盘"
+      mobileTitle={formatBaziAITitle(paipan)}
+      pendingLabel="正在解盘..."
+      inputValue={message}
+      messages={messages}
+      isSending={isSending}
+      onInputChange={setMessage}
+      onNewSession={handleNewSession}
+      onStop={handleStop}
+      onSubmit={handleSubmit}
+      renderMarkdown={renderBaziMarkdown}
+    />
   );
 }
 
@@ -808,125 +491,11 @@ function formatBaziAITitle(paipan: BaziPaipan) {
   return `${paipan.name || "未署名"} · ${paipan.tymeEightChar}`;
 }
 
-function createBaziAISessionId() {
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return `bazi-${globalThis.crypto.randomUUID()}`;
-  }
-
-  return `bazi-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-}
-
-function getScrollAreaViewport(root: HTMLDivElement | null) {
-  return root?.querySelector<HTMLElement>("[data-slot='scroll-area-viewport']") ?? null;
-}
-
-function isScrolledNearBottom(element: HTMLElement) {
-  const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
-
-  return distanceToBottom < 32;
-}
-
-function getBaziAIMessageClass(message: BaziAIMessage) {
-  if (message.role === "user") {
-    return cn(
-      "max-w-[82%] rounded-2xl rounded-br-md bg-primary px-3 py-2 text-sm leading-relaxed text-primary-foreground break-words whitespace-pre-wrap",
-      message.status === "error" && "bg-destructive/10 text-destructive"
-    );
-  }
-
-  return cn(
-    "liuyao-ai-markdown w-full max-w-full py-1 text-sm leading-relaxed text-card-foreground break-words",
-    message.status === "error" && "text-destructive"
-  );
-}
-
-function BaziAIMessageContent({ message }: { message: BaziAIMessage }) {
-  if (message.role === "assistant" && message.status !== "error") {
-    return (
-      <AIMessageTimeline
-        message={message}
-        pendingLabel="正在解盘..."
-        renderMarkdown={renderBaziMarkdown}
-      />
-    );
-  }
-
-  if (!message.content) {
-    return message.status === "streaming" ? "正在解盘..." : null;
-  }
-
-  return message.content;
-}
-
 function renderBaziMarkdown(content: string) {
   return baziMarkdown.parse(
     content.replace(MARKDOWN_ZERO_WIDTH_PREFIX_PATTERN, ""),
     { async: false }
   );
-}
-
-function appendBaziAIEventToMessage(
-  messages: BaziAIMessage[],
-  messageId: number,
-  event: AIStreamEvent
-) {
-  return messages.map((item) =>
-    item.id === messageId
-      ? appendAIStreamEventToMessage(item, event)
-      : item
-  );
-}
-
-function buildBaziAIRequestMessages(messages: BaziAIMessage[], currentContent: string) {
-  const history = messages
-    .flatMap((item): Array<Pick<BaziAIMessage, "role" | "content">> => {
-      const content = (item.content || getAIMessageTextFromParts(item.parts)).trim();
-
-      if (!content || (item.role === "assistant" && item.status === "error")) {
-        return [];
-      }
-
-      return [
-        {
-          role: item.role,
-          content,
-        },
-      ];
-    })
-
-  return [
-    ...history,
-    {
-      role: "user" as const,
-      content: currentContent,
-    },
-  ];
-}
-
-function encodeBase64Json(value: unknown) {
-  const bytes = new TextEncoder().encode(JSON.stringify(value));
-  let binary = "";
-  const chunkSize = 0x8000;
-
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-  }
-
-  return btoa(binary);
-}
-
-async function readAIErrorMessage(response: Response) {
-  try {
-    const data = await response.json();
-
-    if (isRecord(data) && typeof data.error === "string") {
-      return data.error;
-    }
-  } catch {
-    // Fall through to the generic message below.
-  }
-
-  return "AI 解盘失败，请稍后再试。";
 }
 
 function normalizeMarkdownUrl(href: string) {

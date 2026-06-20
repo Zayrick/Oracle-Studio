@@ -154,57 +154,57 @@ body {
 
 @layer components {
   @media (max-width: 1023.98px) {
-    .liuyao-mobile-result-page,
-    .liuyao-mobile-ai-page {
+    .divination-mobile-result-page,
+    .divination-mobile-ai-page {
       transition: transform 460ms cubic-bezier(0.16, 1, 0.3, 1);
       will-change: transform;
     }
 
-    .liuyao-mobile-result-page-closed,
-    .liuyao-mobile-ai-page-open {
+    .divination-mobile-result-page-closed,
+    .divination-mobile-ai-page-open {
       transform: translateX(0);
     }
 
-    .liuyao-mobile-result-page-open {
+    .divination-mobile-result-page-open {
       pointer-events: none;
       transform: translateX(-100%);
     }
 
-    .liuyao-mobile-ai-page-closed {
+    .divination-mobile-ai-page-closed {
       pointer-events: none;
       transform: translateX(100%);
     }
   }
 
   @media (min-width: 1024px) {
-    .liuyao-result-grid-closed,
-    .liuyao-result-grid-open {
+    .divination-result-grid-closed,
+    .divination-result-grid-open {
       transition: grid-template-columns 520ms cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .liuyao-result-grid-closed {
+    .divination-result-grid-closed {
       grid-template-columns: minmax(0, 1fr) 0px minmax(0, 0fr);
     }
 
-    .liuyao-result-grid-open {
+    .divination-result-grid-open {
       grid-template-columns: minmax(0, 3fr) 1px minmax(24rem, 2fr);
     }
 
-    .liuyao-result-divider,
-    .liuyao-ai-pane {
+    .divination-result-divider,
+    .divination-ai-pane {
       transition:
         opacity 280ms ease,
         transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .liuyao-result-divider-open,
-    .liuyao-ai-pane-open {
+    .divination-result-divider-open,
+    .divination-ai-pane-open {
       opacity: 1;
       transform: translateX(0);
     }
 
-    .liuyao-result-divider-closed,
-    .liuyao-ai-pane-closed {
+    .divination-result-divider-closed,
+    .divination-ai-pane-closed {
       opacity: 0;
       pointer-events: none;
       transform: translateX(1rem);
@@ -212,72 +212,72 @@ body {
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .liuyao-result-grid-closed,
-    .liuyao-result-grid-open,
-    .liuyao-result-divider,
-    .liuyao-ai-pane,
-    .liuyao-mobile-result-page,
-    .liuyao-mobile-ai-page {
+    .divination-result-grid-closed,
+    .divination-result-grid-open,
+    .divination-result-divider,
+    .divination-ai-pane,
+    .divination-mobile-result-page,
+    .divination-mobile-ai-page {
       transition-duration: 1ms;
     }
   }
 
-  .liuyao-ai-markdown {
+  .divination-ai-markdown {
     white-space: normal;
   }
 
-  .liuyao-ai-markdown > :first-child,
-  .liuyao-ai-markdown > div > :first-child {
+  .divination-ai-markdown > :first-child,
+  .divination-ai-markdown > div > :first-child {
     margin-top: 0;
   }
 
-  .liuyao-ai-markdown > :last-child,
-  .liuyao-ai-markdown > div > :last-child {
+  .divination-ai-markdown > :last-child,
+  .divination-ai-markdown > div > :last-child {
     margin-bottom: 0;
   }
 
-  .liuyao-ai-markdown p {
+  .divination-ai-markdown p {
     margin: 0.45rem 0;
   }
 
-  .liuyao-ai-markdown h1,
-  .liuyao-ai-markdown h2,
-  .liuyao-ai-markdown h3,
-  .liuyao-ai-markdown h4 {
+  .divination-ai-markdown h1,
+  .divination-ai-markdown h2,
+  .divination-ai-markdown h3,
+  .divination-ai-markdown h4 {
     margin: 0.75rem 0 0.35rem;
     font-size: 0.95rem;
     font-weight: 600;
     line-height: 1.3;
   }
 
-  .liuyao-ai-markdown h1 {
+  .divination-ai-markdown h1 {
     font-size: 1rem;
   }
 
-  .liuyao-ai-markdown ul,
-  .liuyao-ai-markdown ol {
+  .divination-ai-markdown ul,
+  .divination-ai-markdown ol {
     margin: 0.45rem 0;
     padding-left: 1.25rem;
   }
 
-  .liuyao-ai-markdown li {
+  .divination-ai-markdown li {
     margin: 0.2rem 0;
   }
 
-  .liuyao-ai-markdown blockquote {
+  .divination-ai-markdown blockquote {
     margin: 0.5rem 0;
     border-left: 2px solid var(--border);
     padding-left: 0.75rem;
     color: var(--muted-foreground);
   }
 
-  .liuyao-ai-markdown a {
+  .divination-ai-markdown a {
     color: inherit;
     text-decoration: underline;
     text-underline-offset: 3px;
   }
 
-  .liuyao-ai-markdown code {
+  .divination-ai-markdown code {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--background);
@@ -285,7 +285,7 @@ body {
     font-size: 0.85em;
   }
 
-  .liuyao-ai-markdown pre {
+  .divination-ai-markdown pre {
     margin: 0.5rem 0;
     overflow-x: auto;
     border: 1px solid var(--border);
@@ -295,13 +295,13 @@ body {
     white-space: pre;
   }
 
-  .liuyao-ai-markdown pre code {
+  .divination-ai-markdown pre code {
     border: 0;
     background: transparent;
     padding: 0;
   }
 
-  .liuyao-ai-markdown table {
+  .divination-ai-markdown table {
     display: block;
     max-width: 100%;
     margin: 0.5rem 0;
@@ -309,15 +309,15 @@ body {
     border-collapse: collapse;
   }
 
-  .liuyao-ai-markdown th,
-  .liuyao-ai-markdown td {
+  .divination-ai-markdown th,
+  .divination-ai-markdown td {
     border: 1px solid var(--border);
     padding: 0.25rem 0.4rem;
     text-align: left;
     vertical-align: top;
   }
 
-  .liuyao-ai-markdown hr {
+  .divination-ai-markdown hr {
     margin: 0.75rem 0;
     border: 0;
     border-top: 1px solid var(--border);
@@ -325,36 +325,36 @@ body {
 }
 
 @supports (view-transition-name: none) {
-  .liuyao-transition-content {
-    view-transition-name: liuyao-content;
+  .divination-transition-content {
+    view-transition-name: divination-content;
   }
 
-  html[data-liuyao-transition="active"]::view-transition-group(root),
-  html[data-liuyao-transition="active"]::view-transition-old(root) {
+  html[data-divination-transition="active"]::view-transition-group(root),
+  html[data-divination-transition="active"]::view-transition-old(root) {
     animation: none;
   }
 
-  html[data-liuyao-transition="active"]::view-transition-new(root) {
+  html[data-divination-transition="active"]::view-transition-new(root) {
     animation: none;
   }
 
-  html[data-liuyao-transition="active"]::view-transition-old(liuyao-content) {
-    animation: liuyao-view-out 180ms ease both;
+  html[data-divination-transition="active"]::view-transition-old(divination-content) {
+    animation: divination-view-out 180ms ease both;
   }
 
-  html[data-liuyao-transition="active"]::view-transition-new(liuyao-content) {
-    animation: liuyao-view-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  html[data-divination-transition="active"]::view-transition-new(divination-content) {
+    animation: divination-view-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    html[data-liuyao-transition="active"]::view-transition-old(liuyao-content),
-    html[data-liuyao-transition="active"]::view-transition-new(liuyao-content) {
+    html[data-divination-transition="active"]::view-transition-old(divination-content),
+    html[data-divination-transition="active"]::view-transition-new(divination-content) {
       animation-duration: 1ms;
     }
   }
 }
 
-@keyframes liuyao-view-in {
+@keyframes divination-view-in {
   from {
     opacity: 0;
     transform: translateY(14px) scale(0.99);
@@ -366,7 +366,7 @@ body {
   }
 }
 
-@keyframes liuyao-view-out {
+@keyframes divination-view-out {
   from {
     opacity: 1;
     transform: translateY(0) scale(1);
