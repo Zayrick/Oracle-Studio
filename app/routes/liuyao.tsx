@@ -491,66 +491,6 @@ export default function Liuyao() {
   const onlineRollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aiHistoryRef = useRef(aiHistory);
 
-  useEffect(() => {
-    return () => {
-      if (onlineRollingTimeoutRef.current) {
-        clearTimeout(onlineRollingTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    aiHistoryRef.current = aiHistory;
-  }, [aiHistory]);
-
-  useEffect(() => {
-    if (!historyId) {
-      if (activeHistoryId) {
-        clearOnlineRollingTimeout();
-        onlineRollingRef.current = false;
-        runDivinationViewTransition(() => {
-          resetCopyStatus();
-          setResult(null);
-          setActiveHistoryId(null);
-          setAiHistory(createEmptyLiuyaoAIHistoryState());
-          setAiPanelOpen(false);
-          setError("");
-          setOnlineRolling(false);
-        });
-      }
-      return;
-    }
-
-    if (historyId === activeHistoryId) {
-      return;
-    }
-
-    const record = getLiuyaoHistoryRecord(historyId);
-
-    if (!record) {
-      clearOnlineRollingTimeout();
-      onlineRollingRef.current = false;
-      runDivinationViewTransition(() => {
-        resetCopyStatus();
-        setResult(null);
-        setActiveHistoryId(null);
-        setAiHistory(createEmptyLiuyaoAIHistoryState());
-        setAiPanelOpen(false);
-        setError("历史记录不存在或已删除。");
-        setOnlineRolling(false);
-      });
-      return;
-    }
-
-    handleRestoreHistoryRecord(record);
-  }, [historyId]);
-
-  const handleSetNow = () => {
-    const now = new Date();
-    setDate(now);
-    setTime(format(now, "HH:mm"));
-  };
-
   const clearOnlineRollingTimeout = () => {
     if (onlineRollingTimeoutRef.current) {
       clearTimeout(onlineRollingTimeoutRef.current);
@@ -567,6 +507,72 @@ export default function Liuyao() {
     setOnlineLastCoinScore(null);
     setYaos(createDefaultLiuyaoYaos());
     setManualYaoSelections(createManualYaoSelectionState(false));
+  };
+
+  const resetFormState = () => {
+    const now = new Date();
+
+    setQuestion("");
+    setDate(now);
+    setTime(format(now, "HH:mm"));
+    setCastingMethod("manual");
+    resetOnlineCastingState();
+  };
+
+  useEffect(() => {
+    return () => {
+      if (onlineRollingTimeoutRef.current) {
+        clearTimeout(onlineRollingTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    aiHistoryRef.current = aiHistory;
+  }, [aiHistory]);
+
+  useEffect(() => {
+    if (!historyId) {
+      if (activeHistoryId) {
+        runDivinationViewTransition(() => {
+          resetCopyStatus();
+          resetFormState();
+          setResult(null);
+          setActiveHistoryId(null);
+          setAiHistory(createEmptyLiuyaoAIHistoryState());
+          setAiPanelOpen(false);
+          setError("");
+        });
+      }
+      return;
+    }
+
+    if (historyId === activeHistoryId) {
+      return;
+    }
+
+    const record = getLiuyaoHistoryRecord(historyId);
+
+    if (!record) {
+      runDivinationViewTransition(() => {
+        resetCopyStatus();
+        resetFormState();
+        setResult(null);
+        setActiveHistoryId(null);
+        setAiHistory(createEmptyLiuyaoAIHistoryState());
+        setAiPanelOpen(false);
+        setError("历史记录不存在或已删除。");
+      });
+      return;
+    }
+
+    handleRestoreHistoryRecord(record);
+  }, [historyId]);
+
+  const handleSetNow = () => {
+    const now = new Date();
+    setDate(now);
+    setTime(format(now, "HH:mm"));
   };
 
   const handleCastingMethodChange = (value: LiuyaoCastingMethod) => {
@@ -727,14 +733,12 @@ export default function Liuyao() {
   const handleStartOver = () => {
     runDivinationViewTransition(() => {
       resetCopyStatus();
+      resetFormState();
       setResult(null);
       setActiveHistoryId(null);
       setAiHistory(createEmptyLiuyaoAIHistoryState());
       setAiPanelOpen(false);
       setError("");
-      if (castingMethod === "online") {
-        resetOnlineCastingState();
-      }
     });
     navigate("/liuyao", { replace: true });
   };

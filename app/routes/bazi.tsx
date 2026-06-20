@@ -79,10 +79,22 @@ export default function Bazi() {
   const [paipan, setPaipan] = useState<BaziPaipan | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
 
+  const resetFormState = () => {
+    const now = new Date();
+
+    setName("");
+    setGender("");
+    setDate(now);
+    setTime(format(now, "HH:mm"));
+    setGenderError("");
+    setCalculationError("");
+  };
+
   const handleBackToForm = () => {
+    resetFormState();
+    setIsCalculating(false);
     setPaipan(null);
     setAiPanelOpen(false);
-    setCalculationError("");
   };
 
   const handleSetNow = () => {
