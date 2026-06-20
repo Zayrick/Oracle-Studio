@@ -73,10 +73,10 @@ const AI_CHAT_LAYOUT = {
     title: "px-4 py-2 text-sm",
   },
   mobile: {
-    header: "px-0 pt-2",
+    header: "px-1 pt-2",
     scrollContent: "px-0 pb-[calc(var(--mobile-dock-height)+5rem)] pt-14",
     messageList: "",
-    composer: "bottom-[var(--mobile-dock-height)] py-3",
+    composer: "bottom-[var(--mobile-dock-height)] px-1 py-3",
     title: "px-3 py-2 text-xs text-muted-foreground",
   },
 } satisfies Record<
@@ -263,13 +263,15 @@ function AIChatHeader<Message extends AIChatMessage>({
   return (
     <header className={cn("pointer-events-none absolute inset-x-0 top-0 z-10", className)}>
       <div className="flex w-full items-center gap-2">
-        <div
-          className={cn(
-            "divination-ai-frosted-surface pointer-events-auto min-w-0 flex-1 rounded-full ring-1 ring-border/60",
-            titleClassName
-          )}
-        >
-          <div className="truncate text-center font-medium">{title}</div>
+        <div className="min-w-0 flex-1">
+          <div
+            className={cn(
+              "divination-ai-frosted-surface pointer-events-auto inline-flex max-w-full rounded-full ring-1 ring-border/60",
+              titleClassName
+            )}
+          >
+            <div className="truncate text-left font-medium">{title}</div>
+          </div>
         </div>
 
         <div className="pointer-events-auto flex shrink-0 items-center gap-2">
