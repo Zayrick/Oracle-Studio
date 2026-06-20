@@ -219,7 +219,7 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
         aria-label="询问AI消息"
         tabIndex={tabIndex}
       >
-        <div className={cn("flex min-h-full flex-col justify-end gap-3", mobile ? "px-0 pb-24 pt-14" : "px-5 pb-28 pt-20")}>
+        <div className={cn("flex min-h-full flex-col justify-end gap-3", mobile ? "px-0 pb-[calc(env(safe-area-inset-bottom)+10rem)] pt-14" : "px-5 pb-28 pt-20")}>
           {messages.map((item) => (
             <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
               <div className={getAIChatMessageClass(item)}>
@@ -236,8 +236,10 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
 
       <form
         className={cn(
-          "divination-ai-glass-bar absolute inset-x-0 bottom-0 z-10 border-t",
-          mobile ? "py-3" : "px-5 pb-5 pt-3"
+          "divination-ai-glass-bar absolute inset-x-0 z-10 border-t",
+          mobile
+            ? "bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] py-3"
+            : "bottom-0 px-5 pb-5 pt-3"
         )}
         onSubmit={onSubmit}
       >

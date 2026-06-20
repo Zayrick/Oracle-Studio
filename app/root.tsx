@@ -9,6 +9,7 @@ import {
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import { MobileDockNav } from "./components/mobile-dock-nav";
 import { SidebarNav } from "./components/sidebar-nav";
 
 export const links: Route.LinksFunction = () => [
@@ -46,9 +47,10 @@ export default function App() {
   return (
     <div className="min-h-svh bg-background">
       <SidebarNav />
-      <main className="min-h-svh md:pl-[224px]">
+      <main className="min-h-svh pb-[calc(env(safe-area-inset-bottom)+5rem)] md:pb-0 md:pl-[224px]">
         <Outlet />
       </main>
+      <MobileDockNav />
     </div>
   );
 }
@@ -72,7 +74,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   return (
     <div className="min-h-svh bg-background">
       <SidebarNav />
-      <main className="min-h-svh md:pl-[224px]">
+      <main className="min-h-svh pb-[calc(env(safe-area-inset-bottom)+5rem)] md:pb-0 md:pl-[224px]">
         <div className="container mx-auto p-4">
           <h1>{message}</h1>
           <p>{details}</p>
@@ -83,6 +85,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           )}
         </div>
       </main>
+      <MobileDockNav />
     </div>
   );
 }

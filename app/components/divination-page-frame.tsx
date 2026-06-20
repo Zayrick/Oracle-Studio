@@ -122,7 +122,7 @@ export function DivinationPageFrame({
           >
             <div
               className={cn(
-                "divination-mobile-result-page min-w-0 max-lg:absolute max-lg:inset-0 max-lg:overflow-y-auto max-lg:pb-6 lg:flex lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-8 lg:py-8",
+                "divination-mobile-result-page min-w-0 max-lg:absolute max-lg:inset-0 max-lg:overflow-y-auto max-lg:pb-[calc(env(safe-area-inset-bottom)+6rem)] lg:flex lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-8 lg:py-8",
                 aiOpen ? "divination-mobile-result-page-open" : "divination-mobile-result-page-closed",
                 !aiOpen && "lg:w-full",
                 result.pageClassName

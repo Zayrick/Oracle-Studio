@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import type { Route } from "./+types/home";
-import { Button } from "../components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -21,13 +22,15 @@ export default function Home() {
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] gap-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
           {divinations.map((item) => (
-            <Link key={item.path} to={item.path}>
-              <Button
-                variant="outline"
-                className="w-full h-32 text-2xl font-semibold hover:bg-gray-50 transition-colors"
-              >
-                {item.name}
-              </Button>
+            <Link
+              key={item.path}
+              to={item.path}
+              className={cn(
+                buttonVariants({ variant: "outline" }),
+                "h-32 w-full text-2xl font-semibold transition-colors"
+              )}
+            >
+              {item.name}
             </Link>
           ))}
         </div>
