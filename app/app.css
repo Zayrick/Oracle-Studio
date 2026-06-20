@@ -119,6 +119,13 @@ body {
   }
 }
 
+@media (max-width: 767.98px) {
+  html[data-mobile-keyboard-open] {
+    --mobile-dock-height: 0px;
+    --mobile-dock-page-offset: 0px;
+  }
+}
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
