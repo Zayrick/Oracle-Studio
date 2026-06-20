@@ -175,11 +175,16 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
   return (
     <div
       className={cn(
-        "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden",
+        "relative h-full min-h-0 overflow-hidden",
         mobile && "flex-1"
       )}
     >
-      <div className={cn("flex items-center justify-between gap-2", mobile ? "border-b px-0 py-2" : "px-5 pb-2 pt-5")}>
+      <div
+        className={cn(
+          "divination-ai-glass-bar absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 border-b",
+          mobile ? "px-0 py-2" : "px-5 py-4"
+        )}
+      >
         <div className={cn("min-w-0 flex-1 truncate font-medium", mobile ? "text-xs text-muted-foreground" : "text-sm")}>
           {title}
         </div>
@@ -214,7 +219,7 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
         aria-label="询问AI消息"
         tabIndex={tabIndex}
       >
-        <div className={cn("flex min-h-full flex-col justify-end gap-3 py-4", mobile ? "px-0" : "px-5")}>
+        <div className={cn("flex min-h-full flex-col justify-end gap-3", mobile ? "px-0 pb-24 pt-14" : "px-5 pb-28 pt-20")}>
           {messages.map((item) => (
             <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
               <div className={getAIChatMessageClass(item)}>
@@ -229,7 +234,13 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
         </div>
       </div>
 
-      <form className={cn(mobile ? "border-t py-3" : "px-5 pb-5 pt-3")} onSubmit={onSubmit}>
+      <form
+        className={cn(
+          "divination-ai-glass-bar absolute inset-x-0 bottom-0 z-10 border-t",
+          mobile ? "py-3" : "px-5 pb-5 pt-3"
+        )}
+        onSubmit={onSubmit}
+      >
         <FieldGroup className="gap-0">
           <Field orientation="horizontal" className="items-center gap-2">
             <FieldLabel htmlFor={messageInputId} className="sr-only">追问内容</FieldLabel>

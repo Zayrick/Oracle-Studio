@@ -235,6 +235,14 @@ body {
     display: none;
   }
 
+  .divination-ai-glass-bar {
+    border-color: color-mix(in oklch, var(--border) 70%, transparent);
+    background: color-mix(in oklch, var(--background) 74%, transparent);
+    box-shadow: 0 1px 0 color-mix(in oklch, var(--background) 42%, transparent) inset;
+    -webkit-backdrop-filter: blur(18px) saturate(1.35);
+    backdrop-filter: blur(18px) saturate(1.35);
+  }
+
   .divination-ai-markdown > :first-child,
   .divination-ai-markdown > div > :first-child {
     margin-top: 0;
