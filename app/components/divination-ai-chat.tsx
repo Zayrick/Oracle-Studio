@@ -125,7 +125,7 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
   title: string;
   variant: "desktop" | "mobile";
 }) {
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
   const mobile = variant === "mobile";
   const messageInputId = mobile ? "divination-ai-message-mobile" : "divination-ai-message-desktop";
@@ -136,7 +136,7 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
       return;
     }
 
-    const viewport = getScrollAreaViewport(scrollAreaRef.current);
+    const viewport = scrollContainerRef.current;
 
     if (!viewport) {
       return;
@@ -160,7 +160,7 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
     }
 
     const frameId = window.requestAnimationFrame(() => {
-      const viewport = getScrollAreaViewport(scrollAreaRef.current);
+      const viewport = scrollContainerRef.current;
 
       if (viewport) {
         viewport.scrollTop = viewport.scrollHeight;
@@ -207,22 +207,26 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
         </Button>
       </div>
 
-      <div ref={scrollAreaRef} className="h-full min-h-0">
-        <ScrollArea className="h-full min-h-0" aria-live="polite" aria-label="询问AI消息">
-          <div className={cn("flex min-h-full flex-col justify-end gap-3 py-4", mobile ? "px-0" : "px-5")}>
-            {messages.map((item) => (
-              <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
-                <div className={getAIChatMessageClass(item)}>
-                  <AIChatMessageContent
-                    message={item}
-                    pendingLabel={pendingLabel}
-                    renderMarkdown={renderMarkdown}
-                  />
-                </div>
+      <div
+        ref={scrollContainerRef}
+        className="divination-ai-chat-scroll h-full min-h-0 overflow-y-auto overscroll-contain"
+        aria-live="polite"
+        aria-label="询问AI消息"
+        tabIndex={tabIndex}
+      >
+        <div className={cn("flex min-h-full flex-col justify-end gap-3 py-4", mobile ? "px-0" : "px-5")}>
+          {messages.map((item) => (
+            <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
+              <div className={getAIChatMessageClass(item)}>
+                <AIChatMessageContent
+                  message={item}
+                  pendingLabel={pendingLabel}
+                  renderMarkdown={renderMarkdown}
+                />
               </div>
-            ))}
-          </div>
-        </ScrollArea>
+            </div>
+          ))}
+        </div>
       </div>
 
       <form className={cn(mobile ? "border-t py-3" : "px-5 pb-5 pt-3")} onSubmit={onSubmit}>
@@ -390,10 +394,6 @@ function formatHistoryDateTime(value: string) {
   }
 
   return format(date, "yyyy-MM-dd HH:mm");
-}
-
-function getScrollAreaViewport(root: HTMLDivElement | null) {
-  return root?.querySelector<HTMLElement>("[data-slot='scroll-area-viewport']") ?? null;
 }
 
 function isScrolledNearBottom(element: HTMLElement) {

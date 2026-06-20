@@ -226,6 +226,15 @@ body {
     white-space: normal;
   }
 
+  .divination-ai-chat-scroll {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .divination-ai-chat-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
   .divination-ai-markdown > :first-child,
   .divination-ai-markdown > div > :first-child {
     margin-top: 0;
