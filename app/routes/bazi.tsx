@@ -15,7 +15,6 @@ import {
   appendAIChatEventToMessage,
   buildAIChatRequestMessages,
   createAIChatSessionId,
-  encodeBase64Json,
   readAIErrorMessage,
   type AIChatMessage,
 } from "@/features/ai/chat";
@@ -351,12 +350,10 @@ function BaziAIPanel({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          payload: encodeBase64Json({
-            systemPrompt: formatBaziAISystemPrompt(paipan),
-            chart: paipan,
-            sessionId: sessionIdRef.current,
-            messages: requestMessages,
-          }),
+          systemPrompt: formatBaziAISystemPrompt(paipan),
+          chart: paipan,
+          sessionId: sessionIdRef.current,
+          messages: requestMessages,
         }),
         signal: abortController.signal,
       });

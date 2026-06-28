@@ -12,11 +12,6 @@ import { cloudflareContext } from "@/lib/cloudflare-context";
 const OPENROUTER_CHAT_COMPLETIONS_URL = "https://us.oxio.uno/fetch/openrouter.ai/api/v1/chat/completions";
 const DEFAULT_LIUYAO_OPENROUTER_MODEL = "deepseek/deepseek-chat-v3.1";
 const DEFAULT_LIUYAO_OPENROUTER_APP_NAME = "Oracle Studio";
-const MAX_BASE64_PAYLOAD_LENGTH = 240_000;
-const MAX_OPENROUTER_ERROR_LENGTH = 2_000;
-const MAX_LIUYAO_SESSION_ID_LENGTH = 256;
-const MAX_LIUYAO_CONTEXT_MESSAGES = 12;
-const MAX_LIUYAO_MESSAGE_CONTENT_LENGTH = 4_000;
 
 type LiuyaoAIEnv = Env & {
   liuyao_OPENROUTER_API_KEY?: string;
@@ -26,11 +21,7 @@ type LiuyaoAIEnv = Env & {
   liuyao_OPENROUTER_REASONING_EFFORT?: string;
 };
 
-type LiuyaoAIClientRequest = {
-  payload: string;
-};
-
-type LiuyaoAIDecodedPayload = {
+type LiuyaoAIPayload = {
   systemPrompt: string;
   sessionId: string;
   messages: LiuyaoAIMessage[];
@@ -74,12 +65,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     return jsonError(clientPayload.error, 400);
   }
 
-  const decodedPayload = decodeLiuyaoPayload(clientPayload.value.payload);
-
-  if (!decodedPayload.ok) {
-    return jsonError(decodedPayload.error, 400);
-  }
-
   const openRouterResponse = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
@@ -89,11 +74,11 @@ export async function action({ request, context }: Route.ActionArgs) {
       "HTTP-Referer": new URL(request.url).origin,
       "X-Title": env.liuyao_OPENROUTER_APP_NAME || DEFAULT_LIUYAO_OPENROUTER_APP_NAME,
     },
-    body: JSON.stringify(buildOpenRouterRequestBody(env, decodedPayload.value)),
+    body: JSON.stringify(buildOpenRouterRequestBody(env, clientPayload.value)),
   });
 
   if (!openRouterResponse.ok) {
-    const upstreamError = await readBoundedText(openRouterResponse.body);
+    const upstreamError = await readText(openRouterResponse.body);
     return jsonError(formatUpstreamError(openRouterResponse.status, upstreamError), 502);
   }
 
@@ -110,7 +95,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   });
 }
 
-function buildOpenRouterRequestBody(env: LiuyaoAIEnv, payload: LiuyaoAIDecodedPayload) {
+function buildOpenRouterRequestBody(env: LiuyaoAIEnv, payload: LiuyaoAIPayload) {
   const providerSort = env.liuyao_OPENROUTER_PROVIDER_SORT?.trim();
   const reasoningEffort = env.liuyao_OPENROUTER_REASONING_EFFORT?.trim();
 
@@ -141,42 +126,16 @@ async function readClientPayload(request: Request) {
     return { ok: false, error: "请求体不是有效 JSON。" } as const;
   }
 
-  if (!isRecord(body) || typeof body.payload !== "string") {
-    return { ok: false, error: "请求体缺少 payload。" } as const;
+  if (!isRecord(body)) {
+    return { ok: false, error: "请求体内容不合法。" } as const;
   }
 
-  if (body.payload.length === 0 || body.payload.length > MAX_BASE64_PAYLOAD_LENGTH) {
-    return { ok: false, error: "payload 长度不合法。" } as const;
-  }
-
-  return { ok: true, value: body as LiuyaoAIClientRequest } as const;
-}
-
-function decodeLiuyaoPayload(payload: string) {
-  let decoded: unknown;
-
-  try {
-    const binary = atob(payload);
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    decoded = JSON.parse(new TextDecoder().decode(bytes));
-  } catch {
-    return { ok: false, error: "payload 解码失败。" } as const;
-  }
-
-  if (!isRecord(decoded)) {
-    return { ok: false, error: "payload 内容不合法。" } as const;
-  }
-
-  const systemPrompt = typeof decoded.systemPrompt === "string" ? decoded.systemPrompt.trim() : "";
-  const sessionId = typeof decoded.sessionId === "string" ? decoded.sessionId.trim() : "";
-  const messages = Array.isArray(decoded.messages) ? normalizeLiuyaoAIMessages(decoded.messages) : [];
+  const systemPrompt = typeof body.systemPrompt === "string" ? body.systemPrompt : "";
+  const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+  const messages = Array.isArray(body.messages) ? normalizeLiuyaoAIMessages(body.messages) : [];
 
   if (!systemPrompt || !sessionId || messages.length === 0) {
-    return { ok: false, error: "payload 缺少必要提示词。" } as const;
-  }
-
-  if (sessionId.length > MAX_LIUYAO_SESSION_ID_LENGTH) {
-    return { ok: false, error: "sessionId 长度不合法。" } as const;
+    return { ok: false, error: "请求体缺少必要提示词。" } as const;
   }
 
   if (messages[messages.length - 1]?.role !== "user") {
@@ -185,20 +144,19 @@ function decodeLiuyaoPayload(payload: string) {
 
   return {
     ok: true,
-    value: { systemPrompt, sessionId, messages } satisfies LiuyaoAIDecodedPayload,
+    value: { systemPrompt, sessionId, messages } satisfies LiuyaoAIPayload,
   } as const;
 }
 
 function normalizeLiuyaoAIMessages(messages: unknown[]) {
   return messages
-    .slice(-MAX_LIUYAO_CONTEXT_MESSAGES)
     .flatMap((message): LiuyaoAIMessage[] => {
       if (!isRecord(message)) {
         return [];
       }
 
       const role = message.role;
-      const content = typeof message.content === "string" ? message.content.trim() : "";
+      const content = typeof message.content === "string" ? message.content : "";
 
       if ((role !== "user" && role !== "assistant") || !content) {
         return [];
@@ -207,7 +165,7 @@ function normalizeLiuyaoAIMessages(messages: unknown[]) {
       return [
         {
           role,
-          content: content.slice(0, MAX_LIUYAO_MESSAGE_CONTENT_LENGTH),
+          content,
         },
       ];
     });
@@ -288,7 +246,7 @@ function emitOpenRouterSseLine(
   }
 }
 
-async function readBoundedText(body: ReadableStream<Uint8Array> | null) {
+async function readText(body: ReadableStream<Uint8Array> | null) {
   if (!body) {
     return "";
   }
@@ -298,7 +256,7 @@ async function readBoundedText(body: ReadableStream<Uint8Array> | null) {
   let text = "";
 
   try {
-    while (text.length < MAX_OPENROUTER_ERROR_LENGTH) {
+    while (true) {
       const { done, value } = await reader.read();
 
       if (done) {
@@ -314,7 +272,7 @@ async function readBoundedText(body: ReadableStream<Uint8Array> | null) {
     reader.releaseLock();
   }
 
-  return text.slice(0, MAX_OPENROUTER_ERROR_LENGTH);
+  return text;
 }
 
 function formatUpstreamError(status: number, errorText: string) {

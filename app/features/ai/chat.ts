@@ -62,14 +62,10 @@ export function markStreamingAIChatMessagesStopped<Message extends AIChatMessage
 
 export function buildAIChatRequestMessages<Message extends AIChatMessage>(
   messages: Message[],
-  currentContent: string,
-  options: {
-    maxContextMessages?: number;
-    maxContentLength?: number;
-  } = {}
+  currentContent: string
 ) {
   const history = messages.flatMap((item): AIChatRequestMessage[] => {
-    const content = (item.content || getAIMessageTextFromParts(item.parts)).trim();
+    const content = item.content || getAIMessageTextFromParts(item.parts);
 
     if (!content || (item.role === "assistant" && item.status === "error")) {
       return [];
@@ -78,34 +74,18 @@ export function buildAIChatRequestMessages<Message extends AIChatMessage>(
     return [
       {
         role: item.role,
-        content: clampAIChatContent(content, options.maxContentLength),
+        content,
       },
     ];
   });
 
-  const contextHistory = options.maxContextMessages
-    ? history.slice(-(options.maxContextMessages - 1))
-    : history;
-
   return [
-    ...contextHistory,
+    ...history,
     {
       role: "user" as const,
-      content: clampAIChatContent(currentContent, options.maxContentLength),
+      content: currentContent,
     },
   ];
-}
-
-export function encodeBase64Json(value: unknown) {
-  const bytes = new TextEncoder().encode(JSON.stringify(value));
-  let binary = "";
-  const chunkSize = 0x8000;
-
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-  }
-
-  return btoa(binary);
 }
 
 export async function readAIErrorMessage(response: Response, fallback: string) {
@@ -120,10 +100,6 @@ export async function readAIErrorMessage(response: Response, fallback: string) {
   }
 
   return fallback;
-}
-
-function clampAIChatContent(content: string, maxContentLength: number | undefined) {
-  return maxContentLength ? content.slice(0, maxContentLength) : content;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

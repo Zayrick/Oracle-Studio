@@ -39,7 +39,6 @@ import {
 import {
   appendAIChatEventToMessage,
   buildAIChatRequestMessages,
-  encodeBase64Json,
   getNextAIChatMessageId,
   markStreamingAIChatMessagesStopped,
   readAIErrorMessage,
@@ -84,8 +83,6 @@ type CopyBranchBasis = "yearBranch" | "dayBranch";
 type CopyTargetToken = { type: "stem" | "branch"; name: string };
 type CopyStatus = "idle" | "copied" | "error";
 const LIUYAO_AI_ENDPOINT = "/api/liuyao/ai";
-const MAX_LIUYAO_AI_CONTEXT_MESSAGES = 12;
-const MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH = 4_000;
 const MARKDOWN_ZERO_WIDTH_PREFIX_PATTERN = /^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/;
 const LIUYAO_CASTING_METHOD_ITEMS = [
   { label: "手动指定", value: "manual" },
@@ -1316,10 +1313,7 @@ function AIDivinationPanel({
 
     const userMessageId = nextMessageIdRef.current++;
     const assistantMessageId = nextMessageIdRef.current++;
-    const requestMessages = buildAIChatRequestMessages(messagesRef.current, content, {
-      maxContextMessages: MAX_LIUYAO_AI_CONTEXT_MESSAGES,
-      maxContentLength: MAX_LIUYAO_AI_MESSAGE_CONTENT_LENGTH,
-    });
+    const requestMessages = buildAIChatRequestMessages(messagesRef.current, content);
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
 
@@ -1352,11 +1346,9 @@ function AIDivinationPanel({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          payload: encodeBase64Json({
-            systemPrompt: formatLiuyaoCopyMarkdown(result),
-            sessionId,
-            messages: requestMessages,
-          }),
+          systemPrompt: formatLiuyaoCopyMarkdown(result),
+          sessionId,
+          messages: requestMessages,
         }),
         signal: abortController.signal,
       });

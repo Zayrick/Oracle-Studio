@@ -16,8 +16,6 @@ import { cloudflareContext } from "@/lib/cloudflare-context";
 const OPENROUTER_CHAT_COMPLETIONS_URL = "https://us.oxio.uno/fetch/openrouter.ai/api/v1/chat/completions";
 const DEFAULT_BAZI_OPENROUTER_MODEL = "deepseek/deepseek-chat-v3.1";
 const DEFAULT_BAZI_OPENROUTER_APP_NAME = "Oracle Studio";
-const MAX_OPENROUTER_ERROR_LENGTH = 2_000;
-const MAX_BAZI_AGENT_ITERATIONS = 8;
 
 type BaziAIEnv = Env & {
   bazi_OPENROUTER_API_KEY?: string;
@@ -27,11 +25,7 @@ type BaziAIEnv = Env & {
   bazi_OPENROUTER_REASONING_EFFORT?: string;
 };
 
-type BaziAIClientRequest = {
-  payload: string;
-};
-
-type BaziAIDecodedPayload = {
+type BaziAIPayload = {
   systemPrompt: string;
   sessionId: string;
   messages: BaziAIMessage[];
@@ -99,12 +93,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     return jsonError(clientPayload.error, 400);
   }
 
-  const decodedPayload = decodeBaziPayload(clientPayload.value.payload);
-
-  if (!decodedPayload.ok) {
-    return jsonError(decodedPayload.error, 400);
-  }
-
   const { BAZI_AI_TOOL_DEFINITIONS, executeBaziAITool } = await import("@/features/bazi/ai-tools");
 
   return new Response(
@@ -112,7 +100,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       apiKey,
       env,
       origin: new URL(request.url).origin,
-      payload: decodedPayload.value,
+      payload: clientPayload.value,
       toolDefinitions: BAZI_AI_TOOL_DEFINITIONS,
       executeTool: executeBaziAITool,
     }),
@@ -130,7 +118,7 @@ function streamBaziAgent(args: {
   apiKey: string;
   env: BaziAIEnv;
   origin: string;
-  payload: BaziAIDecodedPayload;
+  payload: BaziAIPayload;
   toolDefinitions: readonly OpenRouterToolDefinition[];
   executeTool: (name: string, args: Record<string, unknown>, chart: BaziPaipan) => string;
 }) {
@@ -179,7 +167,7 @@ async function runBaziAgent({
   apiKey: string;
   env: BaziAIEnv;
   origin: string;
-  payload: BaziAIDecodedPayload;
+  payload: BaziAIPayload;
   toolDefinitions: readonly OpenRouterToolDefinition[];
   executeTool: (name: string, args: Record<string, unknown>, chart: BaziPaipan) => string;
   controller: ReadableStreamDefaultController<Uint8Array>;
@@ -191,7 +179,7 @@ async function runBaziAgent({
     ...payload.messages,
   ];
 
-  for (let iteration = 0; iteration < MAX_BAZI_AGENT_ITERATIONS; iteration += 1) {
+  while (true) {
     const openRouterResponse = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
       method: "POST",
       headers: {
@@ -206,7 +194,7 @@ async function runBaziAgent({
     });
 
     if (!openRouterResponse.ok) {
-      const upstreamError = await readBoundedText(openRouterResponse.body);
+      const upstreamError = await readText(openRouterResponse.body);
       throw new Error(formatUpstreamError(openRouterResponse.status, upstreamError));
     }
 
@@ -272,8 +260,6 @@ async function runBaziAgent({
       });
     }
   }
-
-  throw new Error("AI 工具调用轮次过多，已停止以避免无限循环。");
 }
 
 async function streamOpenRouterAssistantMessage(
@@ -393,7 +379,7 @@ function handleOpenRouterSseLine(
 
 function buildOpenRouterRequestBody(
   env: BaziAIEnv,
-  payload: BaziAIDecodedPayload,
+  payload: BaziAIPayload,
   messages: OpenRouterMessage[],
   toolDefinitions: readonly OpenRouterToolDefinition[]
 ) {
@@ -430,35 +416,17 @@ async function readClientPayload(request: Request) {
     return { ok: false, error: "请求体不是有效 JSON。" } as const;
   }
 
-  if (!isRecord(body) || typeof body.payload !== "string") {
-    return { ok: false, error: "请求体缺少 payload。" } as const;
+  if (!isRecord(body)) {
+    return { ok: false, error: "请求体内容不合法。" } as const;
   }
 
-  return { ok: true, value: body as BaziAIClientRequest } as const;
-}
-
-function decodeBaziPayload(payload: string) {
-  let decoded: unknown;
-
-  try {
-    const binary = atob(payload);
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    decoded = JSON.parse(new TextDecoder().decode(bytes));
-  } catch {
-    return { ok: false, error: "payload 解码失败。" } as const;
-  }
-
-  if (!isRecord(decoded)) {
-    return { ok: false, error: "payload 内容不合法。" } as const;
-  }
-
-  const systemPrompt = typeof decoded.systemPrompt === "string" ? decoded.systemPrompt.trim() : "";
-  const sessionId = typeof decoded.sessionId === "string" ? decoded.sessionId.trim() : "";
-  const messages = Array.isArray(decoded.messages) ? normalizeBaziAIMessages(decoded.messages) : [];
-  const chart = decoded.chart;
+  const systemPrompt = typeof body.systemPrompt === "string" ? body.systemPrompt : "";
+  const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+  const messages = Array.isArray(body.messages) ? normalizeBaziAIMessages(body.messages) : [];
+  const chart = body.chart;
 
   if (!systemPrompt || !sessionId || messages.length === 0 || !isBaziPaipanPayload(chart)) {
-    return { ok: false, error: "payload 缺少必要八字提示词。" } as const;
+    return { ok: false, error: "请求体缺少必要八字提示词。" } as const;
   }
 
   if (messages[messages.length - 1]?.role !== "user") {
@@ -467,7 +435,7 @@ function decodeBaziPayload(payload: string) {
 
   return {
     ok: true,
-    value: { systemPrompt, sessionId, messages, chart } satisfies BaziAIDecodedPayload,
+    value: { systemPrompt, sessionId, messages, chart } satisfies BaziAIPayload,
   } as const;
 }
 
@@ -479,7 +447,7 @@ function normalizeBaziAIMessages(messages: unknown[]) {
       }
 
       const role = message.role;
-      const content = typeof message.content === "string" ? message.content.trim() : "";
+      const content = typeof message.content === "string" ? message.content : "";
 
       if ((role !== "user" && role !== "assistant") || !content) {
         return [];
@@ -504,7 +472,7 @@ function parseToolArguments(value: string) {
   }
 }
 
-async function readBoundedText(body: ReadableStream<Uint8Array> | null) {
+async function readText(body: ReadableStream<Uint8Array> | null) {
   if (!body) {
     return "";
   }
@@ -514,7 +482,7 @@ async function readBoundedText(body: ReadableStream<Uint8Array> | null) {
   let text = "";
 
   try {
-    while (text.length < MAX_OPENROUTER_ERROR_LENGTH) {
+    while (true) {
       const { done, value } = await reader.read();
 
       if (done) {
@@ -530,7 +498,7 @@ async function readBoundedText(body: ReadableStream<Uint8Array> | null) {
     reader.releaseLock();
   }
 
-  return text.slice(0, MAX_OPENROUTER_ERROR_LENGTH);
+  return text;
 }
 
 function formatBaziAIToolDisplayName(name: string) {
