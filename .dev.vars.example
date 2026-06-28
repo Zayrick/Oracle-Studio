@@ -1,14 +1,2 @@
 liuyao_OPENROUTER_API_KEY=
 bazi_OPENROUTER_API_KEY=
-
-# 可选：OpenRouter provider.sort。留空时请求体不发送 provider。
-# 可填值：price、throughput、latency
-# 来源：https://openrouter.ai/docs/guides/routing/provider-selection
-liuyao_OPENROUTER_PROVIDER_SORT=
-bazi_OPENROUTER_PROVIDER_SORT=
-
-# 可选：OpenRouter reasoning.effort。留空时请求体不发送 reasoning。
-# 可填值：xhigh、high、medium、low、minimal、none
-# 来源：https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
-liuyao_OPENROUTER_REASONING_EFFORT=
-bazi_OPENROUTER_REASONING_EFFORT=

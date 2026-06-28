@@ -2,12 +2,9 @@ import type { Route } from "./+types/bazi-ai";
 
 import {
   OpenRouterToolCallAccumulator,
-  buildOpenRouterReasoningConfig,
   enqueueAIStreamEvent,
   parseOpenRouterChunkDeltas,
   parseOpenRouterSseLine,
-  type OpenRouterReasoningConfig,
-  type OpenRouterReasoningDetail,
   type OpenRouterToolCall,
 } from "@/features/ai/openrouter-stream";
 import type { BaziPaipan } from "@/features/bazi/paipan";
@@ -15,14 +12,11 @@ import { cloudflareContext } from "@/lib/cloudflare-context";
 
 const OPENROUTER_CHAT_COMPLETIONS_URL = "https://us.oxio.uno/fetch/openrouter.ai/api/v1/chat/completions";
 const DEFAULT_BAZI_OPENROUTER_MODEL = "deepseek/deepseek-chat-v3.1";
-const DEFAULT_BAZI_OPENROUTER_APP_NAME = "Oracle Studio";
+const OPENROUTER_TITLE = "Oracle Studio";
 
 type BaziAIEnv = Env & {
   bazi_OPENROUTER_API_KEY?: string;
   bazi_OPENROUTER_MODEL?: string;
-  bazi_OPENROUTER_APP_NAME?: string;
-  bazi_OPENROUTER_PROVIDER_SORT?: string;
-  bazi_OPENROUTER_REASONING_EFFORT?: string;
 };
 
 type BaziAIPayload = {
@@ -43,8 +37,6 @@ type OpenRouterMessage =
       role: "assistant";
       content: string | null;
       tool_calls?: OpenRouterToolCall[];
-      reasoning?: string;
-      reasoning_details?: OpenRouterReasoningDetail[];
     }
   | { role: "tool"; tool_call_id: string; content: string };
 
@@ -65,10 +57,6 @@ type OpenRouterChatCompletionRequest = {
   tools?: readonly OpenRouterToolDefinition[];
   tool_choice?: "auto" | "none";
   parallel_tool_calls?: boolean;
-  provider?: {
-    sort: string;
-  };
-  reasoning?: OpenRouterReasoningConfig;
 };
 
 export function loader() {
@@ -187,7 +175,7 @@ async function runBaziAgent({
         Accept: "text/event-stream",
         "Content-Type": "application/json",
         "HTTP-Referer": origin,
-        "X-Title": env.bazi_OPENROUTER_APP_NAME || DEFAULT_BAZI_OPENROUTER_APP_NAME,
+        "X-Title": OPENROUTER_TITLE,
       },
       body: JSON.stringify(buildOpenRouterRequestBody(env, payload, messages, toolDefinitions)),
       signal,
@@ -224,10 +212,6 @@ async function runBaziAgent({
       role: "assistant",
       content: assistantMessage.content || null,
       tool_calls: toolCalls,
-      reasoning: assistantMessage.reasoning || undefined,
-      reasoning_details: assistantMessage.reasoningDetails.length > 0
-        ? assistantMessage.reasoningDetails
-        : undefined,
     });
 
     for (const toolCall of toolCalls) {
@@ -270,7 +254,6 @@ async function streamOpenRouterAssistantMessage(
   const reader = body.getReader();
   const decoder = new TextDecoder();
   const toolCallAccumulator = new OpenRouterToolCallAccumulator();
-  const reasoningDetails: OpenRouterReasoningDetail[] = [];
   let buffer = "";
   let content = "";
   let reasoning = "";
@@ -289,7 +272,6 @@ async function streamOpenRouterAssistantMessage(
         controller,
         encoder,
         toolCallAccumulator,
-        reasoningDetails,
         (deltaContent, deltaReasoning) => {
           content += deltaContent;
           reasoning += deltaReasoning;
@@ -305,7 +287,6 @@ async function streamOpenRouterAssistantMessage(
         controller,
         encoder,
         toolCallAccumulator,
-        reasoningDetails,
         (deltaContent, deltaReasoning) => {
           content += deltaContent;
           reasoning += deltaReasoning;
@@ -322,7 +303,6 @@ async function streamOpenRouterAssistantMessage(
   return {
     content,
     reasoning,
-    reasoningDetails,
     toolCalls: toolCallAccumulator.toToolCalls(),
   };
 }
@@ -332,7 +312,6 @@ function handleCompleteOpenRouterSseLines(
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
   toolCallAccumulator: OpenRouterToolCallAccumulator,
-  reasoningDetails: OpenRouterReasoningDetail[],
   appendText: (content: string, reasoning: string) => void
 ) {
   const lines = buffer.split(/\r?\n/);
@@ -344,7 +323,6 @@ function handleCompleteOpenRouterSseLines(
       controller,
       encoder,
       toolCallAccumulator,
-      reasoningDetails,
       appendText
     );
   }
@@ -357,7 +335,6 @@ function handleOpenRouterSseLine(
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
   toolCallAccumulator: OpenRouterToolCallAccumulator,
-  reasoningDetails: OpenRouterReasoningDetail[],
   appendText: (content: string, reasoning: string) => void
 ) {
   const chunk = parseOpenRouterSseLine(line);
@@ -368,7 +345,6 @@ function handleOpenRouterSseLine(
 
   for (const delta of parseOpenRouterChunkDeltas(chunk)) {
     appendText(delta.content, delta.reasoning);
-    reasoningDetails.push(...delta.reasoningDetails);
     toolCallAccumulator.append(delta.toolCallDeltas);
 
     for (const event of delta.events) {
@@ -383,10 +359,7 @@ function buildOpenRouterRequestBody(
   messages: OpenRouterMessage[],
   toolDefinitions: readonly OpenRouterToolDefinition[]
 ) {
-  const providerSort = env.bazi_OPENROUTER_PROVIDER_SORT?.trim();
-  const reasoningEffort = env.bazi_OPENROUTER_REASONING_EFFORT?.trim();
-
-  const body: OpenRouterChatCompletionRequest = {
+  return {
     model: env.bazi_OPENROUTER_MODEL || DEFAULT_BAZI_OPENROUTER_MODEL,
     session_id: payload.sessionId,
     stream: true,
@@ -394,17 +367,7 @@ function buildOpenRouterRequestBody(
     tools: toolDefinitions,
     tool_choice: "auto",
     parallel_tool_calls: false,
-  };
-
-  if (providerSort) {
-    body.provider = {
-      sort: providerSort,
-    };
-  }
-
-  body.reasoning = buildOpenRouterReasoningConfig(reasoningEffort);
-
-  return body;
+  } satisfies OpenRouterChatCompletionRequest;
 }
 
 async function readClientPayload(request: Request) {

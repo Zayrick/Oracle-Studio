@@ -1,12 +1,5 @@
 import { serializeAIStreamEvent, type AIStreamEvent } from "./timeline";
 
-export type OpenRouterReasoningConfig = {
-  effort?: string;
-  max_tokens?: number;
-  enabled?: boolean;
-  exclude?: boolean;
-};
-
 export type OpenRouterReasoningDetail = Record<string, unknown> & {
   text?: unknown;
   summary?: unknown;
@@ -50,22 +43,6 @@ export type OpenRouterParsedDelta = {
   reasoningDetails: OpenRouterReasoningDetail[];
   toolCallDeltas: OpenRouterToolCallDelta[];
 };
-
-export function buildOpenRouterReasoningConfig(effort: string | undefined) {
-  const trimmedEffort = effort?.trim();
-
-  if (trimmedEffort) {
-    return {
-      effort: trimmedEffort,
-      exclude: false,
-    } satisfies OpenRouterReasoningConfig;
-  }
-
-  return {
-    enabled: true,
-    exclude: false,
-  } satisfies OpenRouterReasoningConfig;
-}
 
 export function enqueueAIStreamEvent(
   controller: ReadableStreamDefaultController<Uint8Array>,

@@ -1,24 +1,19 @@
 import type { Route } from "./+types/liuyao-ai";
 
 import {
-  buildOpenRouterReasoningConfig,
   enqueueAIStreamEvent,
   parseOpenRouterChunkDeltas,
   parseOpenRouterSseLine,
-  type OpenRouterReasoningConfig,
 } from "@/features/ai/openrouter-stream";
 import { cloudflareContext } from "@/lib/cloudflare-context";
 
 const OPENROUTER_CHAT_COMPLETIONS_URL = "https://us.oxio.uno/fetch/openrouter.ai/api/v1/chat/completions";
 const DEFAULT_LIUYAO_OPENROUTER_MODEL = "deepseek/deepseek-chat-v3.1";
-const DEFAULT_LIUYAO_OPENROUTER_APP_NAME = "Oracle Studio";
+const OPENROUTER_TITLE = "Oracle Studio";
 
 type LiuyaoAIEnv = Env & {
   liuyao_OPENROUTER_API_KEY?: string;
   liuyao_OPENROUTER_MODEL?: string;
-  liuyao_OPENROUTER_APP_NAME?: string;
-  liuyao_OPENROUTER_PROVIDER_SORT?: string;
-  liuyao_OPENROUTER_REASONING_EFFORT?: string;
 };
 
 type LiuyaoAIPayload = {
@@ -37,10 +32,6 @@ type OpenRouterChatCompletionRequest = {
   session_id: string;
   stream: true;
   messages: Array<{ role: "system" | LiuyaoAIMessage["role"]; content: string }>;
-  provider?: {
-    sort: string;
-  };
-  reasoning?: OpenRouterReasoningConfig;
 };
 
 export function loader() {
@@ -72,7 +63,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       Accept: "text/event-stream",
       "Content-Type": "application/json",
       "HTTP-Referer": new URL(request.url).origin,
-      "X-Title": env.liuyao_OPENROUTER_APP_NAME || DEFAULT_LIUYAO_OPENROUTER_APP_NAME,
+      "X-Title": OPENROUTER_TITLE,
     },
     body: JSON.stringify(buildOpenRouterRequestBody(env, clientPayload.value)),
   });
@@ -96,25 +87,12 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 function buildOpenRouterRequestBody(env: LiuyaoAIEnv, payload: LiuyaoAIPayload) {
-  const providerSort = env.liuyao_OPENROUTER_PROVIDER_SORT?.trim();
-  const reasoningEffort = env.liuyao_OPENROUTER_REASONING_EFFORT?.trim();
-
-  const body: OpenRouterChatCompletionRequest = {
+  return {
     model: env.liuyao_OPENROUTER_MODEL || DEFAULT_LIUYAO_OPENROUTER_MODEL,
     session_id: payload.sessionId,
     stream: true,
     messages: [{ role: "system", content: payload.systemPrompt }, ...payload.messages],
-  };
-
-  if (providerSort) {
-    body.provider = {
-      sort: providerSort,
-    };
-  }
-
-  body.reasoning = buildOpenRouterReasoningConfig(reasoningEffort);
-
-  return body;
+  } satisfies OpenRouterChatCompletionRequest;
 }
 
 async function readClientPayload(request: Request) {
