@@ -7,16 +7,18 @@ import {
   parseOpenRouterSseLine,
   type OpenRouterToolCall,
 } from "@/features/ai/openrouter-stream";
+import {
+  LLM_APP_TITLE,
+  getLlmChatCompletionsUrl,
+  getLlmModel,
+} from "@/features/ai/llm-config";
 import type { BaziPaipan } from "@/features/bazi/paipan";
 import { cloudflareContext } from "@/lib/cloudflare-context";
 
-const OPENROUTER_CHAT_COMPLETIONS_URL = "https://us.oxio.uno/fetch/openrouter.ai/api/v1/chat/completions";
-const DEFAULT_BAZI_OPENROUTER_MODEL = "deepseek/deepseek-chat-v3.1";
-const OPENROUTER_TITLE = "Oracle Studio";
-
 type BaziAIEnv = Env & {
-  bazi_OPENROUTER_API_KEY?: string;
-  bazi_OPENROUTER_MODEL?: string;
+  bazi_LLM_KEY?: string;
+  bazi_LLM_MODEL?: string;
+  bazi_LLM_BASE?: string;
 };
 
 type BaziAIPayload = {
@@ -31,7 +33,7 @@ type BaziAIMessage = {
   content: string;
 };
 
-type OpenRouterMessage =
+type LLMMessage =
   | { role: "system" | "user"; content: string }
   | {
       role: "assistant";
@@ -40,7 +42,7 @@ type OpenRouterMessage =
     }
   | { role: "tool"; tool_call_id: string; content: string };
 
-type OpenRouterToolDefinition = {
+type LLMToolDefinition = {
   type: "function";
   function: {
     name: string;
@@ -49,12 +51,12 @@ type OpenRouterToolDefinition = {
   };
 };
 
-type OpenRouterChatCompletionRequest = {
+type LLMChatCompletionRequest = {
   model: string;
   session_id: string;
   stream: true;
-  messages: OpenRouterMessage[];
-  tools?: readonly OpenRouterToolDefinition[];
+  messages: LLMMessage[];
+  tools?: readonly LLMToolDefinition[];
   tool_choice?: "auto" | "none";
   parallel_tool_calls?: boolean;
 };
@@ -69,10 +71,10 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const env = context.get(cloudflareContext).env as BaziAIEnv;
-  const apiKey = env.bazi_OPENROUTER_API_KEY;
+  const apiKey = env.bazi_LLM_KEY?.trim();
 
   if (!apiKey) {
-    return jsonError("服务端未配置 bazi_OPENROUTER_API_KEY。", 500);
+    return jsonError("服务端未配置 bazi_LLM_KEY。", 500);
   }
 
   const clientPayload = await readClientPayload(request);
@@ -107,7 +109,7 @@ function streamBaziAgent(args: {
   env: BaziAIEnv;
   origin: string;
   payload: BaziAIPayload;
-  toolDefinitions: readonly OpenRouterToolDefinition[];
+  toolDefinitions: readonly LLMToolDefinition[];
   executeTool: (name: string, args: Record<string, unknown>, chart: BaziPaipan) => string;
 }) {
   const encoder = new TextEncoder();
@@ -156,42 +158,42 @@ async function runBaziAgent({
   env: BaziAIEnv;
   origin: string;
   payload: BaziAIPayload;
-  toolDefinitions: readonly OpenRouterToolDefinition[];
+  toolDefinitions: readonly LLMToolDefinition[];
   executeTool: (name: string, args: Record<string, unknown>, chart: BaziPaipan) => string;
   controller: ReadableStreamDefaultController<Uint8Array>;
   encoder: TextEncoder;
   signal: AbortSignal;
 }) {
-  const messages: OpenRouterMessage[] = [
+  const messages: LLMMessage[] = [
     { role: "system", content: payload.systemPrompt },
     ...payload.messages,
   ];
 
   while (true) {
-    const openRouterResponse = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
+    const llmResponse = await fetch(getLlmChatCompletionsUrl(env.bazi_LLM_BASE), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         Accept: "text/event-stream",
         "Content-Type": "application/json",
         "HTTP-Referer": origin,
-        "X-Title": OPENROUTER_TITLE,
+        "X-Title": LLM_APP_TITLE,
       },
-      body: JSON.stringify(buildOpenRouterRequestBody(env, payload, messages, toolDefinitions)),
+      body: JSON.stringify(buildLlmRequestBody(env, payload, messages, toolDefinitions)),
       signal,
     });
 
-    if (!openRouterResponse.ok) {
-      const upstreamError = await readText(openRouterResponse.body);
-      throw new Error(formatUpstreamError(openRouterResponse.status, upstreamError));
+    if (!llmResponse.ok) {
+      const upstreamError = await readText(llmResponse.body);
+      throw new Error(formatUpstreamError(llmResponse.status, upstreamError));
     }
 
-    if (!openRouterResponse.body) {
-      throw new Error("OpenRouter 未返回可读取的流。");
+    if (!llmResponse.body) {
+      throw new Error("LLM 服务未返回可读取的流。");
     }
 
-    const assistantMessage = await streamOpenRouterAssistantMessage(
-      openRouterResponse.body,
+    const assistantMessage = await streamLlmAssistantMessage(
+      llmResponse.body,
       controller,
       encoder
     );
@@ -246,7 +248,7 @@ async function runBaziAgent({
   }
 }
 
-async function streamOpenRouterAssistantMessage(
+async function streamLlmAssistantMessage(
   body: ReadableStream<Uint8Array>,
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder
@@ -267,7 +269,7 @@ async function streamOpenRouterAssistantMessage(
       }
 
       buffer += decoder.decode(value, { stream: true });
-      buffer = handleCompleteOpenRouterSseLines(
+      buffer = handleCompleteLlmSseLines(
         buffer,
         controller,
         encoder,
@@ -282,7 +284,7 @@ async function streamOpenRouterAssistantMessage(
     buffer += decoder.decode();
 
     if (buffer.trim()) {
-      handleOpenRouterSseLine(
+      handleLlmSseLine(
         buffer,
         controller,
         encoder,
@@ -307,7 +309,7 @@ async function streamOpenRouterAssistantMessage(
   };
 }
 
-function handleCompleteOpenRouterSseLines(
+function handleCompleteLlmSseLines(
   buffer: string,
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
@@ -318,7 +320,7 @@ function handleCompleteOpenRouterSseLines(
   const rest = lines.pop() ?? "";
 
   for (const line of lines) {
-    handleOpenRouterSseLine(
+    handleLlmSseLine(
       line,
       controller,
       encoder,
@@ -330,7 +332,7 @@ function handleCompleteOpenRouterSseLines(
   return rest;
 }
 
-function handleOpenRouterSseLine(
+function handleLlmSseLine(
   line: string,
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
@@ -353,21 +355,21 @@ function handleOpenRouterSseLine(
   }
 }
 
-function buildOpenRouterRequestBody(
+function buildLlmRequestBody(
   env: BaziAIEnv,
   payload: BaziAIPayload,
-  messages: OpenRouterMessage[],
-  toolDefinitions: readonly OpenRouterToolDefinition[]
+  messages: LLMMessage[],
+  toolDefinitions: readonly LLMToolDefinition[]
 ) {
   return {
-    model: env.bazi_OPENROUTER_MODEL || DEFAULT_BAZI_OPENROUTER_MODEL,
+    model: getLlmModel(env.bazi_LLM_MODEL),
     session_id: payload.sessionId,
     stream: true,
     messages,
     tools: toolDefinitions,
     tool_choice: "auto",
     parallel_tool_calls: false,
-  } satisfies OpenRouterChatCompletionRequest;
+  } satisfies LLMChatCompletionRequest;
 }
 
 async function readClientPayload(request: Request) {
@@ -483,8 +485,8 @@ function formatUpstreamError(status: number, errorText: string) {
   const trimmedError = errorText.trim();
 
   return trimmedError
-    ? `OpenRouter 请求失败（${status}）：${trimmedError}`
-    : `OpenRouter 请求失败（${status}）。`;
+    ? `LLM 请求失败（${status}）：${trimmedError}`
+    : `LLM 请求失败（${status}）。`;
 }
 
 function jsonError(message: string, status: number, headers?: HeadersInit) {

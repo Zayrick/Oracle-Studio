@@ -8,8 +8,10 @@
 	"compatibility_date": "2026-06-13",
 	"main": "./workers/app.ts",
 	"vars": {
-		"liuyao_OPENROUTER_MODEL": "google/gemini-3.5-flash",
-		"bazi_OPENROUTER_MODEL": "google/gemini-3.5-flash"
+		"liuyao_LLM_MODEL": "google/gemini-3.5-flash",
+		"liuyao_LLM_BASE": "https://us.oxio.uno/fetch/openrouter.ai/api/v1",
+		"bazi_LLM_MODEL": "google/gemini-3.5-flash",
+		"bazi_LLM_BASE": "https://us.oxio.uno/fetch/openrouter.ai/api/v1"
 	},
 	"observability": {
 		"enabled": true

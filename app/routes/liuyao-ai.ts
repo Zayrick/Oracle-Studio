@@ -5,15 +5,17 @@ import {
   parseOpenRouterChunkDeltas,
   parseOpenRouterSseLine,
 } from "@/features/ai/openrouter-stream";
+import {
+  LLM_APP_TITLE,
+  getLlmChatCompletionsUrl,
+  getLlmModel,
+} from "@/features/ai/llm-config";
 import { cloudflareContext } from "@/lib/cloudflare-context";
 
-const OPENROUTER_CHAT_COMPLETIONS_URL = "https://us.oxio.uno/fetch/openrouter.ai/api/v1/chat/completions";
-const DEFAULT_LIUYAO_OPENROUTER_MODEL = "deepseek/deepseek-chat-v3.1";
-const OPENROUTER_TITLE = "Oracle Studio";
-
 type LiuyaoAIEnv = Env & {
-  liuyao_OPENROUTER_API_KEY?: string;
-  liuyao_OPENROUTER_MODEL?: string;
+  liuyao_LLM_KEY?: string;
+  liuyao_LLM_MODEL?: string;
+  liuyao_LLM_BASE?: string;
 };
 
 type LiuyaoAIPayload = {
@@ -27,7 +29,7 @@ type LiuyaoAIMessage = {
   content: string;
 };
 
-type OpenRouterChatCompletionRequest = {
+type LLMChatCompletionRequest = {
   model: string;
   session_id: string;
   stream: true;
@@ -44,10 +46,10 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const env = context.get(cloudflareContext).env as LiuyaoAIEnv;
-  const apiKey = env.liuyao_OPENROUTER_API_KEY;
+  const apiKey = env.liuyao_LLM_KEY?.trim();
 
   if (!apiKey) {
-    return jsonError("服务端未配置 liuyao_OPENROUTER_API_KEY。", 500);
+    return jsonError("服务端未配置 liuyao_LLM_KEY。", 500);
   }
 
   const clientPayload = await readClientPayload(request);
@@ -56,28 +58,28 @@ export async function action({ request, context }: Route.ActionArgs) {
     return jsonError(clientPayload.error, 400);
   }
 
-  const openRouterResponse = await fetch(OPENROUTER_CHAT_COMPLETIONS_URL, {
+  const llmResponse = await fetch(getLlmChatCompletionsUrl(env.liuyao_LLM_BASE), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       Accept: "text/event-stream",
       "Content-Type": "application/json",
       "HTTP-Referer": new URL(request.url).origin,
-      "X-Title": OPENROUTER_TITLE,
+      "X-Title": LLM_APP_TITLE,
     },
-    body: JSON.stringify(buildOpenRouterRequestBody(env, clientPayload.value)),
+    body: JSON.stringify(buildLlmRequestBody(env, clientPayload.value)),
   });
 
-  if (!openRouterResponse.ok) {
-    const upstreamError = await readText(openRouterResponse.body);
-    return jsonError(formatUpstreamError(openRouterResponse.status, upstreamError), 502);
+  if (!llmResponse.ok) {
+    const upstreamError = await readText(llmResponse.body);
+    return jsonError(formatUpstreamError(llmResponse.status, upstreamError), 502);
   }
 
-  if (!openRouterResponse.body) {
-    return jsonError("OpenRouter 未返回可读取的流。", 502);
+  if (!llmResponse.body) {
+    return jsonError("LLM 服务未返回可读取的流。", 502);
   }
 
-  return new Response(streamOpenRouterEvents(openRouterResponse.body), {
+  return new Response(streamLlmEvents(llmResponse.body), {
     headers: {
       "Cache-Control": "no-store, no-transform",
       "Content-Type": "application/x-ndjson; charset=utf-8",
@@ -86,13 +88,13 @@ export async function action({ request, context }: Route.ActionArgs) {
   });
 }
 
-function buildOpenRouterRequestBody(env: LiuyaoAIEnv, payload: LiuyaoAIPayload) {
+function buildLlmRequestBody(env: LiuyaoAIEnv, payload: LiuyaoAIPayload) {
   return {
-    model: env.liuyao_OPENROUTER_MODEL || DEFAULT_LIUYAO_OPENROUTER_MODEL,
+    model: getLlmModel(env.liuyao_LLM_MODEL),
     session_id: payload.sessionId,
     stream: true,
     messages: [{ role: "system", content: payload.systemPrompt }, ...payload.messages],
-  } satisfies OpenRouterChatCompletionRequest;
+  } satisfies LLMChatCompletionRequest;
 }
 
 async function readClientPayload(request: Request) {
@@ -149,7 +151,7 @@ function normalizeLiuyaoAIMessages(messages: unknown[]) {
     });
 }
 
-function streamOpenRouterEvents(body: ReadableStream<Uint8Array>) {
+function streamLlmEvents(body: ReadableStream<Uint8Array>) {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -174,7 +176,7 @@ function streamOpenRouterEvents(body: ReadableStream<Uint8Array>) {
         buffer += decoder.decode();
 
         if (buffer.trim()) {
-          emitOpenRouterSseLine(buffer, controller, encoder);
+          emitLlmSseLine(buffer, controller, encoder);
         }
 
         controller.close();
@@ -200,13 +202,13 @@ function emitCompleteSseLines(
   const rest = lines.pop() ?? "";
 
   for (const line of lines) {
-    emitOpenRouterSseLine(line, controller, encoder);
+    emitLlmSseLine(line, controller, encoder);
   }
 
   return rest;
 }
 
-function emitOpenRouterSseLine(
+function emitLlmSseLine(
   line: string,
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder
@@ -257,8 +259,8 @@ function formatUpstreamError(status: number, errorText: string) {
   const trimmedError = errorText.trim();
 
   return trimmedError
-    ? `OpenRouter 请求失败（${status}）：${trimmedError}`
-    : `OpenRouter 请求失败（${status}）。`;
+    ? `LLM 请求失败（${status}）：${trimmedError}`
+    : `LLM 请求失败（${status}）。`;
 }
 
 function jsonError(message: string, status: number, headers?: HeadersInit) {
