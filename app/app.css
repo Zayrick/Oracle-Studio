@@ -12,11 +12,7 @@
 
 html,
 body {
-  @apply bg-white dark:bg-gray-950;
-
-  @media (prefers-color-scheme: dark) {
-    color-scheme: dark;
-  }
+  @apply bg-background;
 }
 
 @theme inline {
@@ -66,6 +62,7 @@ body {
 }
 
 :root {
+  color-scheme: light;
   --mobile-dock-content-height: 3.5rem;
   --mobile-dock-padding-top: 0.5rem;
   --mobile-dock-padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
@@ -127,6 +124,7 @@ body {
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
