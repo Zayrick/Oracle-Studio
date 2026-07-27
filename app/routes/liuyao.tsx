@@ -1774,14 +1774,7 @@ function formatCopyAllLineShensha(result: LiuyaoPaipan, line: Pick<LiuyaoLineInf
 }
 
 function formatCopyLineStatuses(result: LiuyaoPaipan, line: Pick<LiuyaoLineInfo, "branch">) {
-  const hits: string[] = [];
-
-  if (result.pillarVoids.year.includes(line.branch)) hits.push("年空");
-  if (result.pillarVoids.month.includes(line.branch)) hits.push("月空");
-  if (result.pillarVoids.day.includes(line.branch)) hits.push("日空");
-  if (result.pillarVoids.hour.includes(line.branch)) hits.push("时空");
-
-  return [...new Set(hits)].join("、") || "-";
+  return result.pillarVoids.day.includes(line.branch) ? "日空" : "-";
 }
 
 function formatCopyRawShenYao(gua: LiuyaoPaipan["raw"]["benGua"]) {
