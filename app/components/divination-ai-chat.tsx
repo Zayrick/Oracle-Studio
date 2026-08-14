@@ -297,7 +297,7 @@ function AIChatHeader<Message extends AIChatMessage>({
             tabIndex={tabIndex}
             onClick={onNewSession}
           >
-            <PlusIcon />
+            <PlusIcon data-icon="inline-start" />
           </Button>
         </div>
       </div>
@@ -390,7 +390,11 @@ function AIChatComposer({
             disabled={!isSending && !inputValue.trim()}
             onClick={isSending ? onStop : undefined}
           >
-            {isSending ? <SquareIcon /> : <ArrowUpIcon />}
+            {isSending ? (
+              <SquareIcon data-icon="inline-start" />
+            ) : (
+              <ArrowUpIcon data-icon="inline-start" />
+            )}
           </Button>
         </Field>
       </FieldGroup>
@@ -433,7 +437,7 @@ function DivinationAIHistoryPopover<Message extends AIChatMessage>({
           />
         }
       >
-        <HistoryIcon />
+        <HistoryIcon data-icon="inline-start" />
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] gap-3">
         <PopoverHeader>

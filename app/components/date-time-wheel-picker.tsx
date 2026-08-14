@@ -252,12 +252,12 @@ export function DateTimeWheelPicker({
             variant="outline"
             aria-label={`选择日期时间，当前为 ${displayValue}`}
             className={cn("w-full justify-between font-normal", className)}
-          >
-            <span className="truncate">{displayValue}</span>
-            <ChevronDownIcon data-icon="inline-end" />
-          </Button>
+          />
         }
-      />
+      >
+        <span className="truncate">{displayValue}</span>
+        <ChevronDownIcon data-icon="inline-end" />
+      </PopoverTrigger>
       <PopoverContent align="start" className="w-[var(--anchor-width)] gap-2 p-3">
         <div className="grid grid-cols-5 px-1 text-center text-xs font-medium text-muted-foreground">
           <span>年</span>

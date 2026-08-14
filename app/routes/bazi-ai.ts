@@ -15,12 +15,6 @@ import {
 import type { BaziPaipan } from "@/features/bazi/paipan";
 import { cloudflareContext } from "@/lib/cloudflare-context";
 
-type BaziAIEnv = Env & {
-  bazi_LLM_KEY?: string;
-  bazi_LLM_MODEL?: string;
-  bazi_LLM_BASE?: string;
-};
-
 type BaziAIPayload = {
   systemPrompt: string;
   sessionId: string;
@@ -70,7 +64,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     return jsonError("仅支持 POST 请求。", 405, { Allow: "POST" });
   }
 
-  const env = context.get(cloudflareContext).env as BaziAIEnv;
+  const env = context.get(cloudflareContext).env;
   const apiKey = env.bazi_LLM_KEY?.trim();
 
   if (!apiKey) {
@@ -106,7 +100,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 function streamBaziAgent(args: {
   apiKey: string;
-  env: BaziAIEnv;
+  env: Env;
   origin: string;
   payload: BaziAIPayload;
   toolDefinitions: readonly LLMToolDefinition[];
@@ -155,7 +149,7 @@ async function runBaziAgent({
   signal,
 }: {
   apiKey: string;
-  env: BaziAIEnv;
+  env: Env;
   origin: string;
   payload: BaziAIPayload;
   toolDefinitions: readonly LLMToolDefinition[];
@@ -356,7 +350,7 @@ function handleLlmSseLine(
 }
 
 function buildLlmRequestBody(
-  env: BaziAIEnv,
+  env: Env,
   payload: BaziAIPayload,
   messages: LLMMessage[],
   toolDefinitions: readonly LLMToolDefinition[]

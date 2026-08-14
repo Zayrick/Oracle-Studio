@@ -3,15 +3,21 @@
  * https://developers.cloudflare.com/workers/wrangler/configuration/
  */
 {
-	"$schema": "node_modules/wrangler/config-schema.json",
+	"$schema": "./node_modules/wrangler/config-schema.json",
 	"name": "oracle-studio",
-	"compatibility_date": "2026-06-13",
+	"compatibility_date": "2026-08-14",
 	"main": "./workers/app.ts",
 	"vars": {
 		"liuyao_LLM_MODEL": "google/gemini-3.5-flash",
-		"liuyao_LLM_BASE": "https://us.oxio.uno/fetch/openrouter.ai/api/v1",
+		"liuyao_LLM_BASE": "https://or-relay.oxio.uno/api/v1",
 		"bazi_LLM_MODEL": "google/gemini-3.5-flash",
-		"bazi_LLM_BASE": "https://us.oxio.uno/fetch/openrouter.ai/api/v1"
+		"bazi_LLM_BASE": "https://or-relay.oxio.uno/api/v1"
+	},
+	"secrets": {
+		"required": [
+			"liuyao_LLM_KEY",
+			"bazi_LLM_KEY"
+		]
 	},
 	"observability": {
 		"enabled": true

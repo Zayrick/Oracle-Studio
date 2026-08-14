@@ -1638,7 +1638,6 @@ function formatLiuyaoCopyGuaOverview(result: LiuyaoPaipan) {
         ["宫五行", result.primary.palaceElement, zhiHexagram.palaceElement, result.mutual.palaceElement],
         ["宫位", result.primary.stage, zhiHexagram.stage, result.mutual.stage],
         ["上下卦", `${result.primary.upperTrigram}上${result.primary.lowerTrigram}下`, `${zhiHexagram.upperTrigram}上${zhiHexagram.lowerTrigram}下`, `${result.mutual.upperTrigram}上${result.mutual.lowerTrigram}下`],
-        ["五星", result.primary.wuXingStar, zhiHexagram.wuXingStar, result.mutual.wuXingStar],
         ["身爻", result.guaBody, formatCopyRawShenYao(result.raw.zhiGua), formatCopyRawShenYao(result.raw.huGua)],
         ["卦辞", result.primary.guaCi, zhiHexagram.guaCi, result.mutual.guaCi],
         ["彖辞", result.primary.tuanCi, zhiHexagram.tuanCi, result.mutual.tuanCi],

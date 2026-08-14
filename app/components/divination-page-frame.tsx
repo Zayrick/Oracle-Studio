@@ -199,7 +199,11 @@ function DivinationResultActions({
                 aria-label={copy!.status === "copied" ? "已复制排盘结果" : copy!.ariaLabel ?? "复制排盘结果"}
                 onClick={copy!.onCopy}
               >
-                {copy!.status === "copied" ? <CheckIcon /> : <CopyIcon />}
+                {copy!.status === "copied" ? (
+                  <CheckIcon data-icon="inline-start" />
+                ) : (
+                  <CopyIcon data-icon="inline-start" />
+                )}
               </Button>
               {copy!.status === "error" ? (
                 <span className="text-xs text-destructive">{copy!.errorLabel ?? "复制失败"}</span>

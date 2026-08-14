@@ -222,7 +222,7 @@ function HistoryRecordItem({
           size={variant === "sidebar" ? "icon-xs" : "icon-sm"}
           aria-label="保存标题"
         >
-          <CheckIcon />
+          <CheckIcon data-icon="inline-start" />
         </Button>
         <Button
           type="button"
@@ -231,7 +231,7 @@ function HistoryRecordItem({
           aria-label="取消重命名"
           onClick={onCancelEditing}
         >
-          <XIcon />
+          <XIcon data-icon="inline-start" />
         </Button>
       </form>
     );
@@ -299,7 +299,7 @@ function HistoryRecordItem({
           aria-label="重命名历史记录"
           onClick={() => onStartEditing(record)}
         >
-          <PencilIcon />
+          <PencilIcon data-icon="inline-start" />
         </Button>
         <AlertDialog>
           <AlertDialogTrigger
@@ -312,7 +312,7 @@ function HistoryRecordItem({
               />
             }
           >
-            <Trash2Icon />
+            <Trash2Icon data-icon="inline-start" />
           </AlertDialogTrigger>
           <AlertDialogContent size="sm">
             <AlertDialogHeader>

@@ -12,12 +12,6 @@ import {
 } from "@/features/ai/llm-config";
 import { cloudflareContext } from "@/lib/cloudflare-context";
 
-type LiuyaoAIEnv = Env & {
-  liuyao_LLM_KEY?: string;
-  liuyao_LLM_MODEL?: string;
-  liuyao_LLM_BASE?: string;
-};
-
 type LiuyaoAIPayload = {
   systemPrompt: string;
   sessionId: string;
@@ -45,7 +39,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     return jsonError("仅支持 POST 请求。", 405, { Allow: "POST" });
   }
 
-  const env = context.get(cloudflareContext).env as LiuyaoAIEnv;
+  const env = context.get(cloudflareContext).env;
   const apiKey = env.liuyao_LLM_KEY?.trim();
 
   if (!apiKey) {
@@ -88,7 +82,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   });
 }
 
-function buildLlmRequestBody(env: LiuyaoAIEnv, payload: LiuyaoAIPayload) {
+function buildLlmRequestBody(env: Env, payload: LiuyaoAIPayload) {
   return {
     model: getLlmModel(env.liuyao_LLM_MODEL),
     session_id: payload.sessionId,

@@ -55,7 +55,6 @@ export interface LiuyaoHexagramInfo {
   worldPosition: number;
   responsePosition: number;
   pattern: HexagramPattern | "";
-  wuXingStar: string;
   guaCi: string;
   yaoCi: string[];
   tuanCi: string;
@@ -305,7 +304,6 @@ function createHexagramInfo(gua: GuaPan, yaoString: YaoString): LiuyaoHexagramIn
     worldPosition: findShiYingPosition(gua.yaoList, "世"),
     responsePosition: findShiYingPosition(gua.yaoList, "应"),
     pattern: HEXAGRAM_PATTERNS[gua.guaName] ?? "",
-    wuXingStar: gua.wuXingStar,
     guaCi: gua.guaCi,
     yaoCi: gua.yaoCi,
     tuanCi: gua.tuanCi,
