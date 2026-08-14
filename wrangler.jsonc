@@ -7,15 +7,13 @@
 	"name": "oracle-studio",
 	"compatibility_date": "2026-08-14",
 	"main": "./workers/app.ts",
-	"vars": {
-		"liuyao_LLM_MODEL": "google/gemini-3.5-flash",
-		"liuyao_LLM_BASE": "https://or-relay.oxio.uno/api/v1",
-		"bazi_LLM_MODEL": "google/gemini-3.5-flash",
-		"bazi_LLM_BASE": "https://or-relay.oxio.uno/api/v1"
-	},
 	"secrets": {
 		"required": [
+			"liuyao_LLM_MODEL",
+			"liuyao_LLM_BASE",
 			"liuyao_LLM_KEY",
+			"bazi_LLM_MODEL",
+			"bazi_LLM_BASE",
 			"bazi_LLM_KEY"
 		]
 	},
