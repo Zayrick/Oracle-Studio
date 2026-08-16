@@ -58,13 +58,14 @@ export function MobileDockNav() {
   return (
     <nav
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-3 pb-[var(--mobile-dock-padding-bottom)] pt-[var(--mobile-dock-padding-top)] backdrop-blur transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:hidden",
-        hiddenForKeyboard && "pointer-events-none translate-y-full opacity-0"
+        "fixed inset-x-[var(--mobile-dock-edge-gap)] bottom-[var(--mobile-dock-bottom-gap)] z-40 mx-auto h-[var(--mobile-dock-content-height)] max-w-md rounded-full border bg-background p-1.5 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:hidden",
+        hiddenForKeyboard &&
+          "pointer-events-none translate-y-[calc(100%+var(--mobile-dock-bottom-gap))] opacity-0"
       )}
       aria-label="移动端主导航"
       aria-hidden={hiddenForKeyboard || undefined}
     >
-      <div className="mx-auto grid h-[var(--mobile-dock-content-height)] max-w-md grid-cols-3 gap-1">
+      <div className="grid h-full grid-cols-3 gap-1">
         {mobileDockItems.map((item) => (
           <MobileDockNavLink
             key={item.to}
@@ -91,7 +92,7 @@ function MobileDockNavLink({
       to={item.to}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex min-w-0 flex-col items-center justify-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 [&_svg]:size-5 [&_svg]:shrink-0",
+        "flex min-w-0 flex-col items-center justify-center gap-1 rounded-full px-2 text-xs font-medium text-muted-foreground transition-[color,background-color,transform] hover:bg-accent hover:text-accent-foreground active:scale-[0.98] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/30 motion-reduce:transition-none [&_svg]:size-5 [&_svg]:shrink-0",
         active && "bg-accent text-accent-foreground"
       )}
     >

@@ -63,15 +63,17 @@ body {
 
 :root {
   color-scheme: light;
-  --mobile-dock-content-height: 3.5rem;
-  --mobile-dock-padding-top: 0.5rem;
-  --mobile-dock-padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+  --mobile-dock-content-height: 4.25rem;
+  --mobile-dock-edge-gap: 1.25rem;
+  --mobile-dock-bottom-gap: 0px;
   --mobile-dock-height: calc(
-    var(--mobile-dock-padding-top) +
     var(--mobile-dock-content-height) +
-    var(--mobile-dock-padding-bottom)
+    var(--mobile-dock-bottom-gap)
   );
-  --mobile-dock-page-offset: calc(var(--mobile-dock-height) + 0.5rem);
+  --mobile-dock-page-offset: calc(
+    var(--mobile-dock-height) +
+    var(--mobile-dock-edge-gap)
+  );
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -107,6 +109,12 @@ body {
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+}
+
+@media (display-mode: standalone) {
+  :root {
+    --mobile-dock-bottom-gap: var(--mobile-dock-edge-gap);
+  }
 }
 
 @media (min-width: 768px) {

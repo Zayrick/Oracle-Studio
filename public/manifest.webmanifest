@@ -1,0 +1,12 @@
+{
+  "id": "/",
+  "name": "云占",
+  "short_name": "云占",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff"
+}

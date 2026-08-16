@@ -14,6 +14,11 @@ import { SidebarNav } from "./components/sidebar-nav";
 import { ThemeInitScript, ThemeProvider } from "./components/theme-provider";
 
 export const links: Route.LinksFunction = () => [
+  {
+    rel: "manifest",
+    href: "/manifest.webmanifest",
+    type: "application/manifest+json",
+  },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",
@@ -28,10 +33,13 @@ export const links: Route.LinksFunction = () => [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
         <meta name="color-scheme" content="light dark" />
         <ThemeInitScript />
         <Meta />
