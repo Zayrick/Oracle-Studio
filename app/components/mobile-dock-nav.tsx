@@ -16,7 +16,7 @@ type MobileDockItem = {
   isActive: (pathname: string) => boolean;
 };
 
-const divinationPathnames = ["/", "/liuyao", "/bazi", "/tarot"];
+const divinationPathnames = ["/", "/liuyao", "/bazi"];
 
 const mobileDockItems = [
   {

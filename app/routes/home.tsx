@@ -80,7 +80,6 @@ const DIVINATION_METHODS = [
     mobileDescription: "关系、状态、灵感观察。",
     material: "问题 + 牌阵",
     status: "待开放",
-    href: "/tarot",
     icon: WandSparklesIcon,
   },
   {
@@ -133,12 +132,6 @@ const ANNOUNCEMENTS = [
     title: "六爻历史继续追问",
     description: "旧记录可回到同一上下文。",
     label: "改进",
-  },
-  {
-    title: "塔罗牌入口准备中",
-    description: "后续将支持基础牌阵。",
-    label: "预告",
-    mobile: true,
   },
 ] satisfies Announcement[];
 

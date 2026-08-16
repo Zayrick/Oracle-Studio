@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-Oracle Studio 是一个使用 React Router 7 构建并部署在 Cloudflare Workers 上的占卜应用程序。该应用提供多种占卜方法，包括塔罗牌、八字和六爻。
+Oracle Studio 是一个使用 React Router 7 构建并部署在 Cloudflare Workers 上的占卜应用程序。该应用目前提供八字和六爻占卜，并为其他占卜方法保留待开放入口。
 
 ## 技术栈
 
@@ -58,7 +58,6 @@ npm run cf-typegen
 
 路由在 `app/routes.ts` 中使用 React Router 的基于文件的路由配置定义。应用支持英文和中文路由路径：
 - `/` - 首页
-- `/tarot` - 塔罗牌占卜
 - `/八字` - 八字占卜
 - `/六爻` - 六爻占卜
 

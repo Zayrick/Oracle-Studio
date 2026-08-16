@@ -5,7 +5,6 @@ import {
   SettingsIcon,
   SparklesIcon,
   type LucideIcon,
-  WandSparklesIcon,
 } from "lucide-react";
 import { NavLink } from "react-router";
 
@@ -23,11 +22,6 @@ const divinationItems = [
     label: "八字",
     to: "/bazi",
     icon: SparklesIcon,
-  },
-  {
-    label: "塔罗牌",
-    to: "/tarot",
-    icon: WandSparklesIcon,
   },
 ];
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Oracle Studio is a divination application built with React Router 7 and deployed on Cloudflare Workers. The application provides multiple divination methods including Tarot, BaZi (八字), and LiuYao (六爻).
+Oracle Studio is a divination application built with React Router 7 and deployed on Cloudflare Workers. The application currently provides BaZi (八字) and LiuYao (六爻), with inactive home-page entries reserved for other divination methods.
 
 ## Technology Stack
 
@@ -56,7 +56,6 @@ npm run cf-typegen
 
 Routes are defined in `app/routes.ts` using React Router's file-based routing configuration. The application supports both English and Chinese route paths:
 - `/` - Home page
-- `/tarot` - Tarot divination
 - `/八字` - BaZi divination
 - `/六爻` - LiuYao divination
 
