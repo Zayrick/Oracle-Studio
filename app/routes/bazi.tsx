@@ -150,7 +150,7 @@ export default function Bazi() {
         content: (
           <form
             onSubmit={handleSubmit}
-            className="mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 lg:gap-6"
+            className="mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground lg:gap-6"
           >
             <Field>
               <FieldLabel htmlFor="bazi-name">命主姓名（可选）</FieldLabel>
