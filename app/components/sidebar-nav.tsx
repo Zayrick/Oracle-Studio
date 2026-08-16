@@ -1,9 +1,7 @@
 import {
   CircleUserRoundIcon,
   HomeIcon,
-  ScrollTextIcon,
   SettingsIcon,
-  SparklesIcon,
   type LucideIcon,
 } from "lucide-react";
 import { NavLink } from "react-router";
@@ -11,19 +9,6 @@ import { NavLink } from "react-router";
 import { SidebarHistorySection } from "@/components/sidebar-history-section";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-
-const divinationItems = [
-  {
-    label: "六爻",
-    to: "/liuyao",
-    icon: ScrollTextIcon,
-  },
-  {
-    label: "八字",
-    to: "/bazi",
-    icon: SparklesIcon,
-  },
-];
 
 export function SidebarNav() {
   return (
@@ -33,18 +18,6 @@ export function SidebarNav() {
 
         <nav className="flex flex-col gap-1" aria-label="主导航">
           <SidebarNavLink to="/" label="主页" icon={HomeIcon} end />
-
-          <div className="ml-6 flex flex-col gap-1 border-l border-sidebar-border pl-2">
-            {divinationItems.map((item) => (
-              <SidebarNavLink
-                key={item.to}
-                to={item.to}
-                label={item.label}
-                icon={item.icon}
-                nested
-              />
-            ))}
-          </div>
         </nav>
 
         <Separator className="my-4 bg-sidebar-border" />
@@ -82,13 +55,11 @@ function SidebarNavLink({
   label,
   icon: Icon,
   end,
-  nested,
 }: {
   to: string;
   label: string;
   icon: LucideIcon;
   end?: boolean;
-  nested?: boolean;
 }) {
   return (
     <NavLink
@@ -97,7 +68,6 @@ function SidebarNavLink({
       className={({ isActive, isPending }) =>
         cn(
           "flex h-9 min-w-0 items-center gap-2 rounded-md px-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0",
-          nested && "h-8 text-sm font-normal",
           isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
           isPending && "opacity-70"
         )
