@@ -223,7 +223,7 @@ export default function Home() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="搜索占卜方式"
-                className="h-[42px] rounded-lg border-border bg-muted pl-10 text-sm shadow-none placeholder:text-muted-foreground focus-visible:border-border focus-visible:ring-ring/20"
+                className="h-[42px] rounded-lg border-border bg-muted pl-10 shadow-none placeholder:text-muted-foreground focus-visible:border-border focus-visible:ring-ring/20"
               />
             </label>
 
@@ -248,13 +248,6 @@ export default function Home() {
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="flex h-[30px] items-center justify-between md:hidden">
-            <h2 className="text-base font-bold text-foreground">方式库</h2>
-            <span className="text-xs font-bold text-muted-foreground">
-              {filteredMethods.length} 种方式
-            </span>
           </div>
 
           <div className="flex flex-col gap-2.5 md:gap-2.5">
