@@ -151,14 +151,17 @@ const TIMING_ITEMS = [
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "云占" },
-    { name: "description", content: "选择您的占卜方式" },
+    {
+      name: "description",
+      content: "想从什么开始？查看今日宜忌并选择占卜方式。",
+    },
   ];
 }
 
 export default function Home() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryFilter>("全部");
-  const lunarDate = useTodayLunarDate();
+  const todayAlmanac = useTodayAlmanac();
 
   const filteredMethods = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -194,18 +197,20 @@ export default function Home() {
       <header className="flex min-h-14 items-start justify-between gap-4 md:min-h-16 md:items-center">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-[22px] font-bold leading-tight tracking-normal text-foreground md:text-[25px]">
-            选择占卜方式
+            想从什么开始？
           </h1>
           <p className="text-[13px] leading-normal text-muted-foreground md:text-sm">
-            <span className="md:hidden">进入后再填写问题与信息</span>
-            <span className="hidden md:inline">
-              进入方式后再填写问题、时间、牌阵或起卦信息。
+            <span suppressHydrationWarning>
+              今日 · 宜 {formatAlmanacItems(todayAlmanac.recommends, 3)} · 忌{" "}
+              {formatAlmanacItems(todayAlmanac.avoids, 3)}
             </span>
           </p>
         </div>
 
         <div className="flex shrink-0 items-center gap-2.5">
-          <InfoPill icon={CalendarDaysIcon}>{lunarDate}</InfoPill>
+          <InfoPill icon={CalendarDaysIcon}>
+            {todayAlmanac.lunarDate}
+          </InfoPill>
         </div>
       </header>
 
@@ -273,16 +278,16 @@ export default function Home() {
   );
 }
 
-function useTodayLunarDate() {
-  const [lunarDate, setLunarDate] = useState(() => formatLunarMonthDay());
+function useTodayAlmanac() {
+  const [todayAlmanac, setTodayAlmanac] = useState(() => getAlmanacForDate());
 
   useEffect(() => {
     let timeoutId: ReturnType<typeof window.setTimeout>;
 
     const updateDate = () => {
-      setLunarDate(formatLunarMonthDay());
-
       const now = new Date();
+      setTodayAlmanac(getAlmanacForDate(now));
+
       const nextMidnight = new Date(
         now.getFullYear(),
         now.getMonth(),
@@ -305,17 +310,25 @@ function useTodayLunarDate() {
     };
   }, []);
 
-  return lunarDate;
+  return todayAlmanac;
 }
 
-function formatLunarMonthDay(date = new Date()) {
+function getAlmanacForDate(date = new Date()) {
   const lunarDay = SolarDay.fromYmd(
     date.getFullYear(),
     date.getMonth() + 1,
     date.getDate()
   ).getLunarDay();
 
-  return `${lunarDay.getLunarMonth().getName()}${lunarDay.getName()}`;
+  return {
+    lunarDate: `${lunarDay.getLunarMonth().getName()}${lunarDay.getName()}`,
+    recommends: lunarDay.getRecommends().map((item) => item.getName()),
+    avoids: lunarDay.getAvoids().map((item) => item.getName()),
+  };
+}
+
+function formatAlmanacItems(items: string[], limit: number) {
+  return items.slice(0, limit).join("、") || "暂无";
 }
 
 function InfoPill({
