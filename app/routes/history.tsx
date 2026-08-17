@@ -10,7 +10,7 @@ export function meta({}: Route.MetaArgs) {
 
 export default function History() {
   return (
-    <div className="container mx-auto min-h-svh px-4 py-10 md:py-12">
+    <div className="container mx-auto min-h-[calc(100dvh-var(--mobile-dock-page-offset))] px-4 pb-10 pt-[calc(var(--mobile-safe-top)+2.5rem)] md:min-h-dvh md:py-12">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
         <header className="flex flex-col gap-2">
           <h1 className="text-2xl font-semibold">历史记录</h1>

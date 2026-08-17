@@ -27,7 +27,7 @@ export default function Settings() {
   const { theme, resolvedTheme, setTheme } = useTheme();
 
   return (
-    <div className="container mx-auto px-4 py-10 md:py-16">
+    <div className="container mx-auto px-4 pb-10 pt-[calc(var(--mobile-safe-top)+2.5rem)] md:py-16">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
         <header className="flex flex-col gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">设置</h1>
@@ -64,7 +64,7 @@ export default function Settings() {
                   <ToggleGroupItem
                     key={option.value}
                     aria-label={option.label}
-                    className="min-w-24 flex-1 sm:flex-none"
+                    className="min-h-11 min-w-24 flex-1 sm:flex-none"
                     value={option.value}
                   >
                     <Icon data-icon="inline-start" aria-hidden="true" />

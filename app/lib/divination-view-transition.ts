@@ -4,6 +4,8 @@ type ViewTransitionDocument = Document & {
   startViewTransition?: (updateCallback: () => void) => ViewTransition;
 };
 
+let activeDivinationTransition: ViewTransition | undefined;
+
 export function runDivinationViewTransition(update: () => void) {
   if (typeof document === "undefined") {
     update();
@@ -22,8 +24,14 @@ export function runDivinationViewTransition(update: () => void) {
   const transition = viewTransitionDocument.startViewTransition(() => {
     flushSync(update);
   });
+  activeDivinationTransition = transition;
 
-  transition.finished.finally(() => {
-    delete document.documentElement.dataset.divinationTransition;
-  });
+  transition.finished
+    .finally(() => {
+      if (activeDivinationTransition === transition) {
+        activeDivinationTransition = undefined;
+        delete document.documentElement.dataset.divinationTransition;
+      }
+    })
+    .catch(() => undefined);
 }

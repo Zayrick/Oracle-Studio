@@ -1,9 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { format } from "date-fns";
 import { motion, useReducedMotion } from "motion/react";
 import { CornerLeftUpIcon } from "lucide-react";
-import { Marked, type RendererObject } from "marked";
 import type { Route } from "./+types/liuyao";
 
 import { DivinationAIChatPanel } from "@/components/divination-ai-chat";
@@ -57,6 +56,7 @@ import {
   type YaoType,
 } from "@/features/liuyao/paipan";
 import { runDivinationViewTransition } from "@/lib/divination-view-transition";
+import { renderSafeMarkdown } from "@/lib/safe-markdown";
 import { cn } from "@/lib/utils";
 
 export function meta({}: Route.MetaArgs) {
@@ -77,13 +77,12 @@ type OnlineCoinState = {
   drift: number;
 };
 type CopyElementName = LiuyaoLineInfo["element"];
-type CopyRelative = LiuyaoLineInfo["relation"];
 type CopyStemBasis = "yearStem" | "dayStem";
 type CopyBranchBasis = "yearBranch" | "dayBranch";
 type CopyTargetToken = { type: "stem" | "branch"; name: string };
 type CopyStatus = "idle" | "copied" | "error";
 const LIUYAO_AI_ENDPOINT = "/api/liuyao/ai";
-const MARKDOWN_ZERO_WIDTH_PREFIX_PATTERN = /^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/;
+
 const LIUYAO_CASTING_METHOD_ITEMS = [
   { label: "手动指定", value: "manual" },
   { label: "随机起卦", value: "random" },
@@ -92,66 +91,6 @@ const LIUYAO_CASTING_METHOD_ITEMS = [
 ] satisfies Array<{ label: string; value: LiuyaoCastingMethod }>;
 const ONLINE_CASTING_LINE_COUNT = 6;
 const ONLINE_COIN_BASE_DRIFTS = [-10, 0, 10];
-
-const liuyaoMarkdownRenderer: RendererObject = {
-  html({ text }) {
-    return escapeHtml(text);
-  },
-  link({ href, title, tokens }) {
-    const text = this.parser.parseInline(tokens);
-    const safeHref = normalizeMarkdownUrl(href);
-
-    if (!safeHref) {
-      return text;
-    }
-
-    const titleAttribute = title ? ` title="${escapeHtmlAttribute(title)}"` : "";
-
-    return `<a href="${escapeHtmlAttribute(safeHref)}"${titleAttribute} target="_blank" rel="noreferrer noopener nofollow">${text}</a>`;
-  },
-  image({ text }) {
-    return text ? escapeHtml(`[图片：${text}]`) : "";
-  },
-};
-
-const liuyaoMarkdown = new Marked({
-  async: false,
-  breaks: true,
-  gfm: true,
-  renderer: liuyaoMarkdownRenderer,
-  silent: true,
-});
-
-const COPY_BRANCH_ELEMENTS: Record<string, CopyElementName> = {
-  子: "水",
-  丑: "土",
-  寅: "木",
-  卯: "木",
-  辰: "土",
-  巳: "火",
-  午: "火",
-  未: "土",
-  申: "金",
-  酉: "金",
-  戌: "土",
-  亥: "水",
-};
-
-const COPY_GENERATES: Record<CopyElementName, CopyElementName> = {
-  木: "火",
-  火: "土",
-  土: "金",
-  金: "水",
-  水: "木",
-};
-
-const COPY_CONTROLS: Record<CopyElementName, CopyElementName> = {
-  木: "土",
-  土: "水",
-  水: "火",
-  火: "金",
-  金: "木",
-};
 
 const COPY_BRANCH_OPPOSITES: Record<string, string> = {
   子: "午",
@@ -385,10 +324,6 @@ function getCoinThrowScore(coins: OnlineCoinSide[]) {
   return coins.filter((coin) => coin === "back").length;
 }
 
-function getRandomCoinScore() {
-  return getCoinThrowScore(createRandomCoinThrow());
-}
-
 function createLiuyaoYaoFromCoinScore(coinScore: number): LiuyaoInputYao {
   if (coinScore === 0) {
     return { type: "阴", moving: true };
@@ -460,12 +395,14 @@ function getRandomInt(maxExclusive: number) {
 }
 
 export default function Liuyao() {
+  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const historyId = searchParams.get("history");
+  const fromHistory = location.state?.returnTo === "/history";
   const [question, setQuestion] = useState("");
-  const [date, setDate] = useState<Date>(new Date());
-  const [time, setTime] = useState(format(new Date(), "HH:mm"));
+  const [date, setDate] = useState<Date>(() => new Date(2000, 0, 1, 12));
+  const [time, setTime] = useState("12:00");
   const [castingMethod, setCastingMethod] = useState<LiuyaoCastingMethod>("manual");
   const [yaos, setYaos] = useState<LiuyaoInputYao[]>(() => createDefaultLiuyaoYaos());
   const [manualYaoSelections, setManualYaoSelections] = useState(() =>
@@ -487,6 +424,16 @@ export default function Liuyao() {
   const onlineRollingRef = useRef(false);
   const onlineRollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aiHistoryRef = useRef(aiHistory);
+
+  useIsomorphicLayoutEffect(() => {
+    if (historyId) {
+      return;
+    }
+
+    const now = new Date();
+    setDate(now);
+    setTime(format(now, "HH:mm"));
+  }, []);
 
   const clearOnlineRollingTimeout = () => {
     if (onlineRollingTimeoutRef.current) {
@@ -516,6 +463,16 @@ export default function Liuyao() {
     resetOnlineCastingState();
   };
 
+  const resetDivinationState = (errorMessage = "") => {
+    resetCopyStatus();
+    resetFormState();
+    setResult(null);
+    setActiveHistoryId(null);
+    setAiHistory(createEmptyLiuyaoAIHistoryState());
+    setAiPanelOpen(false);
+    setError(errorMessage);
+  };
+
   useEffect(() => {
     return () => {
       if (onlineRollingTimeoutRef.current) {
@@ -528,18 +485,10 @@ export default function Liuyao() {
     aiHistoryRef.current = aiHistory;
   }, [aiHistory]);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!historyId) {
       if (activeHistoryId) {
-        runDivinationViewTransition(() => {
-          resetCopyStatus();
-          resetFormState();
-          setResult(null);
-          setActiveHistoryId(null);
-          setAiHistory(createEmptyLiuyaoAIHistoryState());
-          setAiPanelOpen(false);
-          setError("");
-        });
+        resetDivinationState();
       }
       return;
     }
@@ -551,15 +500,7 @@ export default function Liuyao() {
     const record = getLiuyaoHistoryRecord(historyId);
 
     if (!record) {
-      runDivinationViewTransition(() => {
-        resetCopyStatus();
-        resetFormState();
-        setResult(null);
-        setActiveHistoryId(null);
-        setAiHistory(createEmptyLiuyaoAIHistoryState());
-        setAiPanelOpen(false);
-        setError("历史记录不存在或已删除。");
-      });
+      resetDivinationState("历史记录不存在或已删除。");
       return;
     }
 
@@ -714,11 +655,14 @@ export default function Liuyao() {
         setActiveHistoryId(nextHistoryRecord?.id ?? null);
         setAiHistory(nextAiHistory);
         setAiPanelOpen(false);
-      });
 
-      if (nextHistoryRecord) {
-        navigate(`/liuyao?history=${encodeURIComponent(nextHistoryRecord.id)}`, { replace: true });
-      }
+        if (nextHistoryRecord) {
+          navigate(
+            `/liuyao?history=${encodeURIComponent(nextHistoryRecord.id)}`,
+            { replace: true }
+          );
+        }
+      });
     } catch (err) {
       resetCopyStatus();
       setResult(null);
@@ -729,15 +673,9 @@ export default function Liuyao() {
 
   const handleStartOver = () => {
     runDivinationViewTransition(() => {
-      resetCopyStatus();
-      resetFormState();
-      setResult(null);
-      setActiveHistoryId(null);
-      setAiHistory(createEmptyLiuyaoAIHistoryState());
-      setAiPanelOpen(false);
-      setError("");
+      resetDivinationState();
+      navigate("/liuyao", { replace: true });
     });
-    navigate("/liuyao", { replace: true });
   };
 
   const handleRestoreHistoryRecord = (record: LiuyaoHistoryRecord) => {
@@ -746,26 +684,26 @@ export default function Liuyao() {
 
       clearOnlineRollingTimeout();
       onlineRollingRef.current = false;
-      runDivinationViewTransition(() => {
-        resetCopyStatus();
-        setQuestion(restored.question);
-        setDate(restored.date);
-        setTime(restored.time);
-        setCastingMethod(restored.castingMethod);
-        setYaos(restored.yaos);
-        setManualYaoSelections(createManualYaoSelectionState(true));
-        setOnlineCoins(createInitialOnlineCoins());
-        setOnlineCastCount(restored.castingMethod === "online" ? ONLINE_CASTING_LINE_COUNT : 0);
-        setOnlineLastCoinScore(null);
-        setOnlineRolling(false);
-        setResult(restored.result);
-        setActiveHistoryId(record.id);
-        setAiHistory(restored.ai);
-        setAiPanelOpen(false);
-        setError("");
-      });
+      resetCopyStatus();
+      setQuestion(restored.question);
+      setDate(restored.date);
+      setTime(restored.time);
+      setCastingMethod(restored.castingMethod);
+      setYaos(restored.yaos);
+      setManualYaoSelections(createManualYaoSelectionState(true));
+      setOnlineCoins(createInitialOnlineCoins());
+      setOnlineCastCount(restored.castingMethod === "online" ? ONLINE_CASTING_LINE_COUNT : 0);
+      setOnlineLastCoinScore(null);
+      setOnlineRolling(false);
+      setResult(restored.result);
+      setActiveHistoryId(record.id);
+      setAiHistory(restored.ai);
+      setAiPanelOpen(false);
+      setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "历史记录恢复失败。");
+      resetDivinationState(
+        err instanceof Error ? err.message : "历史记录恢复失败。"
+      );
     }
   };
 
@@ -788,13 +726,15 @@ export default function Liuyao() {
 
   return (
     <DivinationPageFrame
+      homeHref={fromHistory ? "/history" : "/"}
+      homeLabel={fromHistory ? "返回历史" : "返回主页"}
       form={{
         title: "六爻排盘",
         description: "本卦、变卦、纳甲、六亲、六神与旬空",
         content: (
           <form
             onSubmit={handleSubmit}
-            className="mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground lg:gap-6"
+            className="mobile-divination-form mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground lg:gap-6"
           >
             <Field>
               <FieldLabel htmlFor="question">所问之事</FieldLabel>
@@ -859,7 +799,11 @@ export default function Liuyao() {
                     <SelectContent alignItemWithTrigger={false}>
                       <SelectGroup>
                         {LIUYAO_CASTING_METHOD_ITEMS.map((item) => (
-                          <SelectItem key={item.value} value={item.value}>
+                          <SelectItem
+                            key={item.value}
+                            value={item.value}
+                            className="min-h-11 md:min-h-0"
+                          >
                             {item.label}
                           </SelectItem>
                         ))}
@@ -888,7 +832,7 @@ export default function Liuyao() {
                           type="button"
                           onClick={() => toggleYaoType(index)}
                           aria-label={`${YAO_NAMES[index]}爻象，${yaoSelected ? formatYaoResultName(yao) : "未选择"}`}
-                          className="relative flex h-9 w-full cursor-pointer items-center justify-center rounded-md hover:bg-background/70 lg:h-10"
+                          className="relative flex h-11 w-full cursor-pointer items-center justify-center rounded-md hover:bg-background/70 lg:h-10"
                         >
                           {yaoSelected ? <YaoGlyph type={yao.type} /> : <YaoPlaceholderGlyph />}
                         </button>
@@ -897,7 +841,7 @@ export default function Liuyao() {
                           type="button"
                           onClick={() => toggleYaoMoving(index)}
                           className={cn(
-                            "flex h-8 items-center justify-center rounded-md border text-xs font-medium transition-colors lg:h-9 lg:text-sm",
+                            "flex h-11 items-center justify-center rounded-md border text-xs font-medium transition-colors lg:h-9 lg:text-sm",
                             yaoSelected && yao.moving
                               ? "border-primary bg-primary text-primary-foreground"
                               : "border-border bg-background hover:bg-muted"
@@ -944,8 +888,9 @@ export default function Liuyao() {
               ariaLabel: "六爻解卦结果",
               content: <PaipanResult result={result} />,
               pageClassName: "lg:items-center lg:justify-center",
-              restartLabel: "再起一卦",
-              onRestart: handleStartOver,
+              restartHref: fromHistory ? "/history" : undefined,
+              restartLabel: fromHistory ? "返回历史" : "再起一卦",
+              onRestart: fromHistory ? undefined : handleStartOver,
               copy: {
                 status: copyStatus,
                 onCopy: copyResult,
@@ -1140,7 +1085,7 @@ function PaipanResult({
 
   return (
     <section
-      className="flex w-full flex-col gap-4 text-card-foreground animate-in fade-in-0 slide-in-from-bottom-3 duration-300 sm:gap-6 lg:mx-auto lg:max-w-[46rem]"
+      className="flex w-full flex-col gap-4 text-card-foreground sm:gap-6 lg:mx-auto lg:max-w-[46rem]"
     >
       <div
         className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-8"
@@ -1528,53 +1473,9 @@ function AIDivinationPanel({
       onNewSession={handleNewSession}
       onStop={handleStop}
       onSubmit={handleSubmit}
-      renderMarkdown={renderLiuyaoMarkdown}
+      renderMarkdown={renderSafeMarkdown}
     />
   );
-}
-
-function renderLiuyaoMarkdown(content: string) {
-  return liuyaoMarkdown.parse(
-    content.replace(MARKDOWN_ZERO_WIDTH_PREFIX_PATTERN, ""),
-    { async: false }
-  );
-}
-
-function normalizeMarkdownUrl(href: string) {
-  const trimmed = href.trim();
-
-  if (!trimmed || /[\u0000-\u001F\u007F\s]/.test(trimmed)) {
-    return "";
-  }
-
-  try {
-    const url = new URL(trimmed, "https://oracle-studio.local");
-
-    if (["http:", "https:", "mailto:", "tel:"].includes(url.protocol)) {
-      return trimmed;
-    }
-  } catch {
-    return "";
-  }
-
-  return "";
-}
-
-const HTML_ESCAPE_REPLACEMENTS: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-  "`": "&#96;",
-};
-
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"'`]/g, (char) => HTML_ESCAPE_REPLACEMENTS[char] ?? char);
-}
-
-function escapeHtmlAttribute(value: string) {
-  return escapeHtml(value);
 }
 
 async function copyTextToClipboard(text: string) {
@@ -1617,32 +1518,7 @@ function formatLiuyaoCopyMarkdown(result: LiuyaoPaipan) {
       `身爻：${result.guaBody}；世爻：${result.worldBody}  `,
       `动爻：${movingLines.length > 0 ? movingLines.map((line) => line.label).join("、") : "无（静卦）"}  `,
     ].join("\n"),
-    // 暂不放入系统提示词，后续需要时再恢复。
-    // formatLiuyaoCopyGuaOverview(result),
     formatLiuyaoCopyCombinedTable(result),
-    // 暂不放入系统提示词，后续需要时再恢复。
-    // formatLiuyaoCopyGuaTexts(result),
-  ]);
-}
-
-function formatLiuyaoCopyGuaOverview(result: LiuyaoPaipan) {
-  const zhiHexagram = result.changed ?? result.primary;
-
-  return joinCopySections([
-    "## 三卦概览",
-    copyMdTable(
-      ["项目", "本卦", "之卦", "互卦"],
-      [
-        ["卦名", formatHexagramName(result.primary), formatHexagramName(zhiHexagram), formatHexagramName(result.mutual)],
-        ["卦宫", result.primary.palace, zhiHexagram.palace, result.mutual.palace],
-        ["宫五行", result.primary.palaceElement, zhiHexagram.palaceElement, result.mutual.palaceElement],
-        ["宫位", result.primary.stage, zhiHexagram.stage, result.mutual.stage],
-        ["上下卦", `${result.primary.upperTrigram}上${result.primary.lowerTrigram}下`, `${zhiHexagram.upperTrigram}上${zhiHexagram.lowerTrigram}下`, `${result.mutual.upperTrigram}上${result.mutual.lowerTrigram}下`],
-        ["身爻", result.guaBody, formatCopyRawShenYao(result.raw.zhiGua), formatCopyRawShenYao(result.raw.huGua)],
-        ["卦辞", result.primary.guaCi, zhiHexagram.guaCi, result.mutual.guaCi],
-        ["彖辞", result.primary.tuanCi, zhiHexagram.tuanCi, result.mutual.tuanCi],
-      ]
-    ),
   ]);
 }
 
@@ -1694,31 +1570,6 @@ function formatLiuyaoCopyCombinedTable(result: LiuyaoPaipan) {
   ]);
 }
 
-function formatLiuyaoCopyGuaTexts(result: LiuyaoPaipan) {
-  return joinCopySections([
-    "## 卦爻辞",
-    formatCopyGuaText("本卦", result.raw.benGua, result.primary),
-    formatCopyGuaText("之卦", result.raw.zhiGua, result.changed ?? result.primary),
-    formatCopyGuaText("互卦", result.raw.huGua, result.mutual),
-  ]);
-}
-
-function formatCopyGuaText(
-  title: string,
-  gua: LiuyaoPaipan["raw"]["benGua"],
-  hexagram: LiuyaoPaipan["primary"]
-) {
-  return joinCopySections([
-    `### ${title}：${formatHexagramName(hexagram)}`,
-    `卦辞：${gua.guaCi || "-"}`,
-    `彖辞：${gua.tuanCi || "-"}`,
-    copyMdTable(
-      ["爻位", "爻辞"],
-      gua.yaoCi.map((text, index) => [YAO_NAMES[index], text || "-"])
-    ),
-  ]);
-}
-
 function formatCopyStemBranch(line: Pick<LiuyaoLineInfo, "stem" | "branch" | "element">) {
   return `${line.stem}${line.branch}（${line.element}）`;
 }
@@ -1731,12 +1582,6 @@ function formatCopyHiddenGod(hiddenGod: LiuyaoLineInfo["fuShen"]) {
   const host = YAO_NAMES[hiddenGod.hostPosition - 1] ?? `${hiddenGod.hostPosition}爻`;
 
   return `${hiddenGod.relation}${hiddenGod.stem}${hiddenGod.branch}（${hiddenGod.element}，${hiddenGod.naYin}，伏于${host}）`;
-}
-
-function formatCopyHiddenGods(hiddenGods: LiuyaoLineInfo["hiddenGods"]) {
-  return hiddenGods.length > 0
-    ? hiddenGods.map(formatCopyHiddenGod).join("、")
-    : "-";
 }
 
 function formatCopyYao(line: Pick<LiuyaoLineInfo, "type" | "yaoValue" | "labelValue" | "moving">) {
@@ -1774,16 +1619,6 @@ function formatCopyAllLineShensha(result: LiuyaoPaipan, line: Pick<LiuyaoLineInf
 
 function formatCopyLineStatuses(result: LiuyaoPaipan, line: Pick<LiuyaoLineInfo, "branch">) {
   return result.pillarVoids.day.includes(line.branch) ? "日空" : "-";
-}
-
-function formatCopyRawShenYao(gua: LiuyaoPaipan["raw"]["benGua"]) {
-  if (!gua.shenYao) {
-    return "-";
-  }
-
-  const yao = gua.yaoList[gua.shenYao - 1];
-
-  return `${YAO_NAMES[gua.shenYao - 1]}${yao ? `（${yao.naJia}）` : ""}`;
 }
 
 function formatCopyLineShensha(result: LiuyaoPaipan, line: Pick<LiuyaoLineInfo, "stem" | "branch">) {
@@ -1852,14 +1687,6 @@ function formatCopyLineChangsheng(result: LiuyaoPaipan, element: CopyElementName
   const dayBranch = getBranchFromPillarText(result.pillars.day);
 
   return `月:${COPY_CHANGSHENG_BY_ELEMENT[element]?.[monthBranch] ?? "-"} 日:${COPY_CHANGSHENG_BY_ELEMENT[element]?.[dayBranch] ?? "-"}`;
-}
-
-function copyRelationFor(palaceElement: CopyElementName, lineElement: CopyElementName): CopyRelative {
-  if (palaceElement === lineElement) return "兄弟";
-  if (COPY_GENERATES[lineElement] === palaceElement) return "父母";
-  if (COPY_GENERATES[palaceElement] === lineElement) return "子孙";
-  if (COPY_CONTROLS[lineElement] === palaceElement) return "官鬼";
-  return "妻财";
 }
 
 function getBranchFromPillarText(pillar: string) {

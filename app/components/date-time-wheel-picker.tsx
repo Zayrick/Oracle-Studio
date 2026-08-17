@@ -286,7 +286,13 @@ export function DateTimeWheelPicker({
             updateParts({ ...selectedParts, minute })
           )}
         </WheelPickerWrapper>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="min-h-11 md:min-h-8"
+          onClick={() => setOpen(false)}
+        >
           完成
         </Button>
       </PopoverContent>

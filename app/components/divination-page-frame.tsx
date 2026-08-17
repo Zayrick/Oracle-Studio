@@ -5,30 +5,29 @@ import {
   CopyIcon,
   SparklesIcon,
 } from "lucide-react";
-import { Link } from "react-router";
 
+import { TransitionBackLink } from "@/components/route-transition-link";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
-export type DivinationCopyStatus = "idle" | "copied" | "error";
+type DivinationCopyStatus = "idle" | "copied" | "error";
 
-export type DivinationResultFrame = {
+type DivinationResultFrame = {
   ariaLabel: string;
   content: ReactNode;
   contentClassName?: string;
   pageClassName?: string;
+  restartHref?: string;
   restartLabel?: string;
-  onRestart: () => void;
+  onRestart?: () => void;
   copy?: {
-    visible?: boolean;
     status: DivinationCopyStatus;
     onCopy: () => void;
     ariaLabel?: string;
     errorLabel?: string;
   };
   ai?: {
-    visible?: boolean;
     open: boolean;
     onToggle: () => void;
     panel: ReactNode;
@@ -52,17 +51,18 @@ export function DivinationPageFrame({
 }) {
   if (!result) {
     return (
-      <div className="container relative mx-auto flex min-h-svh items-center px-4 py-16 md:py-20 lg:py-10">
-        <Link
+      <div className="container relative mx-auto flex min-h-dvh items-center px-4 pb-[calc(4rem+var(--mobile-safe-bottom))] pt-[calc(var(--mobile-safe-top)+4rem)] md:py-20 lg:py-10">
+        <TransitionBackLink
           to={homeHref}
+          prefetch="intent"
           className={cn(
             buttonVariants({ variant: "outline", size: "sm" }),
-            "fixed left-4 top-4 z-20 md:hidden"
+            "fixed left-4 top-[calc(var(--mobile-safe-top)+1rem)] z-20 min-h-11 md:hidden"
           )}
         >
           <ArrowLeftIcon data-icon="inline-start" />
           {homeLabel}
-        </Link>
+        </TransitionBackLink>
 
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 lg:gap-8">
           <div className="flex flex-col gap-2 text-center">
@@ -78,18 +78,18 @@ export function DivinationPageFrame({
     );
   }
 
-  const aiEnabled = Boolean(result.ai && result.ai.visible !== false);
-  const aiOpen = Boolean(aiEnabled && result.ai?.open);
+  const aiOpen = Boolean(result.ai?.open);
 
   return (
-    <div className="relative mx-auto flex h-svh min-h-0 w-full flex-col overflow-hidden px-4 pb-0 pt-16 max-md:-mb-[var(--mobile-dock-page-offset)] md:px-0 md:pt-0">
-      <div className="fixed left-4 right-4 top-4 z-20 md:hidden">
+    <div className="relative mx-auto flex h-dvh min-h-0 w-full flex-col overflow-hidden px-4 pt-[calc(var(--mobile-safe-top)+4rem)] md:px-0 md:pt-0">
+      <div className="fixed left-4 right-4 top-[calc(var(--mobile-safe-top)+1rem)] z-20 md:hidden">
         <DivinationResultActions
           aiOpen={aiOpen}
           copy={result.copy}
           layout="mobile"
+          restartHref={result.restartHref}
           restartLabel={result.restartLabel}
-          onAIToggle={aiEnabled ? result.ai?.onToggle : undefined}
+          onAIToggle={result.ai?.onToggle}
           onRestart={result.onRestart}
         />
       </div>
@@ -104,8 +104,9 @@ export function DivinationPageFrame({
               aiOpen={aiOpen}
               copy={result.copy}
               layout="desktop"
+              restartHref={result.restartHref}
               restartLabel={result.restartLabel}
-              onAIToggle={aiEnabled ? result.ai?.onToggle : undefined}
+              onAIToggle={result.ai?.onToggle}
               onRestart={result.onRestart}
             />
           </div>
@@ -114,17 +115,14 @@ export function DivinationPageFrame({
         <div className="flex h-full min-h-0 w-full flex-1 flex-col md:pt-16">
           <div
             className={cn(
-              "mx-auto flex w-full flex-1 flex-col max-lg:relative max-lg:h-full max-lg:min-h-0 max-lg:overflow-hidden lg:h-full lg:min-h-0 lg:overflow-hidden",
-              aiOpen
-                ? "divination-result-grid-open max-lg:h-full max-lg:min-h-0 lg:grid lg:max-w-[96rem]"
-                : "divination-result-grid-closed lg:grid lg:max-w-[96rem]"
+              "mx-auto flex w-full flex-1 flex-col max-lg:relative max-lg:h-full max-lg:min-h-0 max-lg:overflow-hidden lg:grid lg:h-full lg:min-h-0 lg:max-w-[96rem] lg:overflow-hidden",
+              aiOpen ? "divination-result-grid-open" : "divination-result-grid-closed"
             )}
           >
             <div
               className={cn(
-                "divination-mobile-result-page min-w-0 max-lg:absolute max-lg:inset-0 max-lg:overflow-y-auto max-lg:pb-[calc(var(--mobile-dock-height)+1rem)] lg:flex lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-8 lg:py-8",
-                aiOpen ? "divination-mobile-result-page-open" : "divination-mobile-result-page-closed",
-                !aiOpen && "lg:w-full",
+                "divination-mobile-result-page min-w-0 max-lg:absolute max-lg:inset-0 max-lg:overflow-y-auto max-lg:overscroll-y-contain max-lg:pb-[max(1rem,var(--mobile-safe-bottom))] lg:flex lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-8 lg:py-8",
+                aiOpen && "divination-mobile-result-page-open",
                 result.pageClassName
               )}
             >
@@ -133,7 +131,7 @@ export function DivinationPageFrame({
               </div>
             </div>
 
-            {aiEnabled ? (
+            {result.ai ? (
               <>
                 <Separator
                   orientation="vertical"
@@ -142,7 +140,7 @@ export function DivinationPageFrame({
                     aiOpen ? "divination-result-divider-open lg:block" : "divination-result-divider-closed lg:block"
                   )}
                 />
-                {result.ai!.panel}
+                {result.ai.panel}
               </>
             ) : null}
           </div>
@@ -156,6 +154,7 @@ function DivinationResultActions({
   aiOpen,
   copy,
   layout,
+  restartHref,
   restartLabel = "重新开始",
   onAIToggle,
   onRestart,
@@ -163,50 +162,69 @@ function DivinationResultActions({
   aiOpen: boolean;
   copy?: DivinationResultFrame["copy"];
   layout: "mobile" | "desktop";
+  restartHref?: string;
   restartLabel?: string;
   onAIToggle?: () => void;
-  onRestart: () => void;
+  onRestart?: () => void;
 }) {
   const compact = layout === "mobile";
-  const showCopy = Boolean(copy && copy.visible !== false);
   const showAI = Boolean(onAIToggle);
 
   return (
     <div
       className={cn(
-        "flex w-full max-w-full items-center gap-2",
-        compact ? "justify-between" : "justify-between gap-3"
+        "flex w-full max-w-full items-center justify-between gap-2",
+        !compact && "gap-3"
       )}
     >
-      <Button
-        type="button"
-        variant="outline"
-        size={compact ? "sm" : "default"}
-        onClick={onRestart}
-      >
-        <ArrowLeftIcon data-icon="inline-start" />
-        {restartLabel}
-      </Button>
+      {restartHref ? (
+        <TransitionBackLink
+          to={restartHref}
+          prefetch="viewport"
+          className={cn(
+            buttonVariants({
+              variant: "outline",
+              size: compact ? "sm" : "default",
+            }),
+            compact && "min-h-11"
+          )}
+        >
+          <ArrowLeftIcon data-icon="inline-start" />
+          {restartLabel}
+        </TransitionBackLink>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size={compact ? "sm" : "default"}
+          className={compact ? "min-h-11" : undefined}
+          onClick={onRestart}
+        >
+          <ArrowLeftIcon data-icon="inline-start" />
+          {restartLabel}
+        </Button>
+      )}
 
-      {showCopy || showAI ? (
+      {copy || showAI ? (
         <div className="ml-auto flex items-center gap-2">
-          {showCopy ? (
+          {copy ? (
             <>
               <Button
                 type="button"
                 variant="outline"
                 size={compact ? "icon-sm" : "icon"}
-                aria-label={copy!.status === "copied" ? "已复制排盘结果" : copy!.ariaLabel ?? "复制排盘结果"}
-                onClick={copy!.onCopy}
+                className={compact ? "size-11" : undefined}
+                aria-label={copy.status === "copied" ? "已复制排盘结果" : copy.ariaLabel ?? "复制排盘结果"}
+                onClick={copy.onCopy}
               >
-                {copy!.status === "copied" ? (
+                {copy.status === "copied" ? (
                   <CheckIcon data-icon="inline-start" />
                 ) : (
                   <CopyIcon data-icon="inline-start" />
                 )}
               </Button>
-              {copy!.status === "error" ? (
-                <span className="text-xs text-destructive">{copy!.errorLabel ?? "复制失败"}</span>
+              {copy.status === "error" ? (
+                <span className="text-xs text-destructive">{copy.errorLabel ?? "复制失败"}</span>
               ) : null}
             </>
           ) : null}
@@ -215,6 +233,7 @@ function DivinationResultActions({
             <Button
               type="button"
               size={compact ? "sm" : "default"}
+              className={compact ? "min-h-11" : undefined}
               aria-expanded={aiOpen}
               onClick={onAIToggle}
             >

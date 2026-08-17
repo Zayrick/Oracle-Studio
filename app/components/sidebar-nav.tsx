@@ -33,6 +33,7 @@ export function SidebarNav() {
           <div className="min-w-0 flex-1 truncate text-sm font-medium">开发中</div>
           <NavLink
             to="/settings"
+            prefetch="intent"
             aria-label="设置"
             className={({ isActive, isPending }) =>
               cn(
@@ -65,6 +66,7 @@ function SidebarNavLink({
     <NavLink
       to={to}
       end={end}
+      prefetch="intent"
       className={({ isActive, isPending }) =>
         cn(
           "flex h-9 min-w-0 items-center gap-2 rounded-md px-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0",

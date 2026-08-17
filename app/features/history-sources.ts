@@ -1,4 +1,4 @@
-import { LIUYAO_HISTORY_SOURCE } from "@/features/liuyao/history";
+import { LIUYAO_HISTORY_SOURCE } from "@/features/liuyao/constants";
 import type { HistoryRecord } from "@/lib/history-manager";
 
 export interface HistorySourceConfig {

@@ -6,14 +6,13 @@ import {
   type HistoryRecord,
 } from "@/lib/history-manager";
 import type { AIMessagePart, AIMessageStatus } from "@/features/ai/timeline";
+import { LIUYAO_HISTORY_SOURCE } from "@/features/liuyao/constants";
 
 import {
   buildLiuyaoPaipan,
   type LiuyaoInputYao,
   type LiuyaoPaipan,
 } from "./paipan";
-
-export const LIUYAO_HISTORY_SOURCE = "六爻";
 
 export type LiuyaoCastingMethod = "manual" | "random" | "online" | "time";
 

@@ -1,4 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type FormEvent,
+} from "react";
 import { format } from "date-fns";
 import {
   CheckIcon,
@@ -8,8 +13,9 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react";
-import { NavLink, useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 
+import { TransitionLink } from "@/components/route-transition-link";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,6 +51,8 @@ import {
 import { cn } from "@/lib/utils";
 
 type HistoryRecordListVariant = "sidebar" | "page";
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 export function HistoryRecordList({
   className,
@@ -64,7 +72,7 @@ export function HistoryRecordList({
     setRecords(listHistoryRecords());
   };
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     refreshRecords();
     return subscribeHistoryRecords(refreshRecords);
   }, []);
@@ -86,7 +94,6 @@ export function HistoryRecordList({
 
     if (title) {
       updateHistoryRecord(record.id, { title });
-      refreshRecords();
     }
 
     cancelEditing();
@@ -94,7 +101,6 @@ export function HistoryRecordList({
 
   const deleteRecord = (record: HistoryRecord) => {
     deleteHistoryRecord(record.id);
-    refreshRecords();
 
     if (activeHistoryId === record.id) {
       navigate(getHistoryRecordBaseHref(record), { replace: true });
@@ -212,7 +218,7 @@ function HistoryRecordItem({
         <Input
           value={editingTitle}
           autoFocus
-          className={cn("min-w-0", variant === "sidebar" ? "h-8 text-xs" : "h-9")}
+          className={cn("min-w-0", variant === "sidebar" ? "h-8 text-xs" : "h-11")}
           aria-label="历史记录标题"
           onChange={(event) => onEditingTitleChange(event.target.value)}
         />
@@ -220,6 +226,7 @@ function HistoryRecordItem({
           type="submit"
           variant="ghost"
           size={variant === "sidebar" ? "icon-xs" : "icon-sm"}
+          className={variant === "page" ? "size-11" : undefined}
           aria-label="保存标题"
         >
           <CheckIcon data-icon="inline-start" />
@@ -228,6 +235,7 @@ function HistoryRecordItem({
           type="button"
           variant="ghost"
           size={variant === "sidebar" ? "icon-xs" : "icon-sm"}
+          className={variant === "page" ? "size-11" : undefined}
           aria-label="取消重命名"
           onClick={onCancelEditing}
         >
@@ -250,8 +258,10 @@ function HistoryRecordItem({
             : "border-primary/30 bg-accent text-accent-foreground")
       )}
     >
-      <NavLink
+      <TransitionLink
         to={getHistoryRecordHref(record)}
+        prefetch="intent"
+        state={variant === "page" ? { returnTo: "/history" } : undefined}
         className={cn(
           "flex min-w-0 flex-1 items-start gap-2 rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
           variant === "sidebar" ? "px-1 py-1" : "p-2"
@@ -282,7 +292,7 @@ function HistoryRecordItem({
             {formatHistoryItemMeta(record)}
           </span>
         </span>
-      </NavLink>
+      </TransitionLink>
 
       <div
         className={cn(
@@ -296,6 +306,7 @@ function HistoryRecordItem({
           type="button"
           variant="ghost"
           size={variant === "sidebar" ? "icon-xs" : "icon-sm"}
+          className={variant === "page" ? "size-11" : undefined}
           aria-label="重命名历史记录"
           onClick={() => onStartEditing(record)}
         >
@@ -308,6 +319,7 @@ function HistoryRecordItem({
                 type="button"
                 variant="ghost"
                 size={variant === "sidebar" ? "icon-xs" : "icon-sm"}
+                className={variant === "page" ? "size-11" : undefined}
                 aria-label="删除历史记录"
               />
             }
@@ -322,9 +334,10 @@ function HistoryRecordItem({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogCancel className="min-h-11">取消</AlertDialogCancel>
               <AlertDialogAction
                 variant="destructive"
+                className="min-h-11"
                 onClick={() => onDelete(record)}
               >
                 删除

@@ -1,4 +1,10 @@
-import { useEffect, useRef, type FormEvent, type Ref } from "react";
+import {
+  useEffect,
+  useRef,
+  type FormEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { format } from "date-fns";
 import {
   ArrowUpIcon,
@@ -30,15 +36,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { AIChatMessage } from "@/features/ai/chat";
 import { cn } from "@/lib/utils";
 
-export type DivinationAIChatSession<Message extends AIChatMessage = AIChatMessage> = {
+type DivinationAIChatSession<Message extends AIChatMessage = AIChatMessage> = {
   sessionId: string;
   title: string;
   updatedAt: string;
   messages: Message[];
 };
 
-export type DivinationAIChatHistory<Message extends AIChatMessage = AIChatMessage> = {
-  visible?: boolean;
+type DivinationAIChatHistory<Message extends AIChatMessage = AIChatMessage> = {
   sessions: Array<DivinationAIChatSession<Message>>;
   activeSessionId: string;
   title?: string;
@@ -48,7 +53,7 @@ export type DivinationAIChatHistory<Message extends AIChatMessage = AIChatMessag
   onRestoreSession: (sessionId: string) => void;
 };
 
-export type DivinationAIChatPanelProps<Message extends AIChatMessage = AIChatMessage> = {
+type DivinationAIChatPanelProps<Message extends AIChatMessage = AIChatMessage> = {
   open: boolean;
   desktopTitle: string;
   mobileTitle: string;
@@ -65,33 +70,17 @@ export type DivinationAIChatPanelProps<Message extends AIChatMessage = AIChatMes
 };
 
 const AI_CHAT_LAYOUT = {
-  desktop: {
-    header: "px-5 pt-4",
-    scrollContent: "px-5 pb-24 pt-[4.5rem]",
-    messageList: "",
-    composer: "bottom-0 px-5 pb-5 pt-3",
-    title: "px-4 py-2 text-sm",
-  },
-  mobile: {
-    header: "px-1 pt-2",
-    scrollContent: "px-0 pb-[calc(var(--mobile-dock-height)+5rem)] pt-14",
-    messageList: "",
-    composer: "bottom-[var(--mobile-dock-height)] px-1 py-3",
-    title: "px-3 py-2 text-xs text-muted-foreground",
-  },
-} satisfies Record<
-  "desktop" | "mobile",
-  {
-    header: string;
-    scrollContent: string;
-    messageList: string;
-    composer: string;
-    title: string;
-  }
->;
+  header: "px-1 pt-2 lg:px-5 lg:pt-4",
+  scrollContent:
+    "px-0 pb-[calc(5rem+var(--mobile-safe-bottom))] pt-14 lg:px-5 lg:pb-24 lg:pt-[4.5rem]",
+  composer:
+    "bottom-0 px-1 pb-[max(0.75rem,var(--mobile-safe-bottom))] pt-3 lg:px-5 lg:pb-5 lg:pt-3",
+  title:
+    "px-3 py-2 text-xs text-muted-foreground lg:px-4 lg:text-sm lg:text-foreground",
+};
 
 const AI_HEADER_ICON_BUTTON_CLASS =
-  "divination-ai-frosted-surface rounded-full ring-1 ring-border/60 hover:bg-muted/80";
+  "divination-ai-frosted-surface size-11 rounded-full ring-1 ring-border/60 hover:bg-muted/80 lg:size-8";
 
 export function DivinationAIChatPanel<Message extends AIChatMessage>({
   open,
@@ -99,44 +88,46 @@ export function DivinationAIChatPanel<Message extends AIChatMessage>({
   mobileTitle,
   ...contentProps
 }: DivinationAIChatPanelProps<Message>) {
+  const panelRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (
+      !open &&
+      panelRef.current?.contains(document.activeElement) &&
+      document.activeElement instanceof HTMLElement
+    ) {
+      document.activeElement.blur();
+    }
+  }, [open]);
+
   return (
-    <>
-      <aside
-        aria-hidden={!open}
-        aria-label="询问AI"
-        className={cn(
-          "divination-ai-pane hidden min-h-0 overflow-hidden bg-background lg:flex lg:h-full lg:flex-col",
-          open ? "divination-ai-pane-open" : "divination-ai-pane-closed"
-        )}
-      >
-        <DivinationAIChatContent
-          {...contentProps}
-          title={desktopTitle}
-          tabIndex={open ? 0 : -1}
-          variant="desktop"
-        />
-      </aside>
-      <section
-        aria-hidden={!open}
-        aria-label="询问AI"
-        className={cn(
-          "divination-mobile-ai-page min-h-0 w-full overflow-hidden bg-background max-lg:absolute max-lg:inset-0 max-lg:flex max-lg:flex-col lg:hidden",
-          open ? "divination-mobile-ai-page-open" : "divination-mobile-ai-page-closed"
-        )}
-      >
-        <DivinationAIChatContent
-          {...contentProps}
-          title={mobileTitle}
-          tabIndex={open ? 0 : -1}
-          variant="mobile"
-        />
-      </section>
-    </>
+    <section
+      ref={panelRef}
+      inert={!open}
+      aria-hidden={!open}
+      aria-label="询问AI"
+      className={cn(
+        "divination-ai-pane divination-mobile-ai-page min-h-0 w-full overflow-hidden bg-background max-lg:absolute max-lg:inset-0 max-lg:flex max-lg:flex-col lg:flex lg:h-full lg:flex-col",
+        open
+          ? "divination-ai-pane-open"
+          : "divination-ai-pane-closed divination-mobile-ai-page-closed"
+      )}
+    >
+      <DivinationAIChatContent
+        {...contentProps}
+        active={open}
+        desktopTitle={desktopTitle}
+        mobileTitle={mobileTitle}
+      />
+    </section>
   );
 }
 
 function DivinationAIChatContent<Message extends AIChatMessage>({
+  active,
   history,
+  desktopTitle,
+  mobileTitle,
   inputValue,
   isSending,
   messages,
@@ -146,33 +137,31 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
   onSubmit,
   pendingLabel,
   renderMarkdown,
-  tabIndex,
-  title,
-  variant,
 }: Omit<DivinationAIChatPanelProps<Message>, "desktopTitle" | "mobileTitle" | "open"> & {
-  tabIndex: 0 | -1;
-  title: string;
-  variant: "desktop" | "mobile";
+  active: boolean;
+  desktopTitle: string;
+  mobileTitle: string;
 }) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
-  const mobile = variant === "mobile";
-  const messageInputId = mobile ? "divination-ai-message-mobile" : "divination-ai-message-desktop";
-  const showHistory = history && history.visible !== false;
-  const layout = AI_CHAT_LAYOUT[variant];
+  const messageInputId = "divination-ai-message";
   const header = (
     <AIChatHeader
-      className={layout.header}
-      history={showHistory ? history : undefined}
-      tabIndex={tabIndex}
-      title={title}
-      titleClassName={layout.title}
+      className={AI_CHAT_LAYOUT.header}
+      history={history}
+      title={
+        <>
+          <span className="lg:hidden">{mobileTitle}</span>
+          <span className="hidden lg:inline">{desktopTitle}</span>
+        </>
+      }
+      titleClassName={AI_CHAT_LAYOUT.title}
       onNewSession={onNewSession}
     />
   );
 
   useEffect(() => {
-    if (tabIndex === -1) {
+    if (!active) {
       return;
     }
 
@@ -192,10 +181,10 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
     return () => {
       viewport.removeEventListener("scroll", updateShouldStick);
     };
-  }, [tabIndex]);
+  }, [active]);
 
   useEffect(() => {
-    if (tabIndex === -1 || !shouldStickToBottomRef.current) {
+    if (!active || !shouldStickToBottomRef.current) {
       return;
     }
 
@@ -210,33 +199,27 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [messages, tabIndex]);
+  }, [active, messages]);
 
   return (
     <div
-      className={cn(
-        "relative flex h-full min-h-0 flex-col overflow-hidden",
-        mobile && "flex-1"
-      )}
+      className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden"
     >
       {header}
 
       <AIChatMessages
-        messageListClassName={layout.messageList}
         messages={messages}
         pendingLabel={pendingLabel}
         renderMarkdown={renderMarkdown}
         scrollContainerRef={scrollContainerRef}
-        scrollContentClassName={layout.scrollContent}
-        tabIndex={tabIndex}
+        scrollContentClassName={AI_CHAT_LAYOUT.scrollContent}
       />
 
       <AIChatComposer
-        className={layout.composer}
+        className={AI_CHAT_LAYOUT.composer}
         inputId={messageInputId}
         inputValue={inputValue}
         isSending={isSending}
-        tabIndex={tabIndex}
         onInputChange={onInputChange}
         onStop={onStop}
         onSubmit={onSubmit}
@@ -249,14 +232,12 @@ function AIChatHeader<Message extends AIChatMessage>({
   className,
   history,
   onNewSession,
-  tabIndex,
   title,
   titleClassName,
 }: {
   className: string;
   history?: DivinationAIChatHistory<Message>;
-  tabIndex: 0 | -1;
-  title: string;
+  title: ReactNode;
   titleClassName: string;
   onNewSession: () => void;
 }) {
@@ -282,7 +263,6 @@ function AIChatHeader<Message extends AIChatMessage>({
               emptyDescription={history.emptyDescription}
               emptyTitle={history.emptyTitle}
               sessions={history.sessions}
-              tabIndex={tabIndex}
               title={history.title}
               triggerClassName={AI_HEADER_ICON_BUTTON_CLASS}
               onRestoreSession={history.onRestoreSession}
@@ -294,7 +274,6 @@ function AIChatHeader<Message extends AIChatMessage>({
             size="icon-sm"
             className={AI_HEADER_ICON_BUTTON_CLASS}
             aria-label="新建询问AI会话"
-            tabIndex={tabIndex}
             onClick={onNewSession}
           >
             <PlusIcon data-icon="inline-start" />
@@ -306,21 +285,17 @@ function AIChatHeader<Message extends AIChatMessage>({
 }
 
 function AIChatMessages<Message extends AIChatMessage>({
-  messageListClassName,
   messages,
   pendingLabel,
   renderMarkdown,
   scrollContainerRef,
   scrollContentClassName,
-  tabIndex,
 }: {
-  messageListClassName: string;
   messages: Message[];
   pendingLabel: string;
   renderMarkdown: (content: string) => string;
   scrollContainerRef: Ref<HTMLDivElement>;
   scrollContentClassName: string;
-  tabIndex: 0 | -1;
 }) {
   return (
     <div
@@ -328,10 +303,10 @@ function AIChatMessages<Message extends AIChatMessage>({
       className="divination-ai-chat-scroll h-full min-h-0 flex-1 overflow-y-auto overscroll-contain"
       aria-live="polite"
       aria-label="询问AI消息"
-      tabIndex={tabIndex}
+      tabIndex={0}
     >
       <div className={cn("flex min-h-full flex-col", scrollContentClassName)}>
-        <div className={cn("flex flex-1 flex-col justify-end gap-3", messageListClassName)}>
+        <div className="flex flex-1 flex-col justify-end gap-3">
           {messages.map((item) => (
             <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
               <div className={getAIChatMessageClass(item)}>
@@ -357,13 +332,11 @@ function AIChatComposer({
   onInputChange,
   onStop,
   onSubmit,
-  tabIndex,
 }: {
   className: string;
   inputId: string;
   inputValue: string;
   isSending: boolean;
-  tabIndex: 0 | -1;
   onInputChange: (value: string) => void;
   onStop: () => void;
   onSubmit: (event: FormEvent) => void;
@@ -376,17 +349,15 @@ function AIChatComposer({
           <Input
             id={inputId}
             value={inputValue}
-            tabIndex={tabIndex}
-            className="divination-ai-frosted-filter"
+            className="h-11 lg:h-9"
             onChange={(event) => onInputChange(event.target.value)}
             placeholder="输入你想了解的内容"
           />
           <Button
             type={isSending ? "button" : "submit"}
             size="icon"
-            className="rounded-full bg-primary text-primary-foreground opacity-100 hover:bg-primary disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100"
+            className="size-11 rounded-full bg-primary text-primary-foreground opacity-100 hover:bg-primary disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100 lg:size-9"
             aria-label={isSending ? "停止输出" : "发送追问"}
-            tabIndex={tabIndex}
             disabled={!isSending && !inputValue.trim()}
             onClick={isSending ? onStop : undefined}
           >
@@ -408,7 +379,6 @@ function DivinationAIHistoryPopover<Message extends AIChatMessage>({
   emptyDescription = "还没有保存过询问会话。",
   emptyTitle = "暂无 AI 会话",
   sessions,
-  tabIndex,
   title = "AI 历史",
   triggerClassName,
   onRestoreSession,
@@ -418,7 +388,6 @@ function DivinationAIHistoryPopover<Message extends AIChatMessage>({
   emptyDescription?: string;
   emptyTitle?: string;
   sessions: Array<DivinationAIChatSession<Message>>;
-  tabIndex: 0 | -1;
   title?: string;
   triggerClassName?: string;
   onRestoreSession: (sessionId: string) => void;
@@ -433,7 +402,6 @@ function DivinationAIHistoryPopover<Message extends AIChatMessage>({
             size="icon-sm"
             className={triggerClassName}
             aria-label="询问AI历史"
-            tabIndex={tabIndex}
           />
         }
       >

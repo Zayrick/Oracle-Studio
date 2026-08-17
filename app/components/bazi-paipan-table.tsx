@@ -224,7 +224,7 @@ export function BaziPaipanTable({ paipan }: BaziPaipanTableProps) {
   return (
     <section
       aria-labelledby="bazi-paipan-heading"
-      className="flex w-full flex-col gap-3 animate-in fade-in-0 slide-in-from-bottom-3 duration-300 md:gap-4"
+      className="flex w-full flex-col gap-3 md:gap-4"
     >
       <div className="flex flex-col gap-1.5 px-4 text-center md:gap-2 md:px-0">
         <h2 id="bazi-paipan-heading" className="text-xl font-semibold tracking-tight">

@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { format } from "date-fns";
-import { Marked, type RendererObject } from "marked";
 import type { Route } from "./+types/bazi";
 
 import { BaziPaipanTable } from "@/components/bazi-paipan-table";
@@ -21,6 +26,8 @@ import {
 import { readAIStreamEvents } from "@/features/ai/timeline";
 import { formatBaziAISystemPrompt } from "@/features/bazi/ai-format";
 import type { BaziGender, BaziPaipan } from "@/features/bazi/paipan";
+import { runDivinationViewTransition } from "@/lib/divination-view-transition";
+import { renderSafeMarkdown } from "@/lib/safe-markdown";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -34,49 +41,36 @@ const BAZI_GENDER_OPTIONS = [
   { label: "女", value: "female" },
 ] satisfies Array<{ label: string; value: BaziGender }>;
 const BAZI_AI_ENDPOINT = "/api/bazi/ai";
-const MARKDOWN_ZERO_WIDTH_PREFIX_PATTERN = /^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/;
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 type BaziAIMessage = AIChatMessage;
-
-const baziMarkdownRenderer: RendererObject = {
-  html({ text }) {
-    return escapeHtml(text);
-  },
-  link({ href, title, tokens }) {
-    const text = this.parser.parseInline(tokens);
-    const safeHref = normalizeMarkdownUrl(href);
-
-    if (!safeHref) {
-      return text;
-    }
-
-    const titleAttribute = title ? ` title="${escapeHtmlAttribute(title)}"` : "";
-
-    return `<a href="${escapeHtmlAttribute(safeHref)}"${titleAttribute} target="_blank" rel="noreferrer noopener nofollow">${text}</a>`;
-  },
-  image({ text }) {
-    return text ? escapeHtml(`[图片：${text}]`) : "";
-  },
-};
-
-const baziMarkdown = new Marked({
-  async: false,
-  breaks: true,
-  gfm: true,
-  renderer: baziMarkdownRenderer,
-  silent: true,
-});
 
 export default function Bazi() {
   const [name, setName] = useState("");
   const [gender, setGender] = useState<BaziGender | "">("");
-  const [date, setDate] = useState<Date>(new Date());
-  const [time, setTime] = useState(format(new Date(), "HH:mm"));
+  const [date, setDate] = useState<Date>(() => new Date(2000, 0, 1, 12));
+  const [time, setTime] = useState("12:00");
   const [genderError, setGenderError] = useState("");
   const [calculationError, setCalculationError] = useState("");
   const [isCalculating, setIsCalculating] = useState(false);
   const [paipan, setPaipan] = useState<BaziPaipan | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const mountedRef = useRef(false);
+
+  useIsomorphicLayoutEffect(() => {
+    const now = new Date();
+    setDate(now);
+    setTime(format(now, "HH:mm"));
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const resetFormState = () => {
     const now = new Date();
@@ -90,10 +84,11 @@ export default function Bazi() {
   };
 
   const handleBackToForm = () => {
-    resetFormState();
-    setIsCalculating(false);
-    setPaipan(null);
-    setAiPanelOpen(false);
+    runDivinationViewTransition(() => {
+      resetFormState();
+      setPaipan(null);
+      setAiPanelOpen(false);
+    });
   };
 
   const handleSetNow = () => {
@@ -129,16 +124,31 @@ export default function Bazi() {
     try {
       setIsCalculating(true);
       const { buildBaziPaipan } = await import("@/features/bazi/paipan");
-      setPaipan(buildBaziPaipan({ name, gender, date, time }));
-      setAiPanelOpen(false);
-      setCalculationError("");
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      const nextPaipan = buildBaziPaipan({ name, gender, date, time });
+
+      runDivinationViewTransition(() => {
+        setPaipan(nextPaipan);
+        setAiPanelOpen(false);
+        setCalculationError("");
+      });
     } catch (error) {
+      if (!mountedRef.current) {
+        return;
+      }
+
       console.error(error);
       setPaipan(null);
       setAiPanelOpen(false);
       setCalculationError("排盘失败，请检查出生时间后重试。");
     } finally {
-      setIsCalculating(false);
+      if (mountedRef.current) {
+        setIsCalculating(false);
+      }
     }
   };
 
@@ -150,7 +160,7 @@ export default function Bazi() {
         content: (
           <form
             onSubmit={handleSubmit}
-            className="mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground lg:gap-6"
+            className="mobile-divination-form mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground lg:gap-6"
           >
             <Field>
               <FieldLabel htmlFor="bazi-name">命主姓名（可选）</FieldLabel>
@@ -270,10 +280,9 @@ function BaziAIPanel({
 }) {
   const [message, setMessage] = useState("");
   const [messages, setMessagesState] = useState<BaziAIMessage[]>([]);
-  const [sessionId, setSessionIdState] = useState(() => createAIChatSessionId("bazi"));
   const [isSending, setIsSending] = useState(false);
   const messagesRef = useRef(messages);
-  const sessionIdRef = useRef(sessionId);
+  const sessionIdRef = useRef(createAIChatSessionId("bazi"));
   const nextMessageIdRef = useRef(1);
   const activeRequestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -287,25 +296,7 @@ function BaziAIPanel({
 
     messagesRef.current = nextMessages;
     setMessagesState(nextMessages);
-
-    return nextMessages;
   };
-
-  const setSessionId = (nextSessionId: string) => {
-    sessionIdRef.current = nextSessionId;
-    setSessionIdState(nextSessionId);
-  };
-
-  useEffect(() => {
-    activeRequestIdRef.current += 1;
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
-    setMessage("");
-    setMessages([]);
-    setSessionId(createAIChatSessionId("bazi"));
-    setIsSending(false);
-    nextMessageIdRef.current = 1;
-  }, [paipan]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -456,7 +447,7 @@ function BaziAIPanel({
     setMessage("");
     setMessages([]);
     setIsSending(false);
-    setSessionId(createAIChatSessionId("bazi"));
+    sessionIdRef.current = createAIChatSessionId("bazi");
     nextMessageIdRef.current = 1;
   };
 
@@ -491,59 +482,11 @@ function BaziAIPanel({
       onNewSession={handleNewSession}
       onStop={handleStop}
       onSubmit={handleSubmit}
-      renderMarkdown={renderBaziMarkdown}
+      renderMarkdown={renderSafeMarkdown}
     />
   );
 }
 
 function formatBaziAITitle(paipan: BaziPaipan) {
   return `${paipan.name || "未署名"} · ${paipan.tymeEightChar}`;
-}
-
-function renderBaziMarkdown(content: string) {
-  return baziMarkdown.parse(
-    content.replace(MARKDOWN_ZERO_WIDTH_PREFIX_PATTERN, ""),
-    { async: false }
-  );
-}
-
-function normalizeMarkdownUrl(href: string) {
-  const trimmed = href.trim();
-
-  if (!trimmed || /[\u0000-\u001F\u007F\s]/.test(trimmed)) {
-    return "";
-  }
-
-  try {
-    const url = new URL(trimmed, "https://oracle-studio.local");
-
-    if (["http:", "https:", "mailto:", "tel:"].includes(url.protocol)) {
-      return trimmed;
-    }
-  } catch {
-    return "";
-  }
-
-  return "";
-}
-
-const HTML_ESCAPE_REPLACEMENTS: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-  "`": "&#96;",
-};
-
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"'`]/g, (char) => HTML_ESCAPE_REPLACEMENTS[char] ?? char);
-}
-
-function escapeHtmlAttribute(value: string) {
-  return escapeHtml(value);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

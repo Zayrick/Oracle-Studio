@@ -1,6 +1,5 @@
 import type {
   BaziFlowItemDisplay,
-  BaziFlowYearDisplay,
   BaziHiddenStemDisplay,
   BaziPaipan,
   BaziPillarDisplay,

@@ -13,73 +13,62 @@ type MobileDockItem = {
   label: string;
   to: string;
   icon: LucideIcon;
-  isActive: (pathname: string) => boolean;
 };
-
-const divinationPathnames = ["/", "/liuyao", "/bazi"];
 
 const mobileDockItems = [
   {
     label: "占卜",
     to: "/",
     icon: SparklesIcon,
-    isActive: (pathname) =>
-      divinationPathnames.some((item) => isSamePathOrChild(pathname, item)),
   },
   {
     label: "历史",
     to: "/history",
     icon: Clock3Icon,
-    isActive: (pathname) => isSamePathOrChild(pathname, "/history"),
   },
   {
     label: "设置",
     to: "/settings",
     icon: SettingsIcon,
-    isActive: (pathname) => isSamePathOrChild(pathname, "/settings"),
   },
 ] satisfies MobileDockItem[];
 
-export function isMobilePrimaryPathname(pathname: string) {
-  const normalizedPathname =
-    pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-
-  return mobileDockItems.some((item) => item.to === normalizedPathname);
+export function isMobileDockPathname(pathname: string) {
+  return getMobileDockIndex(pathname) >= 0;
 }
 
 export function MobileDockNav() {
   const location = useLocation();
   const hiddenForKeyboard = useMobileKeyboardDockHidden();
-
-  useEffect(() => {
-    document.documentElement.toggleAttribute(
-      "data-mobile-keyboard-open",
-      hiddenForKeyboard
-    );
-
-    return () => {
-      document.documentElement.removeAttribute("data-mobile-keyboard-open");
-    };
-  }, [hiddenForKeyboard]);
+  const activeIndex = getMobileDockIndex(location.pathname);
 
   return (
     <nav
       className={cn(
-        "fixed inset-x-[var(--mobile-dock-edge-gap)] bottom-[var(--mobile-dock-bottom-gap)] z-40 mx-auto h-[var(--mobile-dock-content-height)] max-w-md rounded-full border bg-background p-1.5 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:hidden",
+        "fixed inset-x-[var(--mobile-dock-edge-gap)] bottom-[var(--mobile-dock-bottom-gap)] z-40 mx-auto h-[var(--mobile-dock-content-height)] max-w-md rounded-full border bg-background/95 p-1.5 shadow-lg backdrop-blur-xl transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:hidden",
         hiddenForKeyboard &&
           "pointer-events-none translate-y-[calc(100%+var(--mobile-dock-bottom-gap))] opacity-0"
       )}
       aria-label="移动端主导航"
       aria-hidden={hiddenForKeyboard || undefined}
+      inert={hiddenForKeyboard}
     >
-      <div className="grid h-full grid-cols-3 gap-1">
-        {mobileDockItems.map((item) => (
-          <MobileDockNavLink
-            key={item.to}
-            active={item.isActive(location.pathname)}
-            item={item}
-          />
-        ))}
+      <div className="relative grid h-full grid-cols-3">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 w-1/3 rounded-full bg-accent shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
+          style={{ transform: `translateX(${activeIndex * 100}%)` }}
+        />
+
+        {mobileDockItems.map((item, index) => {
+          return (
+            <MobileDockNavLink
+              key={item.to}
+              active={index === activeIndex}
+              item={item}
+            />
+          );
+        })}
       </div>
     </nav>
   );
@@ -97,10 +86,12 @@ function MobileDockNavLink({
   return (
     <Link
       to={item.to}
+      prefetch="viewport"
       aria-current={active ? "page" : undefined}
+      onClick={active ? (event) => event.preventDefault() : undefined}
       className={cn(
-        "flex min-w-0 flex-col items-center justify-center gap-1 rounded-full px-2 text-xs font-medium text-muted-foreground transition-[color,background-color,transform] hover:bg-accent hover:text-accent-foreground active:scale-[0.98] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/30 motion-reduce:transition-none [&_svg]:size-5 [&_svg]:shrink-0",
-        active && "bg-accent text-accent-foreground"
+        "relative z-10 flex min-w-0 flex-col items-center justify-center gap-1 rounded-full px-2 text-xs font-medium text-muted-foreground transition-[color,transform] hover:text-accent-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/30 motion-reduce:transition-none [&_svg]:size-5 [&_svg]:shrink-0",
+        active && "text-accent-foreground"
       )}
     >
       <Icon aria-hidden="true" />
@@ -109,12 +100,11 @@ function MobileDockNavLink({
   );
 }
 
-function isSamePathOrChild(pathname: string, target: string) {
-  if (target === "/") {
-    return pathname === "/";
-  }
+function getMobileDockIndex(pathname: string) {
+  const normalizedPathname =
+    pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
 
-  return pathname === target || pathname.startsWith(`${target}/`);
+  return mobileDockItems.findIndex((item) => item.to === normalizedPathname);
 }
 
 function useMobileKeyboardDockHidden() {
@@ -122,11 +112,21 @@ function useMobileKeyboardDockHidden() {
 
   useEffect(() => {
     const mobileQuery = window.matchMedia("(max-width: 767.98px)");
+    const getViewportHeight = () =>
+      window.visualViewport?.height ?? window.innerHeight;
+    let restingViewportHeight = getViewportHeight();
 
     const updateHiddenState = () => {
-      setHidden(
-        mobileQuery.matches && isTextEntryElement(document.activeElement)
-      );
+      const viewportHeight = getViewportHeight();
+      const textEntryFocused = isTextEntryElement(document.activeElement);
+
+      if (!mobileQuery.matches || !textEntryFocused) {
+        restingViewportHeight = viewportHeight;
+        setHidden(false);
+        return;
+      }
+
+      setHidden(restingViewportHeight - viewportHeight > 96);
     };
 
     const handleFocusIn = () => {
