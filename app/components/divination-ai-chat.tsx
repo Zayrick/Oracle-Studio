@@ -364,7 +364,7 @@ function AIChatComposer({
             id={inputId}
             value={inputValue}
             rows={1}
-            className="min-h-11 max-h-36 rounded-[1.375rem] py-2.5"
+            className="min-h-11 max-h-36 rounded-[1.375rem] bg-muted py-2.5"
             onChange={(event) => onInputChange(event.target.value)}
             onKeyDown={handleInputKeyDown}
             placeholder="输入你想了解的内容"
