@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   type FormEvent,
+  type KeyboardEvent,
   type ReactNode,
   type Ref,
 } from "react";
@@ -23,7 +24,6 @@ import {
 } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -33,6 +33,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import type { AIChatMessage } from "@/features/ai/chat";
 import { cn } from "@/lib/utils";
 
@@ -74,7 +75,7 @@ const AI_CHAT_LAYOUT = {
   scrollContent:
     "px-0 pb-[calc(5rem+var(--mobile-safe-bottom))] pt-14 lg:px-5 lg:pb-24 lg:pt-[4.5rem]",
   composer:
-    "bottom-0 px-0 pb-4 pt-3 md:px-4 lg:px-5 lg:pb-5",
+    "bottom-0 px-1 pb-[calc(1rem+4px)] pt-3 md:px-[calc(1rem+4px)] lg:px-[calc(1.25rem+4px)] lg:pb-[calc(1.25rem+4px)]",
   title:
     "px-3 py-2 text-xs text-muted-foreground lg:px-4 lg:text-sm lg:text-foreground",
 };
@@ -306,7 +307,7 @@ function AIChatMessages<Message extends AIChatMessage>({
       tabIndex={0}
     >
       <div className={cn("flex min-h-full flex-col", scrollContentClassName)}>
-        <div className="flex flex-1 flex-col justify-end gap-3">
+        <div className="flex flex-col gap-3">
           {messages.map((item) => (
             <div key={item.id} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
               <div className={getAIChatMessageClass(item)}>
@@ -341,22 +342,37 @@ function AIChatComposer({
   onStop: () => void;
   onSubmit: (event: FormEvent) => void;
 }) {
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (
+      event.key !== "Enter" ||
+      !event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  };
+
   return (
     <form className={cn("absolute inset-x-0 z-10", className)} onSubmit={onSubmit}>
       <FieldGroup className="gap-0">
-        <Field orientation="horizontal" className="items-center gap-2">
+        <Field orientation="horizontal" className="items-end gap-2">
           <FieldLabel htmlFor={inputId} className="sr-only">追问内容</FieldLabel>
-          <Input
+          <Textarea
             id={inputId}
             value={inputValue}
-            className="h-11 lg:h-9"
+            rows={1}
+            className="min-h-11 max-h-36 rounded-[1.375rem] py-2.5"
             onChange={(event) => onInputChange(event.target.value)}
+            onKeyDown={handleInputKeyDown}
             placeholder="输入你想了解的内容"
           />
           <Button
             type={isSending ? "button" : "submit"}
             size="icon"
-            className="rounded-full bg-primary text-primary-foreground opacity-100 hover:bg-primary disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100"
+            className="size-11 rounded-full bg-primary text-primary-foreground opacity-100 hover:bg-primary disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100 [&_svg:not([class*='size-'])]:size-5"
             aria-label={isSending ? "停止输出" : "发送追问"}
             disabled={!isSending && !inputValue.trim()}
             onClick={isSending ? onStop : undefined}
