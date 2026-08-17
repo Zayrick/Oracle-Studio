@@ -57,7 +57,9 @@ export function AIMessageTimeline({
   }
 
   if (segments.length === 0) {
-    return message.status === "streaming" ? pendingLabel : null;
+    return message.status === "streaming" ? (
+      <span className="shimmer text-muted-foreground">{pendingLabel}</span>
+    ) : null;
   }
 
   return (
@@ -87,7 +89,7 @@ function ThinkingSection({
 }: {
   segment: Extract<TimelineSegment, { kind: "thinking" }>;
 }) {
-  const [collapsed, setCollapsed] = useState(() => !segment.active);
+  const [collapsed, setCollapsed] = useState(true);
   const wasActiveRef = useRef(segment.active);
   const reasoningCount = segment.parts.filter((part) => part.type === "reasoning").length;
   const toolCount = segment.parts.filter((part) => part.type === "tool").length;
@@ -96,9 +98,7 @@ function ThinkingSection({
     : formatThinkingSummary(reasoningCount, toolCount);
 
   useEffect(() => {
-    if (segment.active) {
-      setCollapsed(false);
-    } else if (wasActiveRef.current) {
+    if (!segment.active && wasActiveRef.current) {
       setCollapsed(true);
     }
 
@@ -113,17 +113,35 @@ function ThinkingSection({
     <section className="text-muted-foreground">
       <button
         type="button"
-        className="flex w-full items-center gap-2 py-1.5 text-left text-xs font-medium outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30"
+        className="flex w-full items-center gap-2 py-1.5 text-left text-sm font-medium outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30"
         aria-expanded={!collapsed}
         onClick={() => setCollapsed((current) => !current)}
       >
         <ChevronRightIcon
           aria-hidden="true"
-          className={cn("size-3.5 shrink-0 transition-transform", !collapsed && "rotate-90")}
+          className={cn(
+            "size-4 shrink-0 transition-transform",
+            segment.active && "divination-thinking-control-enter",
+            !collapsed && "rotate-90"
+          )}
         />
-        <span className="min-w-0 flex-1 truncate">{title}</span>
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate",
+            segment.active && "divination-thinking-title-enter"
+          )}
+        >
+          <span className={cn("inline-block max-w-full", segment.active && "shimmer")}>
+            {title}
+          </span>
+        </span>
         {segment.active ? (
-          <LoaderCircleIcon aria-hidden="true" className="size-3.5 shrink-0 animate-spin" />
+          <span
+            aria-hidden="true"
+            className="divination-thinking-control-enter flex size-4 shrink-0 items-center justify-center"
+          >
+            <LoaderCircleIcon className="size-4 animate-spin" />
+          </span>
         ) : null}
       </button>
 
