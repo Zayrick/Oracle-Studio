@@ -81,7 +81,7 @@ export function DivinationPageFrame({
   const aiOpen = Boolean(result.ai?.open);
 
   return (
-    <div className="relative mx-auto flex h-dvh min-h-0 w-full flex-col overflow-hidden px-4 pt-[calc(var(--mobile-safe-top)+4rem)] md:px-0 md:pt-0">
+    <div className="relative mx-auto flex h-dvh min-h-0 w-full flex-col overflow-hidden px-4 md:px-0">
       <div className="fixed left-4 right-4 top-[calc(var(--mobile-safe-top)+1rem)] z-20 md:hidden">
         <DivinationResultActions
           aiOpen={aiOpen}
@@ -112,7 +112,7 @@ export function DivinationPageFrame({
           </div>
         </div>
 
-        <div className="flex h-full min-h-0 w-full flex-1 flex-col md:pt-16">
+        <div className="flex h-full min-h-0 w-full flex-1 flex-col">
           <div
             className={cn(
               "mx-auto flex w-full flex-1 flex-col max-lg:relative max-lg:h-full max-lg:min-h-0 max-lg:overflow-hidden lg:grid lg:h-full lg:min-h-0 lg:max-w-[96rem] lg:overflow-hidden",
@@ -121,7 +121,7 @@ export function DivinationPageFrame({
           >
             <div
               className={cn(
-                "divination-mobile-result-page min-w-0 max-lg:absolute max-lg:inset-0 max-lg:overflow-y-auto max-lg:overscroll-y-contain max-lg:pb-[max(1rem,var(--mobile-safe-bottom))] lg:flex lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-8 lg:py-8",
+                "divination-mobile-result-page min-w-0 max-lg:absolute max-lg:inset-0 max-lg:overflow-y-auto max-lg:overscroll-y-contain max-lg:pb-[max(1rem,var(--mobile-safe-bottom))] max-lg:pt-[calc(var(--mobile-safe-top)+4rem)] lg:flex lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-8 lg:pb-8 lg:pt-24",
                 aiOpen && "divination-mobile-result-page-open",
                 result.pageClassName
               )}
@@ -136,7 +136,7 @@ export function DivinationPageFrame({
                 <Separator
                   orientation="vertical"
                   className={cn(
-                    "divination-result-divider hidden",
+                    "divination-result-divider hidden lg:mt-16 lg:h-[calc(100%-4rem)]",
                     aiOpen ? "divination-result-divider-open lg:block" : "divination-result-divider-closed lg:block"
                   )}
                 />
@@ -205,7 +205,14 @@ function DivinationResultActions({
 
       {copy || showAI ? (
         <div className="ml-auto flex items-center gap-2">
-          {copy ? (
+          {aiOpen ? (
+            <div
+              className="flex items-center gap-2"
+              data-divination-ai-actions
+            />
+          ) : null}
+
+          {copy && !aiOpen ? (
             <>
               <Button
                 type="button"

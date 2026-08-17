@@ -687,6 +687,7 @@ function BaziAIPanel({
   return (
     <DivinationAIChatPanel
       open={open}
+      actionsPlacement="page-header"
       desktopTitle="AI 解盘"
       mobileTitle={formatBaziAITitle(paipan)}
       pendingLabel="正在解盘..."

@@ -1191,7 +1191,6 @@ function AIDivinationPanel({
   const nextMessageIdRef = useRef(getNextAIChatMessageId(messages));
   const activeRequestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const mobileTitle = formatHexagramTransition(result);
 
   const setMessages = (
     updater:
@@ -1455,8 +1454,9 @@ function AIDivinationPanel({
   return (
     <DivinationAIChatPanel
       open={open}
+      actionsPlacement="page-header"
       desktopTitle="AI 解卦"
-      mobileTitle={mobileTitle}
+      mobileTitle={formatHexagramTransition(result)}
       pendingLabel="正在解卦..."
       inputValue={message}
       messages={messages}

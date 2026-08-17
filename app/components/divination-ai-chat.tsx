@@ -1,11 +1,13 @@
 import {
   useEffect,
   useRef,
+  useState,
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
   type Ref,
 } from "react";
+import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import {
   ArrowUpIcon,
@@ -58,6 +60,7 @@ type DivinationAIChatPanelProps<Message extends AIChatMessage = AIChatMessage> =
   open: boolean;
   desktopTitle: string;
   mobileTitle: string;
+  actionsPlacement?: "panel" | "page-header";
   pendingLabel: string;
   inputValue: string;
   messages: Message[];
@@ -72,7 +75,7 @@ type DivinationAIChatPanelProps<Message extends AIChatMessage = AIChatMessage> =
 const AI_CHAT_LAYOUT = {
   header: "px-1 pt-2 lg:px-5 lg:pt-4",
   scrollContent:
-    "px-0 pb-[calc(5rem+var(--mobile-safe-bottom))] pt-14 lg:px-5 lg:pb-24 lg:pt-[4.5rem]",
+    "px-0 pb-[calc(5rem+var(--mobile-safe-bottom))] pt-[calc(var(--mobile-safe-top)+4rem)] lg:px-5 lg:pb-24 lg:pt-[4.5rem]",
   composer:
     "bottom-0 px-1 pb-[calc(1rem+4px)] pt-3 md:px-[calc(1rem+4px)] lg:px-[calc(1.25rem+4px)] lg:pb-[calc(1.25rem+4px)]",
   title:
@@ -86,6 +89,7 @@ export function DivinationAIChatPanel<Message extends AIChatMessage>({
   open,
   desktopTitle,
   mobileTitle,
+  actionsPlacement = "panel",
   ...contentProps
 }: DivinationAIChatPanelProps<Message>) {
   const panelRef = useRef<HTMLElement>(null);
@@ -116,6 +120,7 @@ export function DivinationAIChatPanel<Message extends AIChatMessage>({
       <DivinationAIChatContent
         {...contentProps}
         active={open}
+        actionsPlacement={actionsPlacement}
         desktopTitle={desktopTitle}
         mobileTitle={mobileTitle}
       />
@@ -125,6 +130,7 @@ export function DivinationAIChatPanel<Message extends AIChatMessage>({
 
 function DivinationAIChatContent<Message extends AIChatMessage>({
   active,
+  actionsPlacement,
   history,
   desktopTitle,
   mobileTitle,
@@ -138,13 +144,20 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
   pendingLabel,
 }: Omit<DivinationAIChatPanelProps<Message>, "desktopTitle" | "mobileTitle" | "open"> & {
   active: boolean;
+  actionsPlacement: "panel" | "page-header";
   desktopTitle: string;
   mobileTitle: string;
 }) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
   const messageInputId = "divination-ai-message";
-  const header = (
+  const header = actionsPlacement === "page-header" ? (
+    <AIChatPageHeaderActions
+      active={active}
+      history={history}
+      onNewSession={onNewSession}
+    />
+  ) : (
     <AIChatHeader
       className={AI_CHAT_LAYOUT.header}
       history={history}
@@ -223,6 +236,68 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
         onSubmit={onSubmit}
       />
     </div>
+  );
+}
+
+function AIChatPageHeaderActions<Message extends AIChatMessage>({
+  active,
+  history,
+  onNewSession,
+}: {
+  active: boolean;
+  history?: DivinationAIChatHistory<Message>;
+  onNewSession: () => void;
+}) {
+  const [targets, setTargets] = useState<Element[]>([]);
+
+  useEffect(() => {
+    if (!active) {
+      setTargets([]);
+      return;
+    }
+
+    setTargets(Array.from(document.querySelectorAll("[data-divination-ai-actions]")));
+  }, [active]);
+
+  return targets.map((target, index) =>
+    createPortal(
+      <AIChatActionButtons history={history} onNewSession={onNewSession} />,
+      target,
+      `divination-ai-actions-${index}`
+    )
+  );
+}
+
+function AIChatActionButtons<Message extends AIChatMessage>({
+  history,
+  onNewSession,
+}: {
+  history?: DivinationAIChatHistory<Message>;
+  onNewSession: () => void;
+}) {
+  return (
+    <>
+      {history ? (
+        <DivinationAIHistoryPopover
+          activeSessionId={history.activeSessionId}
+          description={history.description}
+          emptyDescription={history.emptyDescription}
+          emptyTitle={history.emptyTitle}
+          sessions={history.sessions}
+          title={history.title}
+          onRestoreSession={history.onRestoreSession}
+        />
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-sm"
+        aria-label="新建询问AI会话"
+        onClick={onNewSession}
+      >
+        <PlusIcon data-icon="inline-start" />
+      </Button>
+    </>
   );
 }
 
@@ -408,7 +483,7 @@ function DivinationAIHistoryPopover<Message extends AIChatMessage>({
         render={
           <Button
             type="button"
-            variant="ghost"
+            variant={triggerClassName ? "ghost" : "outline"}
             size="icon-sm"
             className={triggerClassName}
             aria-label="询问AI历史"
