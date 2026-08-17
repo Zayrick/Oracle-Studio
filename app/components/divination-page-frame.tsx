@@ -82,23 +82,25 @@ export function DivinationPageFrame({
 
   return (
     <div className="relative mx-auto flex h-dvh min-h-0 w-full flex-col overflow-hidden px-4 md:px-0">
-      <div className="fixed left-4 right-4 top-[calc(var(--mobile-safe-top)+1rem)] z-20 md:hidden">
-        <DivinationResultActions
-          aiOpen={aiOpen}
-          copy={result.copy}
-          layout="mobile"
-          restartHref={result.restartHref}
-          restartLabel={result.restartLabel}
-          onAIToggle={result.ai?.onToggle}
-          onRestart={result.onRestart}
-        />
+      <div className="divination-eased-header pointer-events-none fixed inset-x-0 top-0 z-20 h-[calc(var(--mobile-safe-top)+4rem)] md:hidden">
+        <div className="pointer-events-auto absolute left-4 right-4 top-[calc(var(--mobile-safe-top)+1rem)]">
+          <DivinationResultActions
+            aiOpen={aiOpen}
+            copy={result.copy}
+            layout="mobile"
+            restartHref={result.restartHref}
+            restartLabel={result.restartLabel}
+            onAIToggle={result.ai?.onToggle}
+            onRestart={result.onRestart}
+          />
+        </div>
       </div>
 
       <section
         className="divination-transition-content flex min-h-0 w-full flex-1 flex-col"
         aria-label={result.ariaLabel}
       >
-        <div className="fixed inset-x-0 top-0 z-20 hidden h-16 border-b bg-background/95 backdrop-blur md:left-[224px] md:flex md:items-center">
+        <div className="divination-eased-header fixed inset-x-0 top-0 z-20 hidden h-16 md:left-[224px] md:flex md:items-center">
           <div className="mx-auto flex w-full max-w-[96rem] px-6 lg:px-8">
             <DivinationResultActions
               aiOpen={aiOpen}

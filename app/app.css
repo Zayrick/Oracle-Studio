@@ -167,6 +167,66 @@
 }
 
 @layer components {
+  .divination-eased-header {
+    isolation: isolate;
+  }
+
+  .divination-eased-header::before,
+  .divination-eased-header::after {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    pointer-events: none;
+    content: "";
+  }
+
+  .divination-eased-header::before {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklch, var(--background) 97%, transparent) 0%,
+      color-mix(in oklch, var(--background) 96%, transparent) 18.5%,
+      color-mix(in oklch, var(--background) 92%, transparent) 34%,
+      color-mix(in oklch, var(--background) 84%, transparent) 47%,
+      color-mix(in oklch, var(--background) 71%, transparent) 58%,
+      color-mix(in oklch, var(--background) 55%, transparent) 67.5%,
+      color-mix(in oklch, var(--background) 38%, transparent) 76%,
+      color-mix(in oklch, var(--background) 22%, transparent) 83%,
+      color-mix(in oklch, var(--background) 10%, transparent) 89%,
+      transparent 100%
+    );
+  }
+
+  .divination-eased-header::after {
+    -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    backdrop-filter: blur(18px) saturate(1.2);
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      rgb(0 0 0) 0%,
+      rgb(0 0 0 / 98%) 18.5%,
+      rgb(0 0 0 / 92%) 34%,
+      rgb(0 0 0 / 84%) 47%,
+      rgb(0 0 0 / 71%) 58%,
+      rgb(0 0 0 / 55%) 67.5%,
+      rgb(0 0 0 / 38%) 76%,
+      rgb(0 0 0 / 22%) 83%,
+      rgb(0 0 0 / 10%) 89%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      rgb(0 0 0) 0%,
+      rgb(0 0 0 / 98%) 18.5%,
+      rgb(0 0 0 / 92%) 34%,
+      rgb(0 0 0 / 84%) 47%,
+      rgb(0 0 0 / 71%) 58%,
+      rgb(0 0 0 / 55%) 67.5%,
+      rgb(0 0 0 / 38%) 76%,
+      rgb(0 0 0 / 22%) 83%,
+      rgb(0 0 0 / 10%) 89%,
+      transparent 100%
+    );
+  }
+
   @media (max-width: 767.98px) {
     .mobile-divination-form [data-slot="input"],
     .mobile-divination-form [data-slot="select-trigger"] {
