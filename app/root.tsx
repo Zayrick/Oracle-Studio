@@ -26,6 +26,7 @@ import {
   MobileDockNav,
 } from "./components/mobile-dock-nav";
 import { ThemeInitScript, ThemeProvider } from "./components/theme-provider";
+import { consumeManualRouteBackTransition } from "./lib/route-transition";
 import { cn } from "./lib/utils";
 
 const useIsomorphicLayoutEffect =
@@ -101,10 +102,14 @@ function AppShell({ children }: { children: React.ReactNode }) {
 function useRouteTransitionDirection(location: ReturnType<typeof useLocation>) {
   const transition = useContext(UNSAFE_ViewTransitionContext);
   const handledTransition = useRef<object | null>(null);
+  const committedHistoryIndex = useRef<number | null>(null);
 
   useIsomorphicLayoutEffect(() => {
+    const currentHistoryIndex = getRouterHistoryIndex();
+
     if (!transition.isTransitioning) {
       handledTransition.current = null;
+      committedHistoryIndex.current = currentHistoryIndex;
       delete document.documentElement.dataset.routeTransition;
       return;
     }
@@ -114,6 +119,18 @@ function useRouteTransitionDirection(location: ReturnType<typeof useLocation>) {
     }
 
     handledTransition.current = transition;
+    const isHistoryBack =
+      committedHistoryIndex.current !== null &&
+      currentHistoryIndex < committedHistoryIndex.current;
+    const isManualBack =
+      isHistoryBack &&
+      consumeManualRouteBackTransition(currentHistoryIndex);
+
+    if (isHistoryBack && !isManualBack) {
+      document.documentElement.dataset.routeTransition = "none";
+      return;
+    }
+
     const destination =
       transition.currentLocation.key === location.key
         ? transition.nextLocation
@@ -128,6 +145,11 @@ function useRouteTransitionDirection(location: ReturnType<typeof useLocation>) {
           ? "back"
           : "forward";
   }, [location.key, transition]);
+}
+
+function getRouterHistoryIndex() {
+  const index = window.history.state?.idx;
+  return typeof index === "number" ? index : 0;
 }
 
 function DesktopSidebarNav() {

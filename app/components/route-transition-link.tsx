@@ -1,6 +1,8 @@
 import type { MouseEvent } from "react";
 import { Link, type LinkProps, useNavigate } from "react-router";
 
+import { markManualRouteBackTransition } from "@/lib/route-transition";
+
 type TransitionLinkProps = Omit<LinkProps, "viewTransition">;
 
 export function TransitionLink(props: TransitionLinkProps) {
@@ -16,11 +18,14 @@ export function TransitionBackLink({
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
 
-    if (!isPlainLeftClick(event) || getRouterHistoryIndex() <= 0) {
+    const historyIndex = getRouterHistoryIndex();
+
+    if (!isPlainLeftClick(event) || historyIndex <= 0) {
       return;
     }
 
     event.preventDefault();
+    markManualRouteBackTransition(historyIndex - 1);
     void navigate(-1);
   };
 
