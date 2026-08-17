@@ -226,7 +226,6 @@ function HistoryRecordItem({
           type="submit"
           variant="ghost"
           size={variant === "sidebar" ? "icon-xs" : "icon-sm"}
-          className={variant === "page" ? "size-11" : undefined}
           aria-label="保存标题"
         >
           <CheckIcon data-icon="inline-start" />
@@ -235,7 +234,6 @@ function HistoryRecordItem({
           type="button"
           variant="ghost"
           size={variant === "sidebar" ? "icon-xs" : "icon-sm"}
-          className={variant === "page" ? "size-11" : undefined}
           aria-label="取消重命名"
           onClick={onCancelEditing}
         >
@@ -306,7 +304,6 @@ function HistoryRecordItem({
           type="button"
           variant="ghost"
           size={variant === "sidebar" ? "icon-xs" : "icon-sm"}
-          className={variant === "page" ? "size-11" : undefined}
           aria-label="重命名历史记录"
           onClick={() => onStartEditing(record)}
         >
@@ -319,7 +316,6 @@ function HistoryRecordItem({
                 type="button"
                 variant="ghost"
                 size={variant === "sidebar" ? "icon-xs" : "icon-sm"}
-                className={variant === "page" ? "size-11" : undefined}
                 aria-label="删除历史记录"
               />
             }
@@ -334,10 +330,9 @@ function HistoryRecordItem({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="min-h-11">取消</AlertDialogCancel>
+              <AlertDialogCancel>取消</AlertDialogCancel>
               <AlertDialogAction
                 variant="destructive"
-                className="min-h-11"
                 onClick={() => onDelete(record)}
               >
                 删除

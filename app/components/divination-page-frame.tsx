@@ -57,7 +57,7 @@ export function DivinationPageFrame({
           prefetch="intent"
           className={cn(
             buttonVariants({ variant: "outline", size: "sm" }),
-            "fixed left-4 top-[calc(var(--mobile-safe-top)+1rem)] z-20 min-h-11 md:hidden"
+            "fixed left-4 top-[calc(var(--mobile-safe-top)+1rem)] z-20 md:hidden"
           )}
         >
           <ArrowLeftIcon data-icon="inline-start" />
@@ -185,8 +185,7 @@ function DivinationResultActions({
             buttonVariants({
               variant: "outline",
               size: compact ? "sm" : "default",
-            }),
-            compact && "min-h-11"
+            })
           )}
         >
           <ArrowLeftIcon data-icon="inline-start" />
@@ -197,7 +196,6 @@ function DivinationResultActions({
           type="button"
           variant="outline"
           size={compact ? "sm" : "default"}
-          className={compact ? "min-h-11" : undefined}
           onClick={onRestart}
         >
           <ArrowLeftIcon data-icon="inline-start" />
@@ -213,7 +211,6 @@ function DivinationResultActions({
                 type="button"
                 variant="outline"
                 size={compact ? "icon-sm" : "icon"}
-                className={compact ? "size-11" : undefined}
                 aria-label={copy.status === "copied" ? "已复制排盘结果" : copy.ariaLabel ?? "复制排盘结果"}
                 onClick={copy.onCopy}
               >
@@ -233,7 +230,6 @@ function DivinationResultActions({
             <Button
               type="button"
               size={compact ? "sm" : "default"}
-              className={compact ? "min-h-11" : undefined}
               aria-expanded={aiOpen}
               onClick={onAIToggle}
             >

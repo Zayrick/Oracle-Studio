@@ -64,7 +64,7 @@ export default function Settings() {
                   <ToggleGroupItem
                     key={option.value}
                     aria-label={option.label}
-                    className="min-h-11 min-w-24 flex-1 sm:flex-none"
+                    className="min-w-24 flex-1 sm:flex-none"
                     value={option.value}
                   >
                     <Icon data-icon="inline-start" aria-hidden="true" />

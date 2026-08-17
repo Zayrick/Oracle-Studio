@@ -80,7 +80,7 @@ const AI_CHAT_LAYOUT = {
 };
 
 const AI_HEADER_ICON_BUTTON_CLASS =
-  "divination-ai-frosted-surface size-11 rounded-full ring-1 ring-border/60 hover:bg-muted/80 lg:size-8";
+  "divination-ai-frosted-surface rounded-full ring-1 ring-border/60 hover:bg-muted/80";
 
 export function DivinationAIChatPanel<Message extends AIChatMessage>({
   open,
@@ -356,7 +356,7 @@ function AIChatComposer({
           <Button
             type={isSending ? "button" : "submit"}
             size="icon"
-            className="size-11 rounded-full bg-primary text-primary-foreground opacity-100 hover:bg-primary disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100 lg:size-9"
+            className="rounded-full bg-primary text-primary-foreground opacity-100 hover:bg-primary disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100"
             aria-label={isSending ? "停止输出" : "发送追问"}
             disabled={!isSending && !inputValue.trim()}
             onClick={isSending ? onStop : undefined}

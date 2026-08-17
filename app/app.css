@@ -165,10 +165,8 @@
 
 @layer components {
   @media (max-width: 767.98px) {
-    .mobile-divination-form [data-slot="button"],
     .mobile-divination-form [data-slot="input"],
-    .mobile-divination-form [data-slot="select-trigger"],
-    .mobile-divination-form [data-slot="toggle-group-item"] {
+    .mobile-divination-form [data-slot="select-trigger"] {
       min-height: 2.75rem;
     }
   }

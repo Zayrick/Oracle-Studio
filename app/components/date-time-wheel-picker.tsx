@@ -290,7 +290,6 @@ export function DateTimeWheelPicker({
           type="button"
           variant="ghost"
           size="sm"
-          className="min-h-11 md:min-h-8"
           onClick={() => setOpen(false)}
         >
           完成

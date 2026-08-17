@@ -200,7 +200,7 @@ export default function Home() {
             </label>
 
             <ToggleGroup
-              className="h-[52px] w-full rounded-lg border border-border bg-muted p-1 md:h-[42px] md:w-fit"
+              className="h-9 w-full rounded-lg border border-border bg-muted p-1 md:h-[42px] md:w-fit"
               value={[category]}
               spacing={1}
               aria-label="方式分类"
@@ -216,7 +216,7 @@ export default function Home() {
                 <ToggleGroupItem
                   key={item}
                   value={item}
-                  className="h-11 min-w-0 flex-1 rounded-md px-3 text-xs font-bold text-muted-foreground hover:text-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm md:h-full md:flex-none"
+                  className="h-full min-w-0 flex-1 rounded-md px-3 text-xs font-bold text-muted-foreground hover:text-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm md:flex-none"
                 >
                   {item}
                 </ToggleGroupItem>

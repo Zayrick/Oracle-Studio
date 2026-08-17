@@ -832,7 +832,7 @@ export default function Liuyao() {
                           type="button"
                           onClick={() => toggleYaoType(index)}
                           aria-label={`${YAO_NAMES[index]}爻象，${yaoSelected ? formatYaoResultName(yao) : "未选择"}`}
-                          className="relative flex h-11 w-full cursor-pointer items-center justify-center rounded-md hover:bg-background/70 lg:h-10"
+                          className="relative flex h-9 w-full cursor-pointer items-center justify-center rounded-md hover:bg-background/70 lg:h-10"
                         >
                           {yaoSelected ? <YaoGlyph type={yao.type} /> : <YaoPlaceholderGlyph />}
                         </button>
@@ -841,7 +841,7 @@ export default function Liuyao() {
                           type="button"
                           onClick={() => toggleYaoMoving(index)}
                           className={cn(
-                            "flex h-11 items-center justify-center rounded-md border text-xs font-medium transition-colors lg:h-9 lg:text-sm",
+                            "flex h-8 items-center justify-center rounded-md border text-xs font-medium transition-colors lg:h-9 lg:text-sm",
                             yaoSelected && yao.moving
                               ? "border-primary bg-primary text-primary-foreground"
                               : "border-border bg-background hover:bg-muted"
