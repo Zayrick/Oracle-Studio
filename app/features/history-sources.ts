@@ -1,3 +1,4 @@
+import { BAZI_HISTORY_SOURCE } from "@/features/bazi/constants";
 import { LIUYAO_HISTORY_SOURCE } from "@/features/liuyao/constants";
 import type { HistoryRecord } from "@/lib/history-manager";
 
@@ -8,6 +9,11 @@ export interface HistorySourceConfig {
 }
 
 const historySourceConfigs = [
+  {
+    source: BAZI_HISTORY_SOURCE,
+    baseHref: "/bazi",
+    getRecordHref: (record) => `/bazi?history=${encodeURIComponent(record.id)}`,
+  },
   {
     source: LIUYAO_HISTORY_SOURCE,
     baseHref: "/liuyao",

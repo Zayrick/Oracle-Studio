@@ -6,6 +6,7 @@ import {
   type FormEvent,
 } from "react";
 import { format } from "date-fns";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import type { Route } from "./+types/bazi";
 
 import { BaziPaipanTable } from "@/components/bazi-paipan-table";
@@ -19,12 +20,26 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   appendAIChatEventToMessage,
   buildAIChatRequestMessages,
-  createAIChatSessionId,
+  getNextAIChatMessageId,
+  markStreamingAIChatMessagesStopped,
   readAIErrorMessage,
-  type AIChatMessage,
 } from "@/features/ai/chat";
 import { readAIStreamEvents } from "@/features/ai/timeline";
 import { formatBaziAISystemPrompt } from "@/features/bazi/ai-format";
+import {
+  activateBaziAIHistorySession,
+  createBaziAISessionId,
+  createBaziHistoryRecord,
+  createEmptyBaziAIHistoryState,
+  getBaziAIHistorySession,
+  getBaziHistoryRecord,
+  restoreBaziHistoryRecord,
+  updateBaziHistoryRecordAI,
+  upsertBaziAIHistorySession,
+  type BaziAIHistoryState,
+  type BaziAIMessage,
+  type BaziHistoryRecord,
+} from "@/features/bazi/history";
 import type { BaziGender, BaziPaipan } from "@/features/bazi/paipan";
 import { runDivinationViewTransition } from "@/lib/divination-view-transition";
 
@@ -43,9 +58,12 @@ const BAZI_AI_ENDPOINT = "/api/bazi/ai";
 const useIsomorphicLayoutEffect =
   typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-type BaziAIMessage = AIChatMessage;
-
 export default function Bazi() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const historyId = searchParams.get("history");
+  const fromHistory = location.state?.returnTo === "/history";
   const [name, setName] = useState("");
   const [gender, setGender] = useState<BaziGender | "">("");
   const [date, setDate] = useState<Date>(() => new Date(2000, 0, 1, 12));
@@ -55,13 +73,26 @@ export default function Bazi() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [paipan, setPaipan] = useState<BaziPaipan | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+  const [aiHistory, setAiHistory] = useState<BaziAIHistoryState>(() =>
+    createEmptyBaziAIHistoryState()
+  );
   const mountedRef = useRef(false);
+  const aiHistoryRef = useRef(aiHistory);
 
   useIsomorphicLayoutEffect(() => {
+    if (historyId) {
+      return;
+    }
+
     const now = new Date();
     setDate(now);
     setTime(format(now, "HH:mm"));
   }, []);
+
+  useEffect(() => {
+    aiHistoryRef.current = aiHistory;
+  }, [aiHistory]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -86,9 +117,68 @@ export default function Bazi() {
     runDivinationViewTransition(() => {
       resetFormState();
       setPaipan(null);
+      setActiveHistoryId(null);
+      setAiHistory(createEmptyBaziAIHistoryState());
       setAiPanelOpen(false);
+      navigate("/bazi", { replace: true });
     });
   };
+
+  const handleRestoreHistoryRecord = (record: BaziHistoryRecord) => {
+    try {
+      const restored = restoreBaziHistoryRecord(record);
+
+      setName(restored.name);
+      setGender(restored.gender);
+      setDate(restored.date);
+      setTime(restored.time);
+      setPaipan(restored.result);
+      setActiveHistoryId(record.id);
+      setAiHistory(restored.ai);
+      setAiPanelOpen(false);
+      setGenderError("");
+      setCalculationError("");
+    } catch (error) {
+      resetFormState();
+      setPaipan(null);
+      setActiveHistoryId(null);
+      setAiHistory(createEmptyBaziAIHistoryState());
+      setAiPanelOpen(false);
+      setCalculationError(
+        error instanceof Error ? error.message : "历史记录恢复失败。"
+      );
+    }
+  };
+
+  useIsomorphicLayoutEffect(() => {
+    if (!historyId) {
+      if (activeHistoryId) {
+        resetFormState();
+        setPaipan(null);
+        setActiveHistoryId(null);
+        setAiHistory(createEmptyBaziAIHistoryState());
+        setAiPanelOpen(false);
+      }
+      return;
+    }
+
+    if (historyId === activeHistoryId) {
+      return;
+    }
+
+    const record = getBaziHistoryRecord(historyId);
+    if (!record) {
+      resetFormState();
+      setPaipan(null);
+      setActiveHistoryId(null);
+      setAiHistory(createEmptyBaziAIHistoryState());
+      setAiPanelOpen(false);
+      setCalculationError("历史记录不存在或已删除。");
+      return;
+    }
+
+    handleRestoreHistoryRecord(record);
+  }, [historyId]);
 
   const handleSetNow = () => {
     const now = new Date();
@@ -129,11 +219,28 @@ export default function Bazi() {
       }
 
       const nextPaipan = buildBaziPaipan({ name, gender, date, time });
+      const nextAiHistory = createEmptyBaziAIHistoryState();
+      const nextHistoryRecord = createBaziHistoryRecord({
+        name,
+        gender,
+        date,
+        time,
+        result: nextPaipan,
+        ai: nextAiHistory,
+      });
 
       runDivinationViewTransition(() => {
         setPaipan(nextPaipan);
+        setActiveHistoryId(nextHistoryRecord?.id ?? null);
+        setAiHistory(nextAiHistory);
         setAiPanelOpen(false);
         setCalculationError("");
+
+        if (nextHistoryRecord) {
+          navigate(`/bazi?history=${encodeURIComponent(nextHistoryRecord.id)}`, {
+            replace: true,
+          });
+        }
       });
     } catch (error) {
       if (!mountedRef.current) {
@@ -151,8 +258,23 @@ export default function Bazi() {
     }
   };
 
+  const handleAIHistoryChange = (
+    updater: (current: BaziAIHistoryState) => BaziAIHistoryState,
+    options?: { touch?: boolean }
+  ) => {
+    const next = updater(aiHistoryRef.current);
+    aiHistoryRef.current = next;
+    setAiHistory(next);
+
+    if (activeHistoryId) {
+      updateBaziHistoryRecordAI(activeHistoryId, next, options);
+    }
+  };
+
   return (
     <DivinationPageFrame
+      homeHref={fromHistory ? "/history" : "/"}
+      homeLabel={fromHistory ? "返回历史" : "返回主页"}
       form={{
         title: "八字排盘",
         description: "填写命主信息与出生时间",
@@ -257,7 +379,10 @@ export default function Bazi() {
                   <BaziAIPanel
                     open={aiPanelOpen}
                     paipan={paipan}
+                    historyRecordId={activeHistoryId}
+                    aiHistory={aiHistory}
                     onClose={() => setAiPanelOpen(false)}
+                    onAIHistoryChange={handleAIHistoryChange}
                   />
                 ),
               },
@@ -271,18 +396,34 @@ export default function Bazi() {
 function BaziAIPanel({
   open,
   paipan,
+  historyRecordId,
+  aiHistory,
   onClose,
+  onAIHistoryChange,
 }: {
   open: boolean;
   paipan: BaziPaipan;
+  historyRecordId: string | null;
+  aiHistory: BaziAIHistoryState;
   onClose: () => void;
+  onAIHistoryChange: (
+    updater: (current: BaziAIHistoryState) => BaziAIHistoryState,
+    options?: { touch?: boolean }
+  ) => void;
 }) {
+  const activeSession = getBaziAIHistorySession(
+    aiHistory,
+    aiHistory.activeSessionId
+  );
   const [message, setMessage] = useState("");
-  const [messages, setMessagesState] = useState<BaziAIMessage[]>([]);
+  const [messages, setMessagesState] = useState<BaziAIMessage[]>(
+    () => activeSession?.messages ?? []
+  );
+  const [sessionId, setSessionIdState] = useState(aiHistory.activeSessionId);
   const [isSending, setIsSending] = useState(false);
   const messagesRef = useRef(messages);
-  const sessionIdRef = useRef(createAIChatSessionId("bazi"));
-  const nextMessageIdRef = useRef(1);
+  const sessionIdRef = useRef(sessionId);
+  const nextMessageIdRef = useRef(getNextAIChatMessageId(messages));
   const activeRequestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -295,7 +436,46 @@ function BaziAIPanel({
 
     messagesRef.current = nextMessages;
     setMessagesState(nextMessages);
+    return nextMessages;
   };
+
+  const setSessionId = (nextSessionId: string) => {
+    sessionIdRef.current = nextSessionId;
+    setSessionIdState(nextSessionId);
+  };
+
+  const persistSession = (
+    nextMessages: BaziAIMessage[],
+    options?: { touch?: boolean }
+  ) => {
+    if (nextMessages.length === 0) {
+      return;
+    }
+
+    onAIHistoryChange(
+      (current) =>
+        upsertBaziAIHistorySession(current, {
+          sessionId: sessionIdRef.current,
+          messages: nextMessages,
+        }),
+      options
+    );
+  };
+
+  useEffect(() => {
+    const nextSessionId = aiHistory.activeSessionId || createBaziAISessionId();
+    const nextSession = getBaziAIHistorySession(aiHistory, nextSessionId);
+    const nextMessages = nextSession?.messages ?? [];
+
+    activeRequestIdRef.current += 1;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setMessage("");
+    setMessages(nextMessages);
+    setSessionId(nextSessionId);
+    setIsSending(false);
+    nextMessageIdRef.current = getNextAIChatMessageId(nextMessages);
+  }, [aiHistory.activeSessionId, historyRecordId]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -312,7 +492,7 @@ function BaziAIPanel({
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
 
-    setMessages([
+    const nextMessages = setMessages([
       ...messagesRef.current,
       {
         id: userMessageId,
@@ -326,6 +506,7 @@ function BaziAIPanel({
         status: "streaming",
       },
     ]);
+    persistSession(nextMessages);
     setMessage("");
     setIsSending(true);
 
@@ -342,7 +523,7 @@ function BaziAIPanel({
         body: JSON.stringify({
           systemPrompt: formatBaziAISystemPrompt(paipan),
           chart: paipan,
-          sessionId: sessionIdRef.current,
+          sessionId,
           messages: requestMessages,
         }),
         signal: abortController.signal,
@@ -370,7 +551,7 @@ function BaziAIPanel({
         return;
       }
 
-      setMessages((prev) =>
+      const finalMessages = setMessages((prev) =>
         prev.map((item) => {
           if (item.id !== assistantMessageId) {
             return item;
@@ -385,13 +566,14 @@ function BaziAIPanel({
           };
         })
       );
+      persistSession(finalMessages);
     } catch (err) {
       if (!isActiveRequest()) {
         return;
       }
 
       if (abortController.signal.aborted) {
-        setMessages((prev) =>
+        const stoppedMessages = setMessages((prev) =>
           prev.map((item) => {
             if (item.id !== assistantMessageId) {
               return item;
@@ -404,10 +586,11 @@ function BaziAIPanel({
             };
           })
         );
+        persistSession(stoppedMessages);
         return;
       }
 
-      setMessages((prev) =>
+      const errorMessages = setMessages((prev) =>
         prev.map((item) =>
           item.id === assistantMessageId
             ? {
@@ -418,6 +601,7 @@ function BaziAIPanel({
             : item
         )
       );
+      persistSession(errorMessages);
     } finally {
       if (abortControllerRef.current === abortController) {
         abortControllerRef.current = null;
@@ -440,14 +624,46 @@ function BaziAIPanel({
   };
 
   const handleNewSession = () => {
+    const stoppedMessages = markStreamingAIChatMessagesStopped(
+      messagesRef.current
+    );
+    if (stoppedMessages !== messagesRef.current) {
+      persistSession(stoppedMessages);
+    }
+
+    const nextSessionId = createBaziAISessionId();
     activeRequestIdRef.current += 1;
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     setMessage("");
     setMessages([]);
     setIsSending(false);
-    sessionIdRef.current = createAIChatSessionId("bazi");
+    setSessionId(nextSessionId);
     nextMessageIdRef.current = 1;
+    onAIHistoryChange(
+      (current) => activateBaziAIHistorySession(current, nextSessionId),
+      { touch: false }
+    );
+  };
+
+  const handleRestoreSession = (restoredSessionId: string) => {
+    const session = getBaziAIHistorySession(aiHistory, restoredSessionId);
+    if (!session) {
+      return;
+    }
+
+    activeRequestIdRef.current += 1;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setMessage("");
+    setMessages(session.messages);
+    setSessionId(session.sessionId);
+    setIsSending(false);
+    nextMessageIdRef.current = getNextAIChatMessageId(session.messages);
+    onAIHistoryChange(
+      (current) => activateBaziAIHistorySession(current, session.sessionId),
+      { touch: false }
+    );
   };
 
   useEffect(() => {
@@ -477,6 +693,13 @@ function BaziAIPanel({
       inputValue={message}
       messages={messages}
       isSending={isSending}
+      history={{
+        sessions: aiHistory.sessions,
+        activeSessionId: sessionId,
+        description: "恢复此八字中过去的询问会话。",
+        emptyDescription: "此八字还没有保存过询问会话。",
+        onRestoreSession: handleRestoreSession,
+      }}
       onInputChange={setMessage}
       onNewSession={handleNewSession}
       onStop={handleStop}
