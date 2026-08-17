@@ -74,7 +74,7 @@ const AI_CHAT_LAYOUT = {
   scrollContent:
     "px-0 pb-[calc(5rem+var(--mobile-safe-bottom))] pt-14 lg:px-5 lg:pb-24 lg:pt-[4.5rem]",
   composer:
-    "bottom-0 px-1 pb-[max(0.75rem,var(--mobile-safe-bottom))] pt-3 lg:px-5 lg:pb-5 lg:pt-3",
+    "bottom-0 px-0 pb-4 pt-3 md:px-4 lg:px-5 lg:pb-5",
   title:
     "px-3 py-2 text-xs text-muted-foreground lg:px-4 lg:text-sm lg:text-foreground",
 };
