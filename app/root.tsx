@@ -5,13 +5,18 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
 } from "react-router";
 
 import type { Route } from "./+types/root";
 import "./app.css";
-import { MobileDockNav } from "./components/mobile-dock-nav";
+import {
+  isMobilePrimaryPathname,
+  MobileDockNav,
+} from "./components/mobile-dock-nav";
 import { SidebarNav } from "./components/sidebar-nav";
 import { ThemeInitScript, ThemeProvider } from "./components/theme-provider";
+import { cn } from "./lib/utils";
 
 export const links: Route.LinksFunction = () => [
   {
@@ -56,12 +61,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <div className="min-h-svh bg-background">
+    <AppShell>
+      <Outlet />
+    </AppShell>
+  );
+}
+
+function AppShell({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const showMobileNav = isMobilePrimaryPathname(location.pathname);
+
+  return (
+    <div
+      className={cn(
+        "min-h-svh bg-background",
+        !showMobileNav &&
+          "[--mobile-dock-height:0px] [--mobile-dock-page-offset:0px]"
+      )}
+    >
       <SidebarNav />
       <main className="min-h-svh pb-[var(--mobile-dock-page-offset)] md:pb-0 md:pl-[224px]">
-        <Outlet />
+        {children}
       </main>
-      <MobileDockNav />
+      {showMobileNav ? <MobileDockNav /> : null}
     </div>
   );
 }
@@ -83,20 +105,16 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 
   return (
-    <div className="min-h-svh bg-background">
-      <SidebarNav />
-      <main className="min-h-svh pb-[var(--mobile-dock-page-offset)] md:pb-0 md:pl-[224px]">
-        <div className="container mx-auto p-4">
-          <h1>{message}</h1>
-          <p>{details}</p>
-          {stack && (
-            <pre className="w-full overflow-x-auto p-4">
-              <code>{stack}</code>
-            </pre>
-          )}
-        </div>
-      </main>
-      <MobileDockNav />
-    </div>
+    <AppShell>
+      <div className="container mx-auto p-4">
+        <h1>{message}</h1>
+        <p>{details}</p>
+        {stack && (
+          <pre className="w-full overflow-x-auto p-4">
+            <code>{stack}</code>
+          </pre>
+        )}
+      </div>
+    </AppShell>
   );
 }

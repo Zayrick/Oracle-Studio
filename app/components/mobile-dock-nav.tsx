@@ -40,6 +40,13 @@ const mobileDockItems = [
   },
 ] satisfies MobileDockItem[];
 
+export function isMobilePrimaryPathname(pathname: string) {
+  const normalizedPathname =
+    pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+
+  return mobileDockItems.some((item) => item.to === normalizedPathname);
+}
+
 export function MobileDockNav() {
   const location = useLocation();
   const hiddenForKeyboard = useMobileKeyboardDockHidden();
