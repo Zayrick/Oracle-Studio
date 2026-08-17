@@ -67,7 +67,6 @@ type DivinationAIChatPanelProps<Message extends AIChatMessage = AIChatMessage> =
   onNewSession: () => void;
   onStop: () => void;
   onSubmit: (event: FormEvent) => void;
-  renderMarkdown: (content: string) => string;
 };
 
 const AI_CHAT_LAYOUT = {
@@ -137,7 +136,6 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
   onStop,
   onSubmit,
   pendingLabel,
-  renderMarkdown,
 }: Omit<DivinationAIChatPanelProps<Message>, "desktopTitle" | "mobileTitle" | "open"> & {
   active: boolean;
   desktopTitle: string;
@@ -211,7 +209,6 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
       <AIChatMessages
         messages={messages}
         pendingLabel={pendingLabel}
-        renderMarkdown={renderMarkdown}
         scrollContainerRef={scrollContainerRef}
         scrollContentClassName={AI_CHAT_LAYOUT.scrollContent}
       />
@@ -288,13 +285,11 @@ function AIChatHeader<Message extends AIChatMessage>({
 function AIChatMessages<Message extends AIChatMessage>({
   messages,
   pendingLabel,
-  renderMarkdown,
   scrollContainerRef,
   scrollContentClassName,
 }: {
   messages: Message[];
   pendingLabel: string;
-  renderMarkdown: (content: string) => string;
   scrollContainerRef: Ref<HTMLDivElement>;
   scrollContentClassName: string;
 }) {
@@ -314,7 +309,6 @@ function AIChatMessages<Message extends AIChatMessage>({
                 <AIChatMessageContent
                   message={item}
                   pendingLabel={pendingLabel}
-                  renderMarkdown={renderMarkdown}
                 />
               </div>
             </div>
@@ -476,18 +470,15 @@ function DivinationAIHistoryPopover<Message extends AIChatMessage>({
 function AIChatMessageContent({
   message,
   pendingLabel,
-  renderMarkdown,
 }: {
   message: AIChatMessage;
   pendingLabel: string;
-  renderMarkdown: (content: string) => string;
 }) {
   if (message.role === "assistant" && message.status !== "error") {
     return (
       <AIMessageTimeline
         message={message}
         pendingLabel={pendingLabel}
-        renderMarkdown={renderMarkdown}
       />
     );
   }
@@ -508,7 +499,7 @@ function getAIChatMessageClass(message: AIChatMessage) {
   }
 
   return cn(
-    "divination-ai-markdown w-full max-w-full py-1 text-sm leading-relaxed text-card-foreground break-words",
+    "w-full max-w-full py-1 text-sm leading-relaxed text-card-foreground break-words",
     message.status === "error" && "text-destructive"
   );
 }

@@ -56,7 +56,6 @@ import {
   type YaoType,
 } from "@/features/liuyao/paipan";
 import { runDivinationViewTransition } from "@/lib/divination-view-transition";
-import { renderSafeMarkdown } from "@/lib/safe-markdown";
 import { cn } from "@/lib/utils";
 
 export function meta({}: Route.MetaArgs) {
@@ -1473,7 +1472,6 @@ function AIDivinationPanel({
       onNewSession={handleNewSession}
       onStop={handleStop}
       onSubmit={handleSubmit}
-      renderMarkdown={renderSafeMarkdown}
     />
   );
 }

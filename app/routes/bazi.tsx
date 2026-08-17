@@ -27,7 +27,6 @@ import { readAIStreamEvents } from "@/features/ai/timeline";
 import { formatBaziAISystemPrompt } from "@/features/bazi/ai-format";
 import type { BaziGender, BaziPaipan } from "@/features/bazi/paipan";
 import { runDivinationViewTransition } from "@/lib/divination-view-transition";
-import { renderSafeMarkdown } from "@/lib/safe-markdown";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -482,7 +481,6 @@ function BaziAIPanel({
       onNewSession={handleNewSession}
       onStop={handleStop}
       onSubmit={handleSubmit}
-      renderMarkdown={renderSafeMarkdown}
     />
   );
 }

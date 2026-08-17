@@ -3,6 +3,9 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/cjk/dist/*.js";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -258,103 +261,6 @@
       0 12px 32px color-mix(in oklch, var(--foreground) 8%, transparent);
     -webkit-backdrop-filter: blur(18px) saturate(1.35);
     backdrop-filter: blur(18px) saturate(1.35);
-  }
-
-  .divination-ai-markdown > :first-child,
-  .divination-ai-markdown > div > :first-child {
-    margin-top: 0;
-  }
-
-  .divination-ai-markdown > :last-child,
-  .divination-ai-markdown > div > :last-child {
-    margin-bottom: 0;
-  }
-
-  .divination-ai-markdown p {
-    margin: 0.45rem 0;
-  }
-
-  .divination-ai-markdown h1,
-  .divination-ai-markdown h2,
-  .divination-ai-markdown h3,
-  .divination-ai-markdown h4 {
-    margin: 0.75rem 0 0.35rem;
-    font-size: 0.95rem;
-    font-weight: 600;
-    line-height: 1.3;
-  }
-
-  .divination-ai-markdown h1 {
-    font-size: 1rem;
-  }
-
-  .divination-ai-markdown ul,
-  .divination-ai-markdown ol {
-    margin: 0.45rem 0;
-    padding-left: 1.25rem;
-  }
-
-  .divination-ai-markdown li {
-    margin: 0.2rem 0;
-  }
-
-  .divination-ai-markdown blockquote {
-    margin: 0.5rem 0;
-    border-left: 2px solid var(--border);
-    padding-left: 0.75rem;
-    color: var(--muted-foreground);
-  }
-
-  .divination-ai-markdown a {
-    color: inherit;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-
-  .divination-ai-markdown code {
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--background);
-    padding: 0.05rem 0.25rem;
-    font-size: 0.85em;
-  }
-
-  .divination-ai-markdown pre {
-    margin: 0.5rem 0;
-    overflow-x: auto;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    background: var(--background);
-    padding: 0.65rem;
-    white-space: pre;
-  }
-
-  .divination-ai-markdown pre code {
-    border: 0;
-    background: transparent;
-    padding: 0;
-  }
-
-  .divination-ai-markdown table {
-    display: block;
-    max-width: 100%;
-    margin: 0.5rem 0;
-    overflow-x: auto;
-    border-collapse: collapse;
-  }
-
-  .divination-ai-markdown th,
-  .divination-ai-markdown td {
-    border: 1px solid var(--border);
-    padding: 0.25rem 0.4rem;
-    text-align: left;
-    vertical-align: top;
-  }
-
-  .divination-ai-markdown hr {
-    margin: 0.75rem 0;
-    border: 0;
-    border-top: 1px solid var(--border);
   }
 }
 

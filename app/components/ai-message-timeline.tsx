@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { cjk } from "@streamdown/cjk";
 import {
   BrainIcon,
   ChevronRightIcon,
@@ -6,6 +7,7 @@ import {
   WrenchIcon,
   XIcon,
 } from "lucide-react";
+import { Streamdown, type AnimateOptions } from "streamdown";
 
 import {
   getAIMessageTextFromParts,
@@ -13,6 +15,14 @@ import {
   type AIMessageStatus,
 } from "@/features/ai/timeline";
 import { cn } from "@/lib/utils";
+
+const STREAMDOWN_ANIMATION = {
+  animation: "fadeIn",
+  duration: 150,
+  easing: "ease-out",
+  sep: "word",
+} satisfies AnimateOptions;
+const STREAMDOWN_PLUGINS = { cjk };
 
 type AIMessageTimelineMessage = {
   content: string;
@@ -36,11 +46,9 @@ type TimelineSegment =
 export function AIMessageTimeline({
   message,
   pendingLabel,
-  renderMarkdown,
 }: {
   message: AIMessageTimelineMessage;
   pendingLabel: string;
-  renderMarkdown: (content: string) => string;
 }) {
   const segments = useMemo(() => buildTimelineSegments(message), [message]);
 
@@ -56,22 +64,18 @@ export function AIMessageTimeline({
     <div className="flex flex-col gap-2">
       {segments.map((segment) => {
         if (segment.kind === "thinking") {
-          return (
-            <ThinkingSection
-              key={segment.id}
-              segment={segment}
-              renderMarkdown={renderMarkdown}
-            />
-          );
+          return <ThinkingSection key={segment.id} segment={segment} />;
         }
 
         return (
-          <div
+          <Streamdown
             key={segment.id}
-            dangerouslySetInnerHTML={{
-              __html: renderMarkdown(segment.text),
-            }}
-          />
+            animated={STREAMDOWN_ANIMATION}
+            isAnimating={message.status === "streaming"}
+            plugins={STREAMDOWN_PLUGINS}
+          >
+            {segment.text}
+          </Streamdown>
         );
       })}
     </div>
@@ -80,10 +84,8 @@ export function AIMessageTimeline({
 
 function ThinkingSection({
   segment,
-  renderMarkdown,
 }: {
   segment: Extract<TimelineSegment, { kind: "thinking" }>;
-  renderMarkdown: (content: string) => string;
 }) {
   const [collapsed, setCollapsed] = useState(() => !segment.active);
   const wasActiveRef = useRef(segment.active);
@@ -129,7 +131,11 @@ function ThinkingSection({
         <div className="flex flex-col gap-0 pb-1">
           {segment.parts.map((part) =>
             part.type === "reasoning" ? (
-              <ReasoningItem key={part.id} part={part} renderMarkdown={renderMarkdown} />
+              <ReasoningItem
+                key={part.id}
+                isAnimating={segment.active}
+                part={part}
+              />
             ) : (
               <ToolItem key={part.id} part={part} />
             )
@@ -141,11 +147,11 @@ function ThinkingSection({
 }
 
 function ReasoningItem({
+  isAnimating,
   part,
-  renderMarkdown,
 }: {
+  isAnimating: boolean;
   part: Extract<AIMessagePart, { type: "reasoning" }>;
-  renderMarkdown: (content: string) => string;
 }) {
   return (
     <div className="grid grid-cols-[1rem_minmax(0,1fr)] gap-2 py-1.5 [--reasoning-line-height:1.21875rem]">
@@ -154,12 +160,15 @@ function ReasoningItem({
           <BrainIcon aria-hidden="true" className="size-3" />
         </span>
       </span>
-      <div
-        className="min-w-0 text-xs leading-[var(--reasoning-line-height)] break-words [&>:first-child]:mt-0 [&>:last-child]:mb-0"
-        dangerouslySetInnerHTML={{
-          __html: renderMarkdown(part.text),
-        }}
-      />
+      <div className="min-w-0 text-xs leading-[var(--reasoning-line-height)] break-words [&>:first-child]:mt-0 [&>:last-child]:mb-0">
+        <Streamdown
+          animated={STREAMDOWN_ANIMATION}
+          isAnimating={isAnimating}
+          plugins={STREAMDOWN_PLUGINS}
+        >
+          {part.text}
+        </Streamdown>
+      </div>
     </div>
   );
 }

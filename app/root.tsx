@@ -20,6 +20,7 @@ import {
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import "streamdown/styles.css";
 import {
   isMobileDockPathname,
   MobileDockNav,
