@@ -57,16 +57,20 @@ export function AIMessageTimeline({
   }
 
   if (segments.length === 0) {
-    return message.status === "streaming" ? (
-      <span className="shimmer text-muted-foreground">{pendingLabel}</span>
-    ) : null;
+    return null;
   }
 
   return (
     <div className="flex flex-col gap-2">
       {segments.map((segment) => {
         if (segment.kind === "thinking") {
-          return <ThinkingSection key={segment.id} segment={segment} />;
+          return (
+            <ThinkingSection
+              key={segment.id}
+              pendingLabel={pendingLabel}
+              segment={segment}
+            />
+          );
         }
 
         return (
@@ -85,16 +89,21 @@ export function AIMessageTimeline({
 }
 
 function ThinkingSection({
+  pendingLabel,
   segment,
 }: {
+  pendingLabel: string;
   segment: Extract<TimelineSegment, { kind: "thinking" }>;
 }) {
   const [collapsed, setCollapsed] = useState(true);
   const wasActiveRef = useRef(segment.active);
   const reasoningCount = segment.parts.filter((part) => part.type === "reasoning").length;
   const toolCount = segment.parts.filter((part) => part.type === "tool").length;
+  const hasDetails = reasoningCount > 0 || toolCount > 0;
   const title = segment.active
-    ? "思考中"
+    ? hasDetails
+      ? "思考中"
+      : pendingLabel
     : formatThinkingSummary(reasoningCount, toolCount);
 
   useEffect(() => {
@@ -113,22 +122,25 @@ function ThinkingSection({
     <section className="text-muted-foreground">
       <button
         type="button"
-        className="flex w-full items-center gap-2 py-1.5 text-left text-sm font-medium outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30"
-        aria-expanded={!collapsed}
+        className="flex w-full items-center gap-2 text-left text-sm leading-relaxed font-medium outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30 disabled:pointer-events-none"
+        aria-busy={segment.active}
+        aria-expanded={hasDetails ? !collapsed : undefined}
+        disabled={!hasDetails}
         onClick={() => setCollapsed((current) => !current)}
       >
-        <ChevronRightIcon
-          aria-hidden="true"
-          className={cn(
-            "size-4 shrink-0 transition-transform",
-            segment.active && "divination-thinking-control-enter",
-            !collapsed && "rotate-90"
-          )}
-        />
+        {hasDetails ? (
+          <ChevronRightIcon
+            aria-hidden="true"
+            className={cn(
+              "divination-thinking-control-enter size-4 shrink-0 transition-transform",
+              !collapsed && "rotate-90"
+            )}
+          />
+        ) : null}
         <span
           className={cn(
             "min-w-0 flex-1 truncate",
-            segment.active && "divination-thinking-title-enter"
+            hasDetails && segment.active && "divination-thinking-title-enter"
           )}
         >
           <span className={cn("inline-block max-w-full", segment.active && "shimmer")}>
@@ -138,7 +150,7 @@ function ThinkingSection({
         {segment.active ? (
           <span
             aria-hidden="true"
-            className="divination-thinking-control-enter flex size-4 shrink-0 items-center justify-center"
+            className="flex size-4 shrink-0 items-center justify-center"
           >
             <LoaderCircleIcon className="size-4 animate-spin" />
           </span>
@@ -291,6 +303,15 @@ function buildTimelineSegments(message: AIMessageTimelineMessage) {
   }
 
   flushThinking(message.status === "streaming");
+
+  if (segments.length === 0 && message.status === "streaming") {
+    segments.push({
+      id: "thinking-1",
+      kind: "thinking",
+      parts: [],
+      active: true,
+    });
+  }
 
   return segments;
 }
