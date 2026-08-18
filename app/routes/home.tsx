@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  CalendarDaysIcon,
   ChevronRightIcon,
   CompassIcon,
   Flower2Icon,
@@ -17,6 +16,7 @@ import type { Route } from "./+types/home";
 import { PageShell } from "@/components/page-shell";
 import { TransitionLink } from "@/components/route-transition-link";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 
@@ -168,19 +168,23 @@ export default function Home() {
           <h1 className="text-[22px] font-bold leading-tight tracking-normal text-foreground md:text-[25px]">
             想从什么开始？
           </h1>
-          <p className="line-clamp-2 min-h-10 text-[13px] leading-normal text-muted-foreground md:min-h-0 md:text-sm">
-            <span>
-              今日 · 宜 {formatAlmanacItems(todayAlmanac.recommends, 3)} · 忌{" "}
-              {formatAlmanacItems(todayAlmanac.avoids, 3)}
-            </span>
+          <p className="text-[13px] leading-normal text-muted-foreground md:text-sm">
+            {todayAlmanac.lunarDate}
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2.5">
-          <InfoPill className="min-w-[6.75rem] justify-center" icon={CalendarDaysIcon}>
-            {todayAlmanac.lunarDate}
-          </InfoPill>
-        </div>
+        <AlmanacSummary className="max-w-[55%] shrink-0 self-center md:max-w-none">
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-normal">
+            <span className="truncate">
+              <span className="font-semibold">宜</span>{" "}
+              {formatAlmanacItems(todayAlmanac.recommends, 3)}
+            </span>
+            <span className="truncate">
+              <span className="font-semibold">忌</span>{" "}
+              {formatAlmanacItems(todayAlmanac.avoids, 3)}
+            </span>
+          </span>
+        </AlmanacSummary>
       </header>
 
       <section className="flex min-w-0 flex-1 flex-col gap-4" aria-label="方式库">
@@ -319,24 +323,22 @@ function isCategoryFilter(value: unknown): value is CategoryFilter {
   );
 }
 
-function InfoPill({
+function AlmanacSummary({
   children,
   className,
-  icon: Icon,
 }: {
-  children: string;
+  children: ReactNode;
   className?: string;
-  icon: LucideIcon;
 }) {
   return (
     <div
       className={cn(
-        "flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-[13px] font-medium text-foreground max-md:border-0 max-md:bg-muted max-md:text-xs max-md:font-bold",
+        "flex w-fit items-stretch gap-3 text-[13px] font-normal text-foreground max-md:text-xs",
         className
       )}
     >
-      <Icon aria-hidden={true} className="size-[15px] text-muted-foreground max-md:size-3.5" />
-      <span>{children}</span>
+      <Separator orientation="vertical" />
+      {children}
     </div>
   );
 }
