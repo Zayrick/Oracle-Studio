@@ -37,6 +37,7 @@ type DivinationMethod = {
 
 type TodayAlmanac = {
   lunarDate: string;
+  sixtyCycleDate: string;
   recommends: string[];
   avoids: string[];
 };
@@ -112,7 +113,8 @@ const DIVINATION_METHODS = [
 ] satisfies DivinationMethod[];
 
 const INITIAL_TODAY_ALMANAC: TodayAlmanac = {
-  lunarDate: "农历加载中",
+  lunarDate: "加载中",
+  sixtyCycleDate: "干支加载中",
   recommends: ["加载中"],
   avoids: ["加载中"],
 };
@@ -169,7 +171,7 @@ export default function Home() {
             想从什么开始？
           </h1>
           <p className="text-[13px] leading-normal text-muted-foreground md:text-sm">
-            {todayAlmanac.lunarDate}
+            {todayAlmanac.lunarDate} · {todayAlmanac.sixtyCycleDate}
           </p>
         </div>
 
@@ -304,9 +306,11 @@ async function getAlmanacForDate(date: Date) {
     date.getMonth() + 1,
     date.getDate()
   ).getLunarDay();
+  const sixtyCycleDay = lunarDay.getSixtyCycleDay();
 
   return {
     lunarDate: `${lunarDay.getLunarMonth().getName()}${lunarDay.getName()}`,
+    sixtyCycleDate: `${sixtyCycleDay.getYear().getName()} ${sixtyCycleDay.getMonth().getName()} ${sixtyCycleDay.getSixtyCycle().getName()}`,
     recommends: lunarDay.getRecommends().map((item) => item.getName()),
     avoids: lunarDay.getAvoids().map((item) => item.getName()),
   };
