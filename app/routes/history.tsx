@@ -1,4 +1,5 @@
 import { HistoryRecordList } from "@/components/history-record-list";
+import { PageShell } from "@/components/page-shell";
 import type { Route } from "./+types/history";
 
 export function meta({}: Route.MetaArgs) {
@@ -10,7 +11,7 @@ export function meta({}: Route.MetaArgs) {
 
 export default function History() {
   return (
-    <div className="container mx-auto min-h-[calc(100dvh-var(--mobile-dock-page-offset))] px-4 pb-10 pt-[calc(var(--mobile-safe-top)+2.5rem)] md:min-h-dvh md:py-12">
+    <PageShell className="container px-4 pb-10">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
         <header className="flex flex-col gap-2">
           <h1 className="text-2xl font-semibold">历史记录</h1>
@@ -19,6 +20,6 @@ export default function History() {
 
         <HistoryRecordList variant="page" />
       </div>
-    </div>
+    </PageShell>
   );
 }

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import type { Route } from "./+types/home";
+import { PageShell } from "@/components/page-shell";
 import { TransitionLink } from "@/components/route-transition-link";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -161,7 +162,7 @@ export default function Home() {
   }, [category, query]);
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-var(--mobile-dock-page-offset))] w-full max-w-[1216px] flex-col gap-6 bg-background px-5 pb-6 pt-[calc(var(--mobile-safe-top)+1.5rem)] md:min-h-dvh md:px-10 md:py-8">
+    <PageShell className="flex w-full max-w-[1216px] flex-col gap-6 bg-background px-5 pb-6 md:px-10 md:pb-8">
       <header className="flex min-h-14 items-start justify-between gap-4 md:min-h-16 md:items-center">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-[22px] font-bold leading-tight tracking-normal text-foreground md:text-[25px]">
@@ -236,7 +237,7 @@ export default function Home() {
             )}
           </div>
       </section>
-    </div>
+    </PageShell>
   );
 }
 

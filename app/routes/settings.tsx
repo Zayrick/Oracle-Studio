@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { PageShell } from "@/components/page-shell";
 import {
   Field,
   FieldContent,
@@ -27,7 +28,7 @@ export default function Settings() {
   const { theme, resolvedTheme, setTheme } = useTheme();
 
   return (
-    <div className="container mx-auto px-4 pb-10 pt-[calc(var(--mobile-safe-top)+2.5rem)] md:py-16">
+    <PageShell className="container px-4 pb-10">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
         <header className="flex flex-col gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">设置</h1>
@@ -76,7 +77,7 @@ export default function Settings() {
           </Field>
         </FieldGroup>
       </div>
-    </div>
+    </PageShell>
   );
 }
 
