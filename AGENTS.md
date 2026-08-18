@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-此文件为 Claude Code (claude.ai/code) 在此代码库中工作时提供指导。
+此文件为 AI 在此代码库中工作时提供指导。
 
 ## 项目概述
 
@@ -57,6 +57,7 @@ npm run cf-typegen
 ### 路由
 
 路由在 `app/routes.ts` 中使用 React Router 的基于文件的路由配置定义。应用支持英文和中文路由路径：
+
 - `/` - 首页
 - `/八字` - 八字占卜
 - `/六爻` - 六爻占卜
@@ -64,12 +65,14 @@ npm run cf-typegen
 ### UI 组件管理
 
 **shadcn/ui 配置** (`components.json`)：
+
 - 样式: `base-luma` 预设
 - 组件安装到 `app/components/ui/`
 - 使用 TailwindCSS 变量，基础颜色为 `neutral`
 - 图标库: lucide-react
 
 **关键的 shadcn 组件使用准则**：
+
 1. **禁止直接修改** `app/components/ui/` 中的 shadcn 组件
 2. **必须使用** 外部样式或包装组件来自定义外观
 3. 添加新的 shadcn 组件时，使用：`npx shadcn add <component-name>`
@@ -78,6 +81,7 @@ npm run cf-typegen
 ### 样式系统
 
 项目使用 TailwindCSS v4，具有以下特性：
+
 - 在 `app/app.css` 中使用 `@import "tailwindcss" source(".")` 导入 CSS
 - 通过 CSS 变量使用 shadcn 的设计令牌（oklch 色彩空间）
 - 通过 `.dark` 类变体支持暗黑模式
@@ -89,6 +93,7 @@ npm run cf-typegen
 ### 修改代码前的必要步骤
 
 **在实现功能或修改代码前，必须验证最新的 API 文档**：
+
 - 使用网页搜索或网页抓取工具检查当前的 React Router 7 API
 - 验证 shadcn/ui 组件的 API 和使用模式
 - 检查 Cloudflare Workers API 文档以了解 Worker 特定功能
@@ -112,6 +117,7 @@ npm run cf-typegen
 ### Worker 配置
 
 Cloudflare Worker 在 `wrangler.jsonc` 中配置：
+
 - 入口点：`workers/app.ts`
 - 通过 `nodejs_compat` 标志启用 Node.js 兼容性
 - 启用可观察性和源码映射
@@ -119,6 +125,7 @@ Cloudflare Worker 在 `wrangler.jsonc` 中配置：
 ### 类型生成
 
 类型是自动生成的，必须保持同步：
+
 - 运行 `npm run typecheck` 重新生成所有类型
 - Cloudflare Worker 类型：`worker-configuration.d.ts`
 - React Router 类型：`.react-router/types/`
@@ -127,6 +134,7 @@ Cloudflare Worker 在 `wrangler.jsonc` 中配置：
 ## Cloudflare 部署
 
 应用部署到 Cloudflare Workers：
+
 - 生产环境：`npm run deploy`（构建并部署）
 - 预览部署：`npx wrangler versions upload`
 - 渐进式发布：`npx wrangler versions deploy`
