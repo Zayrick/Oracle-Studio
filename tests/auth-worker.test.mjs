@@ -7,8 +7,9 @@ import { setTimeout as delay } from "node:timers/promises";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 
 // Exercise the production bundle inside workerd, without a dev/preview server.
-test("production Worker renders account pages and persists a real login session", async () => {
+test("production Worker serves account dialog links and persists profile changes", async () => {
   const sentEmail = Promise.withResolvers();
+  const emailChange = Promise.withResolvers();
   const chunks = (await readdir("build/server/assets")).filter((file) =>
     file.endsWith(".js"),
   );
@@ -39,12 +40,16 @@ test("production Worker renders account pages and persists a real login session"
           });
         }
         assert.equal(request.url, "https://api.resend.com/emails");
-        sentEmail.resolve({
+        const delivery = {
           url: request.url,
           method: request.method,
           authorization: request.headers.get("authorization"),
           body: await request.json(),
-        });
+        };
+        sentEmail.resolve(delivery);
+        if (delivery.body.subject === "云占 · 修改邮箱验证码") {
+          emailChange.resolve(delivery);
+        }
         return Response.json({ id: "worker-test-email" });
       },
       bindings: {
@@ -72,10 +77,10 @@ test("production Worker renders account pages and persists a real login session"
     await db.batch(statements.map((statement) => db.prepare(statement)));
 
     for (const [path, title] of [
-      ["/account/login", "登陆帐户"],
-      ["/account/register", "创建账户"],
-      ["/account/forgot-password", "找回密码"],
       ["/settings", "账户"],
+      ["/settings?auth=login", "账户"],
+      ["/settings?auth=register", "账户"],
+      ["/settings?auth=forgot-password", "账户"],
     ]) {
       const response = await runtime.dispatchFetch(
         `https://example.com${path}`,
@@ -86,37 +91,36 @@ test("production Worker renders account pages and persists a real login session"
       assert.ok(html.includes(title), path);
       assert.ok(!html.includes("账户服务暂时不可用"), path);
       assert.ok(!html.includes("验证码登录"), path);
-      if (path === "/account/login") {
-        assert.ok(html.includes('name="password"'));
-        assert.ok(html.includes("忘记密码？"));
-        assert.ok(!html.includes('name="otp"'));
-        assert.ok(!html.includes('role="tablist"'));
-      }
-      if (["/account/register", "/account/forgot-password"].includes(path)) {
-        assert.ok(html.includes('name="otp"'), path);
-      }
-      if (path === "/account/register") {
-        assert.ok(html.includes('name="name"'));
-        assert.ok(html.includes('name="email"'));
-        assert.ok(!html.includes('name="password"'));
-        assert.ok(!html.includes('name="confirmPassword"'));
-        assert.ok(!html.includes("第 1 步，共 2 步"));
-        assert.ok(!html.includes("正在自动进行安全验证"));
-        assert.ok(!html.includes('aria-label="Cloudflare 安全验证"'));
-        assert.ok(html.includes("worker-test-sitekey"));
-      }
+      assert.ok(html.includes("worker-test-sitekey"));
       assert.ok(!html.includes("worker-test-turnstile-secret"));
+    }
+
+    for (const mode of ["login", "register", "forgot-password"]) {
+      const response = await runtime.dispatchFetch(
+        `https://example.com/account/${mode}?email=legacy%40example.com&redirectTo=%2Fhistory`,
+        { redirect: "manual" },
+      );
+      assert.equal(response.status, 302);
+      const location = new URL(
+        response.headers.get("location"),
+        "https://example.com",
+      );
+      assert.equal(location.pathname, "/settings");
+      assert.equal(location.searchParams.get("auth"), mode);
+      assert.equal(location.searchParams.get("email"), "legacy@example.com");
+      assert.equal(location.searchParams.get("redirectTo"), "/history");
     }
 
     const email = "worker-test@example.com";
     const password = "worker-test-password-1234";
-    const post = (path, body) =>
+    const post = (path, body, cookie) =>
       runtime.dispatchFetch(`https://example.com/api/auth${path}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Origin: "https://example.com",
           "CF-Connecting-IP": "192.0.2.9",
+          ...(cookie ? { Cookie: cookie } : {}),
         },
         body: JSON.stringify(body),
       });
@@ -214,9 +218,76 @@ test("production Worker renders account pages and persists a real login session"
     );
     assert.ok(html.includes(email));
     assert.ok(html.includes("退出登录"));
+    assert.ok(html.includes("编辑信息"));
+    assert.ok(html.includes("更改邮箱"));
+    assert.ok(html.includes("重置密码"));
+    assert.ok(!html.includes('href="/account/forgot-password'));
     assert.ok(
       !html.includes(sessionData.session.token),
       "SSR must not serialize the session token",
+    );
+
+    const update = await post(
+      "/update-user",
+      { name: "  更新后的名字  " },
+      cookie,
+    );
+    assert.equal(update.status, 200, await update.text());
+    const renamed = await runtime.dispatchFetch(
+      "https://example.com/settings",
+      {
+        headers: { Cookie: cookie },
+      },
+    );
+    assert.ok((await renamed.text()).includes("更新后的名字"));
+
+    const newEmail = "worker-new@example.com";
+    const changeRequest = await post(
+      "/email-otp/request-email-change",
+      { newEmail },
+      cookie,
+    );
+    assert.equal(changeRequest.status, 200, await changeRequest.text());
+    const changeDelivery = await Promise.race([
+      emailChange.promise,
+      delay(5_000, undefined, { ref: false }).then(() => {
+        assert.fail("Worker did not send the email change verification code");
+      }),
+    ]);
+    assert.deepEqual(changeDelivery.body.to, [newEmail]);
+    const changeCode = changeDelivery.body.text.match(/验证码：(\d{6})/u)?.[1];
+    assert.ok(changeCode);
+    const pendingSettings = await runtime.dispatchFetch(
+      "https://example.com/settings",
+      {
+        headers: { Cookie: cookie },
+      },
+    );
+    assert.ok((await pendingSettings.text()).includes(email));
+    const changed = await post(
+      "/email-otp/change-email",
+      { newEmail, otp: changeCode },
+      cookie,
+    );
+    assert.equal(changed.status, 200, await changed.text());
+    const updatedSettings = await runtime.dispatchFetch(
+      "https://example.com/settings",
+      {
+        headers: { Cookie: cookie },
+      },
+    );
+    const updatedHtml = await updatedSettings.text();
+    assert.equal(updatedSettings.status, 200);
+    assert.ok(updatedHtml.includes(newEmail));
+    assert.ok(updatedHtml.includes("更新后的名字"));
+    assert.ok(!updatedHtml.includes(email));
+    assert.equal(
+      (await post("/sign-in/email", { email, password })).status,
+      401,
+    );
+    assert.equal(
+      (await post("/sign-in/email", { email: newEmail, password })).status,
+      200,
     );
   } finally {
     await runtime.dispose();

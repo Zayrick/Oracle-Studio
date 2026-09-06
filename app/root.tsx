@@ -21,6 +21,7 @@ import {
 
 import type { Route } from "./+types/root";
 import { getAccountState } from "@/features/auth/auth.server";
+import { AuthDialogProvider } from "@/components/account/auth-dialog";
 import { cloudflareContext } from "@/lib/cloudflare-context";
 import "./app.css";
 import "streamdown/styles.css";
@@ -39,7 +40,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, ctx } = context.get(cloudflareContext);
   const headers = new Headers();
   const account = await getAccountState(request, env, ctx, headers);
-  return data({ account }, { headers });
+  return data(
+    { account, turnstileSiteKey: env.TURNSTILE_SITE_KEY?.trim() ?? "" },
+    { headers },
+  );
 }
 
 export const headers: Route.HeadersFunction = ({ loaderHeaders }) => {
@@ -52,7 +56,7 @@ export const headers: Route.HeadersFunction = ({ loaderHeaders }) => {
 const LazySidebarNav = lazy(() =>
   import("./components/sidebar-nav").then(({ SidebarNav }) => ({
     default: SidebarNav,
-  }))
+  })),
 );
 
 export const links: Route.LinksFunction = () => [
@@ -101,18 +105,20 @@ function AppShell({ children }: { children: React.ReactNode }) {
   useRouteTransitionDirection(location);
 
   return (
-    <div className="app-route-stage min-h-dvh bg-background">
-      <DesktopSidebarNav />
-      <main
-        className={cn(
-          "min-h-dvh md:pl-[224px]",
-          showMobileNav && "pb-[var(--mobile-dock-page-offset)] md:pb-0"
-        )}
-      >
-        {children}
-      </main>
-      {showMobileNav ? <MobileDockNav /> : null}
-    </div>
+    <AuthDialogProvider>
+      <div className="app-route-stage min-h-dvh bg-background">
+        <DesktopSidebarNav />
+        <main
+          className={cn(
+            "min-h-dvh md:pl-[224px]",
+            showMobileNav && "pb-[var(--mobile-dock-page-offset)] md:pb-0",
+          )}
+        >
+          {children}
+        </main>
+        {showMobileNav ? <MobileDockNav /> : null}
+      </div>
+    </AuthDialogProvider>
   );
 }
 
@@ -140,8 +146,7 @@ function useRouteTransitionDirection(location: ReturnType<typeof useLocation>) {
       committedHistoryIndex.current !== null &&
       currentHistoryIndex < committedHistoryIndex.current;
     const isManualBack =
-      isHistoryBack &&
-      consumeManualRouteBackTransition(currentHistoryIndex);
+      isHistoryBack && consumeManualRouteBackTransition(currentHistoryIndex);
 
     if (isHistoryBack && !isManualBack) {
       document.documentElement.dataset.routeTransition = "none";

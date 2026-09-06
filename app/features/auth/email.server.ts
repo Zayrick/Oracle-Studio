@@ -3,12 +3,13 @@ import { OTP_EXPIRES_IN } from "./shared";
 type VerificationEmail = {
   email: string;
   otp: string;
-  type: "email-verification" | "forget-password";
+  type: "email-verification" | "forget-password" | "change-email";
 };
 
 const purposes = {
   "email-verification": "验证邮箱",
   "forget-password": "重置密码",
+  "change-email": "修改邮箱",
 } satisfies Record<VerificationEmail["type"], string>;
 
 export async function sendAuthEmail(

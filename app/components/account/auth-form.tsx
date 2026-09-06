@@ -1,26 +1,17 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
   type FormEvent,
 } from "react";
-import { ArrowLeftIcon, MailIcon } from "lucide-react";
-import { Link, useNavigate, useRevalidator } from "react-router";
+import { useRevalidator } from "react-router";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
-import { PageShell } from "@/components/page-shell";
 import { AuthNotice } from "@/components/account/auth-notice";
 import { RegistrationTurnstile } from "@/components/account/registration-turnstile";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Field,
   FieldDescription,
@@ -30,45 +21,61 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { Dialog, DialogPortal, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { authClient } from "@/features/auth/auth-client";
 import { registrationClient } from "@/features/auth/registration-client";
 import {
-  accountHref,
   authErrorMessage,
   OTP_LENGTH,
   OTP_RESEND_SECONDS,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   type AccountMode,
+  type AuthDialogMode,
 } from "@/features/auth/shared";
 import { useAccount } from "@/features/auth/use-account";
-import { cn } from "@/lib/utils";
 
 const copy = {
-  login: { title: "登陆帐户" },
+  login: { title: "登录账户" },
   register: { title: "创建账户" },
   "forgot-password": {
-    title: "找回密码",
-    description: "通过邮箱验证码，设置新的账户密码。",
+    title: "重置密码",
   },
 };
 
 type AuthResult = { error?: { code?: string; status?: number } | null };
 
+type AuthDialogControls = {
+  passwordReset?: boolean;
+  onPendingChange: (pending: boolean) => void;
+  onSignedIn: () => Promise<void>;
+  onModeChange: (
+    mode: AuthDialogMode,
+    email: string,
+    passwordReset?: boolean,
+  ) => void;
+};
+
 export function AuthForm({
   mode,
   initialEmail,
-  redirectTo,
   turnstileSiteKey,
+  dialog,
 }: {
   mode: AccountMode;
   initialEmail: string;
-  redirectTo: string;
   turnstileSiteKey: string;
+  dialog: AuthDialogControls;
 }) {
-  const isAccountEntry = mode === "login" || mode === "register";
-  const navigate = useNavigate();
+  const formId = useId();
+  const fieldId = (name: string) => `${formId}-${name}`;
   const revalidator = useRevalidator();
   const { available } = useAccount();
   const [email, setEmail] = useState(initialEmail);
@@ -86,7 +93,6 @@ export function AuthForm({
   );
   const [passwordMismatch, setPasswordMismatch] = useState(false);
   const locked = useRef(false);
-  const card = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const passwordInput = useRef<HTMLInputElement>(null);
@@ -135,13 +141,12 @@ export function AuthForm({
   }, [remaining]);
 
   const normalizedEmail = email.trim().toLowerCase();
-  const href = (next: AccountMode) =>
-    accountHref(next, { email: normalizedEmail, redirectTo });
 
   async function run(operation: () => Promise<void>) {
     if (locked.current || !available) return;
     locked.current = true;
     setPending(true);
+    dialog.onPendingChange(true);
     setError("");
     try {
       await operation();
@@ -150,6 +155,7 @@ export function AuthForm({
     } finally {
       locked.current = false;
       setPending(false);
+      dialog.onPendingChange(false);
     }
   }
 
@@ -157,11 +163,6 @@ export function AuthForm({
     if (!result.error) return true;
     setError(authErrorMessage(result.error));
     return false;
-  }
-
-  function finishSignIn() {
-    // A document navigation refreshes all server session data from the HttpOnly cookie.
-    window.location.assign(redirectTo);
   }
 
   async function sendCode() {
@@ -219,7 +220,7 @@ export function AuthForm({
             restartRegistration();
             setError(authErrorMessage(result.error));
           } else if (succeeded(result)) {
-            finishSignIn();
+            await dialog.onSignedIn();
           }
         }
       } else if (mode === "forgot-password") {
@@ -236,10 +237,7 @@ export function AuthForm({
           setConfirmPassword("");
           setOtp("");
           await revalidator.revalidate();
-          await navigate(href("login"), {
-            replace: true,
-            state: { passwordReset: true },
-          });
+          dialog.onModeChange("login", normalizedEmail, true);
         }
       } else {
         const result = await authClient.signIn.email({
@@ -247,7 +245,7 @@ export function AuthForm({
           password,
         });
         if (succeeded(result)) {
-          finishSignIn();
+          await dialog.onSignedIn();
         }
       }
     });
@@ -264,12 +262,12 @@ export function AuthForm({
 
   const passwordField = (newPassword: boolean) => (
     <Field>
-      <FieldLabel htmlFor="account-password">
+      <FieldLabel htmlFor={fieldId("account-password")}>
         {newPassword && mode === "forgot-password" ? "新密码" : "密码"}
       </FieldLabel>
       <Input
         ref={passwordInput}
-        id="account-password"
+        id={fieldId("account-password")}
         name="password"
         type="password"
         autoComplete={newPassword ? "new-password" : "current-password"}
@@ -282,19 +280,17 @@ export function AuthForm({
           setPasswordMismatch(false);
         }}
       />
-      {newPassword ? (
-        <FieldDescription>
-          使用 8–128 个字符，建议组合字母、数字和符号。
-        </FieldDescription>
-      ) : null}
+      {newPassword ? <FieldDescription>8–128 个字符。</FieldDescription> : null}
     </Field>
   );
 
   const confirmationField = (
     <Field data-invalid={passwordMismatch || undefined}>
-      <FieldLabel htmlFor="account-confirm-password">确认密码</FieldLabel>
+      <FieldLabel htmlFor={fieldId("account-confirm-password")}>
+        确认密码
+      </FieldLabel>
       <Input
-        id="account-confirm-password"
+        id={fieldId("account-confirm-password")}
         name="confirmPassword"
         type="password"
         autoComplete="new-password"
@@ -303,24 +299,28 @@ export function AuthForm({
         maxLength={PASSWORD_MAX_LENGTH}
         value={confirmPassword}
         aria-invalid={passwordMismatch || undefined}
-        aria-describedby={passwordMismatch ? "password-error" : undefined}
+        aria-describedby={
+          passwordMismatch ? fieldId("password-error") : undefined
+        }
         onChange={(event) => {
           setConfirmPassword(event.target.value);
           setPasswordMismatch(false);
         }}
       />
       {passwordMismatch ? (
-        <FieldError id="password-error">两次输入的密码不一致。</FieldError>
+        <FieldError id={fieldId("password-error")}>
+          两次输入的密码不一致。
+        </FieldError>
       ) : null}
     </Field>
   );
 
   const codeField = (
     <Field>
-      <FieldLabel htmlFor="account-otp">邮箱验证码</FieldLabel>
+      <FieldLabel htmlFor={fieldId("account-otp")}>邮箱验证码</FieldLabel>
       <div className="flex items-center gap-2">
         <Input
-          id="account-otp"
+          id={fieldId("account-otp")}
           name="otp"
           className="min-w-0 flex-1"
           inputMode="numeric"
@@ -348,9 +348,7 @@ export function AuthForm({
               : "获取验证码"}
         </Button>
       </div>
-      <FieldDescription>
-        验证码 5 分钟内有效。如未收到，请检查垃圾邮箱。
-      </FieldDescription>
+      <FieldDescription>验证码 5 分钟内有效。</FieldDescription>
     </Field>
   );
 
@@ -365,175 +363,155 @@ export function AuthForm({
     );
   }
 
-  return (
-    <PageShell className="px-4 pb-12">
-      <div className="mx-auto flex w-full max-w-md flex-col gap-6">
-        <Button
-          className="w-fit"
-          variant="ghost"
-          nativeButton={false}
-          render={<Link to="/settings" />}
-        >
-          <ArrowLeftIcon data-icon="inline-start" />
-          返回设置
-        </Button>
-        <Card ref={card} className="relative isolate">
-          <CardHeader className={cn(isAccountEntry && "text-center")}>
-            {!isAccountEntry ? (
-              <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <MailIcon className="size-5" aria-hidden="true" />
-              </div>
+  function modeButton(next: AccountMode, label: string) {
+    return (
+      <Button
+        type="button"
+        variant="link"
+        disabled={pending}
+        onClick={() => dialog.onModeChange(next, normalizedEmail)}
+      >
+        {label}
+      </Button>
+    );
+  }
+
+  const content = (
+    <>
+      {!available ? (
+        <AuthNotice error>账户服务暂时不可用，请稍后重试。</AuthNotice>
+      ) : null}
+      {error ? <AuthNotice error>{error}</AuthNotice> : null}
+      {dialog.passwordReset && mode === "login" ? (
+        <AuthNotice>密码已重置，请使用新密码登录。</AuthNotice>
+      ) : null}
+      <form onSubmit={(event) => void submit(event)} aria-busy={pending}>
+        <fieldset className="min-w-0" disabled={pending || !available}>
+          <FieldGroup>
+            {mode === "register" && !isPasswordStep ? (
+              <Field>
+                <FieldLabel htmlFor={fieldId("account-name")}>昵称</FieldLabel>
+                <Input
+                  ref={nameInput}
+                  id={fieldId("account-name")}
+                  name="name"
+                  autoComplete="nickname"
+                  required
+                  maxLength={50}
+                  value={name}
+                  pattern=".*\S.*"
+                  title="请输入昵称"
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </Field>
             ) : null}
-            <CardTitle>
-              <h1>{isPasswordStep ? "设置密码" : copy[mode].title}</h1>
-            </CardTitle>
-            {!isAccountEntry ? (
-              <CardDescription>{copy[mode].description}</CardDescription>
+            <Field>
+              <FieldLabel htmlFor={fieldId("account-email")}>邮箱</FieldLabel>
+              <Input
+                ref={emailInput}
+                id={fieldId("account-email")}
+                name="email"
+                type="email"
+                autoComplete="email"
+                inputMode="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                required
+                maxLength={254}
+                placeholder="you@example.com"
+                value={email}
+                readOnly={isPasswordStep}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setOtp("");
+                  setError("");
+                  if (mode === "register") setRemaining(0);
+                }}
+              />
+            </Field>
+            {mode === "login" ? (
+              <>
+                {passwordField(false)}
+                {submitButton("登录")}
+              </>
             ) : null}
-          </CardHeader>
-          <CardContent className="flex flex-col gap-5">
-            {!available ? (
-              <AuthNotice error>账户服务暂时不可用，请稍后重试。</AuthNotice>
+            {mode === "register" && !isPasswordStep ? (
+              <>
+                {codeField}
+                {submitButton("下一步")}
+              </>
             ) : null}
-            {error ? <AuthNotice error>{error}</AuthNotice> : null}
-            <form onSubmit={(event) => void submit(event)} aria-busy={pending}>
-              <fieldset className="min-w-0" disabled={pending || !available}>
-                <FieldGroup>
-                  {mode === "register" && !isPasswordStep ? (
-                    <Field>
-                      <FieldLabel htmlFor="account-name">昵称</FieldLabel>
-                      <Input
-                        ref={nameInput}
-                        id="account-name"
-                        name="name"
-                        autoComplete="nickname"
-                        required
-                        maxLength={50}
-                        value={name}
-                        pattern=".*\S.*"
-                        title="请输入昵称"
-                        onChange={(event) => setName(event.target.value)}
-                      />
-                    </Field>
-                  ) : null}
-                  <Field>
-                    <FieldLabel htmlFor="account-email">邮箱</FieldLabel>
-                    <Input
-                      ref={emailInput}
-                      id="account-email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-                      inputMode="email"
-                      autoCapitalize="none"
-                      spellCheck={false}
-                      required
-                      maxLength={254}
-                      placeholder="you@example.com"
-                      value={email}
-                      readOnly={isPasswordStep}
-                      onChange={(event) => {
-                        setEmail(event.target.value);
-                        setOtp("");
-                        setError("");
-                        if (mode === "register") setRemaining(0);
-                      }}
-                    />
-                  </Field>
-                  {mode === "login" ? (
-                    <>
-                      {passwordField(false)}
-                      {submitButton("登录")}
-                    </>
-                  ) : null}
-                  {mode === "register" && !isPasswordStep ? (
-                    <>
-                      {codeField}
-                      {submitButton("下一步")}
-                    </>
-                  ) : null}
-                  {isPasswordStep ? (
-                    <>
-                      {passwordField(true)}
-                      {confirmationField}
-                      {submitButton("完成注册")}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={restartRegistration}
-                      >
-                        返回修改邮箱
-                      </Button>
-                    </>
-                  ) : null}
-                  {mode === "forgot-password" ? (
-                    <>
-                      {codeField}
-                      {passwordField(true)}
-                      {confirmationField}
-                      {submitButton("重置密码")}
-                    </>
-                  ) : null}
-                </FieldGroup>
-              </fieldset>
-            </form>
-          </CardContent>
-          {!isPasswordStep ? (
-            <CardFooter className="justify-between gap-2">
-              {mode === "login" ? (
-                <>
-                  <Button
-                    variant="link"
-                    nativeButton={false}
-                    render={<Link to={href("forgot-password")} />}
-                  >
-                    忘记密码？
-                  </Button>
-                  <Button
-                    variant="link"
-                    nativeButton={false}
-                    render={<Link to={href("register")} />}
-                  >
-                    还没有账户？创建账户
-                  </Button>
-                </>
-              ) : (
+            {isPasswordStep ? (
+              <>
+                {passwordField(true)}
+                {confirmationField}
+                {submitButton("完成注册")}
                 <Button
-                  className="mx-auto"
-                  variant="link"
-                  nativeButton={false}
-                  render={<Link to={href("login")} />}
+                  type="button"
+                  variant="ghost"
+                  onClick={restartRegistration}
                 >
-                  已有账户？返回登录
+                  返回修改邮箱
                 </Button>
-              )}
-            </CardFooter>
-          ) : null}
-          <Dialog
-            open={challengeRequested}
-            onOpenChange={(open) => {
-              if (!open) cancelTurnstile();
-            }}
+              </>
+            ) : null}
+            {mode === "forgot-password" ? (
+              <>
+                {codeField}
+                {passwordField(true)}
+                {confirmationField}
+                {submitButton("重置密码")}
+              </>
+            ) : null}
+          </FieldGroup>
+        </fieldset>
+      </form>
+    </>
+  );
+  const footer =
+    mode === "login" ? (
+      <>
+        {modeButton("forgot-password", "忘记密码？")}
+        {modeButton("register", "创建账户")}
+      </>
+    ) : (
+      modeButton("login", "返回登录")
+    );
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>{isPasswordStep ? "设置密码" : copy[mode].title}</DialogTitle>
+      </DialogHeader>
+      <div className="flex flex-col gap-5">{content}</div>
+      {!isPasswordStep ? (
+        <DialogFooter className="flex-wrap sm:justify-between">
+          {footer}
+        </DialogFooter>
+      ) : null}
+      <Dialog
+        open={challengeRequested}
+        onOpenChange={(open) => {
+          if (!open) cancelTurnstile();
+        }}
+      >
+        <DialogPortal>
+          <DialogOverlay forceRender />
+          <DialogPrimitive.Popup
+            className="fixed top-1/2 left-1/2 z-50 w-[300px] max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 outline-none"
+            aria-describedby={undefined}
           >
-            <DialogPortal container={card} className="absolute inset-0">
-              <DialogPrimitive.Backdrop className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-              <DialogPrimitive.Popup
-                className="absolute top-1/2 left-1/2 w-[300px] max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 outline-none"
-                aria-describedby={undefined}
-              >
-                <DialogTitle className="sr-only">安全验证</DialogTitle>
-                {challengeRequested ? (
-                  <RegistrationTurnstile
-                    siteKey={turnstileSiteKey}
-                    onTokenChange={receiveTurnstileToken}
-                    onError={failTurnstile}
-                  />
-                ) : null}
-              </DialogPrimitive.Popup>
-            </DialogPortal>
-          </Dialog>
-        </Card>
-      </div>
-    </PageShell>
+            <DialogTitle className="sr-only">安全验证</DialogTitle>
+            {challengeRequested ? (
+              <RegistrationTurnstile
+                siteKey={turnstileSiteKey}
+                onTokenChange={receiveTurnstileToken}
+                onError={failTurnstile}
+              />
+            ) : null}
+          </DialogPrimitive.Popup>
+        </DialogPortal>
+      </Dialog>
+    </>
   );
 }

@@ -7,6 +7,13 @@ export const REGISTRATION_EXPIRES_IN = 600;
 export const REGISTRATION_TURNSTILE_ACTION = "register_email";
 
 export type AccountMode = "login" | "register" | "forgot-password";
+export type AuthDialogMode = AccountMode;
+
+export function isAuthDialogMode(
+  value: string | null,
+): value is AuthDialogMode {
+  return value === "login" || value === "register" || value === "forgot-password";
+}
 
 export function isAccountMode(value: string | undefined): value is AccountMode {
   return ["login", "register", "forgot-password"].includes(value ?? "");
@@ -29,6 +36,11 @@ export function safeRedirect(value: string | null | undefined) {
   ) {
     return "/settings";
   }
+  if (isAuthDialogMode(url.searchParams.get("auth"))) {
+    url.searchParams.delete("auth");
+    url.searchParams.delete("email");
+    url.searchParams.delete("redirectTo");
+  }
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
@@ -37,15 +49,19 @@ export function accountHref(
   options: { email?: string; redirectTo?: string } = {},
 ) {
   const search = new URLSearchParams();
+  search.set("auth", mode);
   if (options.email) search.set("email", options.email);
   if (options.redirectTo)
     search.set("redirectTo", safeRedirect(options.redirectTo));
-  const query = search.toString();
-  return `/account/${mode}${query ? `?${query}` : ""}`;
+  return `/settings?${search.toString()}`;
 }
 
 const errorMessages: Record<string, string> = {
+  INVALID_NAME: "名字需要 1–50 个字符，不能只包含空格。",
   INVALID_EMAIL: "请输入有效的邮箱地址。",
+  UNAUTHORIZED: "登录已失效，请重新登录后修改账户信息。",
+  SESSION_EXPIRED: "登录已失效，请重新登录后修改账户信息。",
+  SESSION_NOT_FRESH: "请重新登录后修改账户信息。",
   INVALID_EMAIL_OR_PASSWORD: "邮箱或密码不正确，请重新输入。",
   EMAIL_NOT_VERIFIED: "请先验证邮箱，再使用密码登录。",
   EMAIL_ALREADY_VERIFIED: "邮箱已验证，请使用邮箱和密码登录。",

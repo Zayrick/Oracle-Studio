@@ -602,6 +602,303 @@ test("unknown password reset requests do not send mail or create accounts", asyn
   assert.deepEqual(reset.data, known.data);
 });
 
+test("profile names are trimmed and validated on the server without changing login credentials", async () => {
+  const cookie = await verifiedAccount();
+  const before = (await request("/get-session", undefined, { cookie })).data
+    .user;
+  const updated = await request(
+    "/update-user",
+    { name: "  新名字  " },
+    { cookie },
+  );
+  assert.equal(updated.response.status, 200, JSON.stringify(updated.data));
+  assert.ok(updated.response.headers.getSetCookie().length > 0);
+  const after = (await request("/get-session", undefined, { cookie })).data
+    .user;
+  assert.equal(after.name, "新名字");
+  assert.equal(after.id, before.id);
+  assert.equal(after.email, email);
+  for (const name of ["", "   ", "x".repeat(51), null, 42, {}]) {
+    const invalid = await request("/update-user", { name }, { cookie });
+    assert.equal(invalid.response.status, 400);
+    assert.equal(invalid.data.code, "INVALID_NAME");
+  }
+  assert.equal(
+    (
+      await request(
+        "/update-user",
+        { email: "unverified@example.com" },
+        { cookie },
+      )
+    ).response.status,
+    400,
+  );
+  assert.equal(
+    (await request("/get-session", undefined, { cookie })).data.user.name,
+    "新名字",
+  );
+  assert.equal(
+    (await request("/sign-in/email", { email, password })).response.status,
+    200,
+  );
+});
+
+test("email changes require a code for the new email and preserve the account, password and session", async () => {
+  const cookie = await verifiedAccount();
+  const original = (await request("/get-session", undefined, { cookie })).data
+    .user;
+  const newEmail = "replacement@example.com";
+  const sent = await request(
+    "/email-otp/request-email-change",
+    { newEmail: `  ${newEmail.toUpperCase()}  ` },
+    { cookie },
+  );
+  assert.equal(sent.response.status, 200, JSON.stringify(sent.data));
+  assert.deepEqual(messages.at(-1).to, [newEmail]);
+  assert.equal(messages.at(-1).subject, "云占 · 修改邮箱验证码");
+  assert.equal(
+    (await request("/get-session", undefined, { cookie })).data.user.email,
+    email,
+  );
+  assert.equal(
+    (await request("/sign-in/email", { email, password })).response.status,
+    200,
+  );
+  assert.equal(
+    (await request("/sign-in/email", { email: newEmail, password })).response
+      .status,
+    401,
+  );
+  const otp = latestCode();
+  const wrong = otp === "000000" ? "111111" : "000000";
+  assert.equal(
+    (
+      await request(
+        "/email-otp/change-email",
+        { newEmail, otp: wrong },
+        { cookie },
+      )
+    ).response.status,
+    400,
+  );
+  const updated = await request(
+    "/email-otp/change-email",
+    { newEmail: newEmail.toUpperCase(), otp },
+    { cookie },
+  );
+  assert.equal(updated.response.status, 200, JSON.stringify(updated.data));
+  const user = (await request("/get-session", undefined, { cookie })).data.user;
+  assert.equal(user.id, original.id);
+  assert.equal(user.name, original.name);
+  assert.equal(user.email, newEmail);
+  assert.equal(user.emailVerified, true);
+  assert.equal(await count("user"), 1);
+  assert.equal(await count("account"), 1);
+  assert.equal(
+    (await request("/sign-in/email", { email, password })).response.status,
+    401,
+  );
+  assert.equal(
+    (await request("/sign-in/email", { email: newEmail, password })).response
+      .status,
+    200,
+  );
+  assert.equal(
+    (await request("/email-otp/change-email", { newEmail, otp }, { cookie }))
+      .response.status,
+    400,
+  );
+});
+
+test("profile mutations require a session and reject cross-origin requests", async () => {
+  const cookie = await verifiedAccount();
+  for (const [path, body] of [
+    ["/update-user", { name: "未经授权" }],
+    ["/email-otp/request-email-change", { newEmail: "other@example.com" }],
+    [
+      "/email-otp/change-email",
+      { newEmail: "other@example.com", otp: "123456" },
+    ],
+  ]) {
+    assert.equal((await request(path, body)).response.status, 401, path);
+    assert.equal(
+      (
+        await request(path, body, {
+          cookie,
+          origin: "https://untrusted.example",
+        })
+      ).response.status,
+      403,
+      path,
+    );
+  }
+  const user = (await request("/get-session", undefined, { cookie })).data.user;
+  assert.equal(user.name, "测试账户");
+  assert.equal(user.email, email);
+  assert.equal(messages.length, 1);
+});
+
+test("email change codes cannot be used by another account or for another address", async () => {
+  const cookie = await verifiedAccount();
+  const otherEmail = "second-account@example.com";
+  await sendCode(otherEmail);
+  const verified = await verifyCode(latestCode(), { email: otherEmail });
+  const other = await complete(verified.data.token, { email: otherEmail });
+  const otherCookie = cookieFrom(other.response);
+  const newEmail = "replacement@example.com";
+  await request("/email-otp/request-email-change", { newEmail }, { cookie });
+  const otp = latestCode();
+  assert.equal(
+    (
+      await request(
+        "/email-otp/change-email",
+        { newEmail, otp },
+        { cookie: otherCookie },
+      )
+    ).response.status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(
+        "/email-otp/change-email",
+        { newEmail: "different@example.com", otp },
+        { cookie },
+      )
+    ).response.status,
+    400,
+  );
+  assert.equal(
+    (await request("/email-otp/change-email", { newEmail, otp }, { cookie }))
+      .response.status,
+    200,
+  );
+  assert.equal(
+    (await request("/get-session", undefined, { cookie: otherCookie })).data
+      .user.email,
+    otherEmail,
+  );
+});
+
+test("expired and exhausted email change codes leave the current email intact", async () => {
+  const cookie = await verifiedAccount();
+  const newEmail = "replacement@example.com";
+  await request("/email-otp/request-email-change", { newEmail }, { cookie });
+  const expiredCode = latestCode();
+  await env.AUTH_DB.prepare('UPDATE "verification" SET "expiresAt" = ?')
+    .bind(new Date(0).toISOString())
+    .run();
+  const expired = await request(
+    "/email-otp/change-email",
+    { newEmail, otp: expiredCode },
+    { cookie },
+  );
+  assert.equal(expired.response.status, 400);
+  assert.equal(expired.data.code, "OTP_EXPIRED");
+  await request("/email-otp/request-email-change", { newEmail }, { cookie });
+  const otp = latestCode();
+  const wrong = otp === "000000" ? "111111" : "000000";
+  for (let i = 0; i < 3; i++) {
+    assert.equal(
+      (
+        await request(
+          "/email-otp/change-email",
+          { newEmail, otp: wrong },
+          { cookie },
+        )
+      ).response.status,
+      400,
+    );
+  }
+  const exhausted = await request(
+    "/email-otp/change-email",
+    { newEmail, otp },
+    { cookie },
+  );
+  assert.equal(exhausted.response.status, 403);
+  assert.equal(exhausted.data.code, "TOO_MANY_ATTEMPTS");
+  assert.equal(
+    (await request("/get-session", undefined, { cookie })).data.user.email,
+    email,
+  );
+});
+
+test("invalid, unchanged and occupied email addresses cannot replace the current email", async () => {
+  const cookie = await verifiedAccount();
+  for (const newEmail of [
+    "invalid",
+    "",
+    "x".repeat(255) + "@example.com",
+    email.toUpperCase(),
+  ]) {
+    assert.equal(
+      (
+        await request(
+          "/email-otp/request-email-change",
+          { newEmail },
+          { cookie },
+        )
+      ).response.status,
+      400,
+    );
+  }
+  const occupied = "occupied@example.com";
+  await sendCode(occupied);
+  const verified = await verifyCode(latestCode(), { email: occupied });
+  await complete(verified.data.token, { email: occupied });
+  const messageCount = messages.length;
+  const sent = await request(
+    "/email-otp/request-email-change",
+    { newEmail: occupied },
+    { cookie },
+  );
+  assert.equal(
+    sent.response.status,
+    200,
+    "occupied addresses use a generic response",
+  );
+  assert.equal(messages.length, messageCount);
+  assert.equal(
+    (
+      await request(
+        "/email-otp/change-email",
+        { newEmail: occupied, otp: latestCode() },
+        { cookie },
+      )
+    ).response.status,
+    400,
+  );
+  assert.equal(
+    (await request("/get-session", undefined, { cookie })).data.user.email,
+    email,
+  );
+  assert.equal(await count("user"), 2);
+});
+
+test("email change requests are rate limited across request-scoped auth instances", async () => {
+  const cookie = await verifiedAccount();
+  const ip = "198.51.100.22";
+  for (let i = 0; i < 3; i++) {
+    assert.equal(
+      (
+        await request(
+          "/email-otp/request-email-change",
+          { newEmail: `replacement${i}@example.com` },
+          { cookie, ip },
+        )
+      ).response.status,
+      200,
+    );
+  }
+  const limited = await request(
+    "/email-otp/request-email-change",
+    { newEmail: "replacement4@example.com" },
+    { cookie, ip },
+  );
+  assert.equal(limited.response.status, 429);
+  assert.equal(messages.length, 4);
+});
+
 test("D1 rate limits persist across auth instances", async () => {
   const ip = "198.51.100.10";
   for (let attempt = 0; attempt < 3; attempt++) {

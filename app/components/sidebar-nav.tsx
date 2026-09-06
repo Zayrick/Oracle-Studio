@@ -7,17 +7,19 @@ import {
 import { NavLink } from "react-router";
 
 import { SidebarHistorySection } from "@/components/sidebar-history-section";
+import { AuthDialogTrigger } from "@/components/account/auth-dialog";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/features/auth/use-account";
-import { accountHref } from "@/features/auth/shared";
 
 export function SidebarNav() {
   const { user } = useAccount();
   return (
     <aside className="fixed inset-y-0 left-0 hidden w-[224px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex">
       <div className="flex h-full min-h-0 flex-col px-3 py-4">
-        <div className="px-2 pb-4 text-lg font-semibold tracking-tight">云占</div>
+        <div className="px-2 pb-4 text-lg font-semibold tracking-tight">
+          云占
+        </div>
 
         <nav className="flex flex-col gap-1" aria-label="主导航">
           <SidebarNavLink to="/" label="主页" icon={HomeIcon} end />
@@ -33,11 +35,23 @@ export function SidebarNav() {
           <div className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground [&_svg]:size-5 [&_svg]:shrink-0">
             <CircleUserRoundIcon aria-hidden="true" />
           </div>
-          <NavLink
-            to={user ? "/settings" : accountHref("login")}
-            className="min-w-0 flex-1 truncate text-sm font-medium hover:underline"
-            title={user?.email}
-          >{user?.name ?? "登录 / 注册"}</NavLink>
+          {user ? (
+            <NavLink
+              to="/settings"
+              className="min-w-0 flex-1 truncate text-sm font-medium hover:underline"
+              title={user.email}
+            >
+              {user.name}
+            </NavLink>
+          ) : (
+            <AuthDialogTrigger
+              mode="login"
+              variant="link"
+              className="min-w-0 flex-1 justify-start px-0"
+            >
+              登录 / 注册
+            </AuthDialogTrigger>
+          )}
           <NavLink
             to="/settings"
             prefetch="intent"
@@ -46,7 +60,7 @@ export function SidebarNav() {
               cn(
                 "flex size-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0",
                 isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
-                isPending && "opacity-70"
+                isPending && "opacity-70",
               )
             }
           >
@@ -78,7 +92,7 @@ function SidebarNavLink({
         cn(
           "flex h-9 min-w-0 items-center gap-2 rounded-md px-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0",
           isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
-          isPending && "opacity-70"
+          isPending && "opacity-70",
         )
       }
     >

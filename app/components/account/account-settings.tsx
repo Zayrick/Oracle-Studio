@@ -1,21 +1,22 @@
 import { useState } from "react";
-import { Link } from "react-router";
 import { LogOutIcon, CircleUserRoundIcon } from "lucide-react";
 
 import { AuthNotice } from "@/components/account/auth-notice";
+import { AccountProfileEditor } from "@/components/account/account-profile-editor";
+import { AccountEmailEditor } from "@/components/account/account-email-editor";
+import { AuthDialogTrigger } from "@/components/account/auth-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/features/auth/auth-client";
-import { accountHref, authErrorMessage } from "@/features/auth/shared";
+import { authErrorMessage } from "@/features/auth/shared";
 import { useAccount } from "@/features/auth/use-account";
 
 export function AccountSettings() {
@@ -44,25 +45,14 @@ export function AccountSettings() {
         <CardTitle>
           <h2>账户</h2>
         </CardTitle>
-        {user ? (
-          <CardDescription>管理你的登录与账户安全。</CardDescription>
-        ) : (
+        {!user ? (
           <CardAction className="row-span-1 flex items-center gap-2 self-center">
-            <Button
-              nativeButton={false}
-              render={<Link to={accountHref("login")} />}
-            >
-              登录
-            </Button>
-            <Button
-              variant="outline"
-              nativeButton={false}
-              render={<Link to={accountHref("register")} />}
-            >
+            <AuthDialogTrigger mode="login">登录</AuthDialogTrigger>
+            <AuthDialogTrigger mode="register" variant="outline">
               创建账户
-            </Button>
+            </AuthDialogTrigger>
           </CardAction>
-        )}
+        ) : null}
       </CardHeader>
       {user || error || !available ? (
         <CardContent className="flex flex-col gap-4">
@@ -100,17 +90,24 @@ export function AccountSettings() {
       ) : null}
       {user ? (
         <CardFooter className="flex-wrap gap-2">
-          <Button
+          <AccountProfileEditor
+            key={user.id}
+            user={user}
+            disabled={pending || !available}
+          />
+          <AccountEmailEditor
+            key={`email:${user.id}`}
+            user={user}
+            disabled={pending || !available}
+          />
+          <AuthDialogTrigger
+            mode="forgot-password"
+            email={user.email}
             variant="outline"
-            nativeButton={false}
-            render={
-              <Link
-                to={accountHref("forgot-password", { email: user.email })}
-              />
-            }
+            disabled={pending || !available}
           >
             重置密码
-          </Button>
+          </AuthDialogTrigger>
         </CardFooter>
       ) : null}
     </Card>

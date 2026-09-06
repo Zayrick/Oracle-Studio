@@ -2,6 +2,7 @@ import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { emailOTP } from "better-auth/plugins/email-otp";
 
 import { sendAuthEmail } from "./email.server";
+import { validateProfileUpdate } from "./profile.server";
 import { registration } from "./registration.server";
 import {
   OTP_EXPIRES_IN,
@@ -66,6 +67,7 @@ export function createAuth(
     secret: env.BETTER_AUTH_SECRET,
     database: env.AUTH_DB,
     trustedOrigins: [new URL(env.BETTER_AUTH_URL).origin],
+    hooks: { before: validateProfileUpdate },
     disabledPaths: [
       "/sign-up/email",
       "/sign-in/email-otp",
@@ -125,8 +127,9 @@ export function createAuth(
         allowedAttempts: 3,
         storeOTP: "hashed",
         disableSignUp: true,
+        changeEmail: { enabled: true },
         sendVerificationOTP: async ({ type, ...message }) => {
-          if (type !== "forget-password") {
+          if (type !== "forget-password" && type !== "change-email") {
             throw new Error("Unsupported authentication email purpose");
           }
           await sendAuthEmail(env, { ...message, type });

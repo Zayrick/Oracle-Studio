@@ -1,9 +1,4 @@
-import {
-  MonitorIcon,
-  MoonIcon,
-  SunIcon,
-  type LucideIcon,
-} from "lucide-react";
+import { MonitorIcon, MoonIcon, SunIcon, type LucideIcon } from "lucide-react";
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PageShell } from "@/components/page-shell";
@@ -19,10 +14,7 @@ import { useTheme, type Theme } from "@/components/theme-provider";
 import type { Route } from "./+types/settings";
 
 export function meta({}: Route.MetaArgs) {
-  return [
-    { title: "云占·设置" },
-    { name: "description", content: "设置" },
-  ];
+  return [{ title: "云占·设置" }, { name: "description", content: "设置" }];
 }
 
 export default function Settings() {
@@ -33,7 +25,6 @@ export default function Settings() {
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
         <header className="flex flex-col gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">设置</h1>
-          <p className="text-sm text-muted-foreground">偏好会保存在当前浏览器。</p>
         </header>
 
         <AccountSettings />
