@@ -9,6 +9,8 @@ create table "account" ("id" text not null primary key, "accountId" text not nul
 
 create table "verification" ("id" text not null primary key, "identifier" text not null, "value" text not null, "expiresAt" date not null, "createdAt" date not null, "updatedAt" date not null);
 
+create table "pendingRegistration" ("id" text not null primary key, "email" text not null unique, "name" text not null, "otpHash" text not null, "otpExpiresAt" integer not null, "attempts" integer not null, "resendAfter" integer not null, "tokenHash" text, "tokenExpiresAt" integer);
+
 create table "rateLimit" ("id" text not null primary key, "key" text not null unique, "count" integer not null, "lastRequest" bigint not null);
 
 create index "session_userId_idx" on "session" ("userId");

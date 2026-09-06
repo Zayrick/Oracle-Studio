@@ -1,9 +1,17 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { ArrowLeftIcon, MailIcon } from "lucide-react";
 import { Link, useNavigate, useRevalidator } from "react-router";
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
 import { PageShell } from "@/components/page-shell";
 import { AuthNotice } from "@/components/account/auth-notice";
+import { RegistrationTurnstile } from "@/components/account/registration-turnstile";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -22,7 +30,9 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { Dialog, DialogPortal, DialogTitle } from "@/components/ui/dialog";
 import { authClient } from "@/features/auth/auth-client";
+import { registrationClient } from "@/features/auth/registration-client";
 import {
   accountHref,
   authErrorMessage,
@@ -38,10 +48,6 @@ import { cn } from "@/lib/utils";
 const copy = {
   login: { title: "登陆帐户" },
   register: { title: "创建账户" },
-  "verify-email": {
-    title: "验证邮箱",
-    description: "输入邮件中的 6 位验证码，完成账户注册。",
-  },
   "forgot-password": {
     title: "找回密码",
     description: "通过邮箱验证码，设置新的账户密码。",
@@ -54,12 +60,12 @@ export function AuthForm({
   mode,
   initialEmail,
   redirectTo,
-  verificationSent,
+  turnstileSiteKey,
 }: {
   mode: AccountMode;
   initialEmail: string;
   redirectTo: string;
-  verificationSent: boolean;
+  turnstileSiteKey: string;
 }) {
   const isAccountEntry = mode === "login" || mode === "register";
   const navigate = useNavigate();
@@ -71,16 +77,53 @@ export function AuthForm({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState(
-    verificationSent ? "验证码已发送，请检查收件箱或垃圾邮件。" : "",
-  );
   const [pending, setPending] = useState(false);
-  const [remaining, setRemaining] = useState(
-    verificationSent ? OTP_RESEND_SECONDS : 0,
+  const [remaining, setRemaining] = useState(0);
+  const [registrationToken, setRegistrationToken] = useState("");
+  const [challengeRequested, setChallengeRequested] = useState(false);
+  const challengeRequest = useRef<((token: string | null) => void) | null>(
+    null,
   );
   const [passwordMismatch, setPasswordMismatch] = useState(false);
   const locked = useRef(false);
+  const card = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const passwordInput = useRef<HTMLInputElement>(null);
+  const isPasswordStep = mode === "register" && Boolean(registrationToken);
+
+  useEffect(() => () => challengeRequest.current?.(null), []);
+
+  const receiveTurnstileToken = useCallback((token: string) => {
+    if (!token || !challengeRequest.current) return;
+    challengeRequest.current(token);
+    challengeRequest.current = null;
+    setChallengeRequested(false);
+  }, []);
+
+  const failTurnstile = useCallback(() => {
+    challengeRequest.current?.(null);
+    challengeRequest.current = null;
+    setChallengeRequested(false);
+    setError(authErrorMessage({ code: "TURNSTILE_FAILED" }));
+  }, []);
+
+  function requestTurnstile() {
+    return new Promise<string | null>((resolve) => {
+      challengeRequest.current = resolve;
+      setChallengeRequested(true);
+    });
+  }
+
+  function cancelTurnstile() {
+    challengeRequest.current?.(null);
+    challengeRequest.current = null;
+    setChallengeRequested(false);
+  }
+
+  useEffect(() => {
+    if (isPasswordStep) passwordInput.current?.focus();
+  }, [isPasswordStep]);
 
   useEffect(() => {
     if (remaining <= 0) return;
@@ -100,7 +143,6 @@ export function AuthForm({
     locked.current = true;
     setPending(true);
     setError("");
-    setNotice("");
     try {
       await operation();
     } catch {
@@ -123,31 +165,33 @@ export function AuthForm({
   }
 
   async function sendCode() {
-    if (mode !== "verify-email" && mode !== "forgot-password") return;
+    if (mode !== "register" && mode !== "forgot-password") return;
     if (remaining > 0 || !emailInput.current?.reportValidity()) return;
+    if (mode === "register" && !nameInput.current?.reportValidity()) return;
     await run(async () => {
+      const turnstileToken =
+        mode === "register" ? await requestTurnstile() : "";
+      if (mode === "register" && !turnstileToken) return;
       const result =
         mode === "forgot-password"
           ? await authClient.emailOtp.requestPasswordReset({
               email: normalizedEmail,
             })
-          : await authClient.emailOtp.sendVerificationOtp({
+          : await registrationClient.sendCode({
               email: normalizedEmail,
-              type: "email-verification",
+              name: name.trim(),
+              turnstileToken: turnstileToken ?? "",
             });
       if (succeeded(result)) {
         setOtp("");
         setRemaining(OTP_RESEND_SECONDS);
-        setNotice(
-          "如果该邮箱符合验证条件，验证码将发送至收件箱，请同时检查垃圾邮件。验证码 5 分钟内有效。",
-        );
       }
     });
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const needsConfirmation = mode === "register" || mode === "forgot-password";
+    const needsConfirmation = isPasswordStep || mode === "forgot-password";
     if (needsConfirmation && password !== confirmPassword) {
       setPasswordMismatch(true);
       return;
@@ -155,28 +199,29 @@ export function AuthForm({
     setPasswordMismatch(false);
     await run(async () => {
       if (mode === "register") {
-        const result = await authClient.signUp.email({
-          email: normalizedEmail,
-          password,
-          name: name.trim(),
-        });
-        if (succeeded(result)) {
-          setPassword("");
-          setConfirmPassword("");
-          await navigate(href("verify-email"), {
-            state: { verificationSent: true },
+        if (!isPasswordStep) {
+          const result = await registrationClient.verifyEmail({
+            email: normalizedEmail,
+            name: name.trim(),
+            otp,
           });
+          if (succeeded(result) && result.data) {
+            setRegistrationToken(result.data.token);
+            setOtp("");
+          }
+        } else {
+          const result = await registrationClient.complete({
+            email: normalizedEmail,
+            token: registrationToken,
+            password,
+          });
+          if (result.error?.code === "REGISTRATION_EXPIRED") {
+            restartRegistration();
+            setError(authErrorMessage(result.error));
+          } else if (succeeded(result)) {
+            finishSignIn();
+          }
         }
-      } else if (mode === "verify-email") {
-        if (
-          succeeded(
-            await authClient.emailOtp.verifyEmail({
-              email: normalizedEmail,
-              otp,
-            }),
-          )
-        )
-          finishSignIn();
       } else if (mode === "forgot-password") {
         if (
           succeeded(
@@ -201,14 +246,20 @@ export function AuthForm({
           email: normalizedEmail,
           password,
         });
-        if (result.error?.code === "EMAIL_NOT_VERIFIED") {
-          setPassword("");
-          await navigate(href("verify-email"));
-        } else if (succeeded(result)) {
+        if (succeeded(result)) {
           finishSignIn();
         }
       }
     });
+  }
+
+  function restartRegistration() {
+    setRegistrationToken("");
+    setPassword("");
+    setConfirmPassword("");
+    setPasswordMismatch(false);
+    setOtp("");
+    setError("");
   }
 
   const passwordField = (newPassword: boolean) => (
@@ -217,6 +268,7 @@ export function AuthForm({
         {newPassword && mode === "forgot-password" ? "新密码" : "密码"}
       </FieldLabel>
       <Input
+        ref={passwordInput}
         id="account-password"
         name="password"
         type="password"
@@ -289,11 +341,15 @@ export function AuthForm({
           disabled={pending || !available || remaining > 0}
           onClick={() => void sendCode()}
         >
-          {remaining > 0 ? `${remaining} 秒后重发` : "获取验证码"}
+          {challengeRequested
+            ? "安全验证中…"
+            : remaining > 0
+              ? `${remaining} 秒后重发`
+              : "获取验证码"}
         </Button>
       </div>
       <FieldDescription>
-        验证码 5 分钟内有效。重新获取后请使用最新验证码。
+        验证码 5 分钟内有效。如未收到，请检查垃圾邮箱。
       </FieldDescription>
     </Field>
   );
@@ -321,7 +377,7 @@ export function AuthForm({
           <ArrowLeftIcon data-icon="inline-start" />
           返回设置
         </Button>
-        <Card>
+        <Card ref={card} className="relative isolate">
           <CardHeader className={cn(isAccountEntry && "text-center")}>
             {!isAccountEntry ? (
               <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -329,7 +385,7 @@ export function AuthForm({
               </div>
             ) : null}
             <CardTitle>
-              <h1>{copy[mode].title}</h1>
+              <h1>{isPasswordStep ? "设置密码" : copy[mode].title}</h1>
             </CardTitle>
             {!isAccountEntry ? (
               <CardDescription>{copy[mode].description}</CardDescription>
@@ -340,14 +396,14 @@ export function AuthForm({
               <AuthNotice error>账户服务暂时不可用，请稍后重试。</AuthNotice>
             ) : null}
             {error ? <AuthNotice error>{error}</AuthNotice> : null}
-            {notice ? <AuthNotice>{notice}</AuthNotice> : null}
             <form onSubmit={(event) => void submit(event)} aria-busy={pending}>
               <fieldset className="min-w-0" disabled={pending || !available}>
                 <FieldGroup>
-                  {mode === "register" ? (
+                  {mode === "register" && !isPasswordStep ? (
                     <Field>
                       <FieldLabel htmlFor="account-name">昵称</FieldLabel>
                       <Input
+                        ref={nameInput}
                         id="account-name"
                         name="name"
                         autoComplete="nickname"
@@ -375,11 +431,12 @@ export function AuthForm({
                       maxLength={254}
                       placeholder="you@example.com"
                       value={email}
+                      readOnly={isPasswordStep}
                       onChange={(event) => {
                         setEmail(event.target.value);
                         setOtp("");
-                        setNotice("");
                         setError("");
+                        if (mode === "register") setRemaining(0);
                       }}
                     />
                   </Field>
@@ -389,17 +446,24 @@ export function AuthForm({
                       {submitButton("登录")}
                     </>
                   ) : null}
-                  {mode === "register" ? (
+                  {mode === "register" && !isPasswordStep ? (
+                    <>
+                      {codeField}
+                      {submitButton("下一步")}
+                    </>
+                  ) : null}
+                  {isPasswordStep ? (
                     <>
                       {passwordField(true)}
                       {confirmationField}
-                      {submitButton("注册")}
-                    </>
-                  ) : null}
-                  {mode === "verify-email" ? (
-                    <>
-                      {codeField}
                       {submitButton("完成注册")}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={restartRegistration}
+                      >
+                        返回修改邮箱
+                      </Button>
                     </>
                   ) : null}
                   {mode === "forgot-password" ? (
@@ -414,35 +478,60 @@ export function AuthForm({
               </fieldset>
             </form>
           </CardContent>
-          <CardFooter className="justify-between gap-2">
-            {mode === "login" ? (
-              <>
+          {!isPasswordStep ? (
+            <CardFooter className="justify-between gap-2">
+              {mode === "login" ? (
+                <>
+                  <Button
+                    variant="link"
+                    nativeButton={false}
+                    render={<Link to={href("forgot-password")} />}
+                  >
+                    忘记密码？
+                  </Button>
+                  <Button
+                    variant="link"
+                    nativeButton={false}
+                    render={<Link to={href("register")} />}
+                  >
+                    还没有账户？创建账户
+                  </Button>
+                </>
+              ) : (
                 <Button
+                  className="mx-auto"
                   variant="link"
                   nativeButton={false}
-                  render={<Link to={href("forgot-password")} />}
+                  render={<Link to={href("login")} />}
                 >
-                  忘记密码？
+                  已有账户？返回登录
                 </Button>
-                <Button
-                  variant="link"
-                  nativeButton={false}
-                  render={<Link to={href("register")} />}
-                >
-                  还没有账户？创建账户
-                </Button>
-              </>
-            ) : (
-              <Button
-                className="mx-auto"
-                variant="link"
-                nativeButton={false}
-                render={<Link to={href("login")} />}
+              )}
+            </CardFooter>
+          ) : null}
+          <Dialog
+            open={challengeRequested}
+            onOpenChange={(open) => {
+              if (!open) cancelTurnstile();
+            }}
+          >
+            <DialogPortal container={card} className="absolute inset-0">
+              <DialogPrimitive.Backdrop className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+              <DialogPrimitive.Popup
+                className="absolute top-1/2 left-1/2 w-[300px] max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 outline-none"
+                aria-describedby={undefined}
               >
-                已有账户？返回登录
-              </Button>
-            )}
-          </CardFooter>
+                <DialogTitle className="sr-only">安全验证</DialogTitle>
+                {challengeRequested ? (
+                  <RegistrationTurnstile
+                    siteKey={turnstileSiteKey}
+                    onTokenChange={receiveTurnstileToken}
+                    onError={failTurnstile}
+                  />
+                ) : null}
+              </DialogPrimitive.Popup>
+            </DialogPortal>
+          </Dialog>
         </Card>
       </div>
     </PageShell>

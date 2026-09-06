@@ -20,6 +20,8 @@
 			"BETTER_AUTH_URL",
 			"RESEND_API_KEY",
 			"AUTH_EMAIL_FROM",
+			"TURNSTILE_SITE_KEY",
+			"TURNSTILE_SECRET_KEY",
 			"liuyao_LLM_MODEL",
 			"liuyao_LLM_BASE",
 			"liuyao_LLM_KEY",

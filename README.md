@@ -64,6 +64,8 @@ BETTER_AUTH_SECRET=replace_with_a_random_secret_of_at_least_32_characters
 BETTER_AUTH_URL=http://localhost:5173
 RESEND_API_KEY=your_resend_api_key
 AUTH_EMAIL_FROM=noreply@your-verified-domain.com
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 ```
 
 `*_LLM_BASE` 应填写 API 根地址。应用会在地址末尾补充 `/chat/completions`；如果配置值已经以该路径结尾，则不会重复追加。六爻接口要求上游支持流式响应，八字接口还要求模型支持工具调用。
@@ -115,8 +117,7 @@ npm run build
 | `/history` | 历史记录管理 |
 | `/settings` | 账户与外观设置 |
 | `/account/login` | 邮箱密码登录 |
-| `/account/register` | 邮箱注册 |
-| `/account/verify-email` | 注册邮箱验证码验证 |
+| `/account/register` | 两步注册：验证邮箱后设置密码 |
 | `/account/forgot-password` | 验证码找回密码 |
 | `/api/auth/*` | Better Auth 账户接口 |
 | `/api/bazi/ai` | 八字 AI 解读接口，仅接受 `POST` |
@@ -160,7 +161,7 @@ npx wrangler d1 create oracle-studio-auth --binding AUTH_DB --update-config
 npm run db:migrate:remote
 ```
 
-首个迁移由当前 Better Auth 配置生成，包含 `user`、`session`、`account`、`verification` 和 `rateLimit` 五张表及索引。`auth:schema` 生成的是完整建表 SQL，不能直接作为已有数据库的增量迁移；后续变更应对照生成结果新增迁移文件，不修改已应用的迁移。
+首个迁移由当前 Better Auth 配置生成，包含 `user`、`session`、`account`、`verification`、`pendingRegistration` 和 `rateLimit` 六张表及索引。`auth:schema` 生成的是完整建表 SQL，不能直接作为已有数据库的增量迁移；后续变更应对照生成结果新增迁移文件，不修改已应用的迁移。
 
 ### 2. 会话密钥和站点地址
 
@@ -171,6 +172,8 @@ npm run db:migrate:remote
 | `RESEND_API_KEY` | Resend API Key，使用 Sending access 权限并限制到发信域名 |
 | `AUTH_EMAIL_FROM` | 仅填写发信邮箱地址，例如 `noreply@example.com`；域名必须已在 Resend 验证，显示名称由应用设置为「云占」 |
 | `AUTH_DB` | D1 数据库绑定 |
+| `TURNSTILE_SITE_KEY` | Cloudflare Turnstile 的公开站点密钥；仅注册页会读取 |
+| `TURNSTILE_SECRET_KEY` | Turnstile 服务端密钥，仅用于调用 Siteverify |
 
 本地填写 `.dev.vars`，线上使用 Wrangler 交互式输入：
 
@@ -179,6 +182,8 @@ npx wrangler secret put BETTER_AUTH_SECRET
 npx wrangler secret put BETTER_AUTH_URL
 npx wrangler secret put RESEND_API_KEY
 npx wrangler secret put AUTH_EMAIL_FROM
+npx wrangler secret put TURNSTILE_SITE_KEY
+npx wrangler secret put TURNSTILE_SECRET_KEY
 ```
 
 真实密钥不可提交 Git。生产环境必须使用 HTTPS；登录 Cookie 为 HttpOnly、Secure、SameSite=Lax。登录后跳转仅允许站内页面。未完成配置时账户界面会显示暂不可用。
@@ -189,18 +194,24 @@ npx wrangler secret put AUTH_EMAIL_FROM
 
 邮件同时包含中文纯文本和 HTML 内容。本地开发与生产环境都会调用 Resend 并使用其发送额度，验证码需要从收件箱查看。若尚未验证域名，可临时使用 `AUTH_EMAIL_FROM=onboarding@resend.dev` 测试，但收件人仅限 Resend 账户自身邮箱，详见 [Resend 测试域名限制](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain)。自动化测试会拦截 HTTP 请求，不需要真实 Resend 密钥。
 
-邮件任务由当前请求的 `ctx.waitUntil()` 执行，避免因发送耗时泄露账户是否存在。Resend 请求在 10 秒后超时；非成功 HTTP 状态和网络错误都会作为发送失败处理。发送失败记录通用服务端错误，响应不暴露邮箱是否已注册；需要检查服务端日志和 Resend 控制台的投递情况。应用日志不会记录密钥、验证码、邮件内容或 Resend 原始错误响应。
+注册验证码在确认 Resend 接受发送后返回；发送失败会清除本次临时记录并提示重试。找回密码的邮件任务由当前请求的 `ctx.waitUntil()` 执行。Resend 请求在 10 秒后超时；非成功 HTTP 状态和网络错误都会作为发送失败处理。找回密码发送失败记录通用服务端错误，需要检查服务端日志和 Resend 控制台的投递情况。应用日志不会记录密钥、验证码、邮件内容或 Resend 原始错误响应。
 
-从原邮件服务切换到 Resend 只需补齐发信配置并部署，不涉及账户数据或 D1 表结构迁移。
+### 4. 注册安全验证
+
+点击「获取验证码」后，「创建账户」卡片内部会水平、垂直居中显示并自动运行 [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/)，验证通过后弹层自动关闭并发送邮箱验证码；打开注册页时不会提前显示验证。服务端调用 Siteverify，并校验 `success`、动作 `register_email` 和 `BETTER_AUTH_URL` 对应的主机名。每次点击获取或重发验证码都会创建新的 widget 和一次性 token；关闭或取消验证不会发送邮件。
+
+`.dev.vars.example` 提供 [Cloudflare 官方自动通过测试密钥](https://developers.cloudflare.com/turnstile/troubleshooting/testing/)。测试密钥仍会调用 Siteverify，仅对这对官方测试密钥接受固定的测试主机名和动作。发布前将 `TURNSTILE_SITE_KEY` 和 `TURNSTILE_SECRET_KEY` 替换为正式 widget 的对应密钥，真实密钥不接受测试元数据。
 
 ### 行为与验证
 
 - 登录使用邮箱和密码；邮箱验证码仅用于完成注册和找回密码，服务端已禁用验证码登录接口及登录验证码发送。
-- 注册后必须验证邮箱；首次验证成功自动登录。已验证账户不能重复使用注册验证获取登录会话。密码登录不会发送验证码，未验证账户会跳转到注册验证页面继续完成注册。
-- 验证码为 6 位数字，有效期 5 分钟，最多允许 3 次错误尝试；重新发送后旧码失效，数据库保存验证码哈希。
+- 第一步填写昵称、邮箱和邮箱验证码。验证成功后进入设置密码的第二步；在此之前只存在临时注册记录，不创建用户、密码或登录会话，也不能通过找回密码完成注册。
+- 第二步填写并确认密码后，服务端在一个 D1 事务中创建已验证用户、保存密码哈希并消费注册凭证，成功后自动登录。凭证绑定已验证邮箱和昵称，10 分钟内有效且只能使用一次；刷新或返回修改邮箱后需要重新验证。
+- 旧的直接注册和邮箱验证接口已关闭。现有账户不能通过注册验证码获取会话，密码登录不会发送验证码。
+- 验证码为 6 位数字，有效期 5 分钟，最多允许 3 次验证尝试；重新发送后旧码失效，数据库保存验证码哈希。
 - 密码长度为 8–128 字符，使用 Better Auth 默认密码哈希。
 - 重置密码后旧密码及所有旧会话失效，需要重新登录；会话最长 7 天，每天刷新有效期。
-- 认证限流存储在 D1，使用 Cloudflare 提供的客户端 IP；验证码相关接口默认每 IP、每接口每分钟最多 3 次。
+- 认证限流存储在 D1，使用 Cloudflare 提供的客户端 IP；发送注册验证码和完成注册每 IP 每分钟最多 3 次，验证邮箱最多 5 次；同一邮箱每 60 秒只能发送一次注册验证码。
 - 当前账户系统不限制匿名排盘或 AI 解读，不包含历史同步、第三方登录、手机号或邮箱修改。
 
 ```bash
@@ -211,7 +222,7 @@ npm run build
 
 测试在临时 D1 中检查真实 Better Auth 请求处理、迁移兼容性、验证码并发消费、密码和会话失效、限流与来源校验。邮件通过模拟 Resend HTTP 响应捕获，同时验证鉴权失败、限流、服务错误和网络超时的脱敏处理。测试不会发送真实邮件，也不会修改本地或线上业务数据库。
 
-`npm run test:auth:worker` 会额外验证生产构建在 Workers 中的运行情况，包括注册后通过 Resend 发送验证码、完成邮箱验证、登录密码哈希、账户页面 SSR、Cookie 传递，以及页面数据不包含会话令牌。这个测试使用临时数据库，并拦截全部出站请求。
+`npm run test:auth:worker` 会额外验证生产构建在 Workers 中的运行情况，包括 Turnstile 校验、注册验证码发送、邮箱验证后仍不可登录、设置密码后完成注册、账户页面 SSR、Cookie 传递，以及页面数据不包含会话令牌或 Turnstile 服务端密钥。这个测试使用临时数据库，并拦截全部出站请求。
 
 ## 部署
 
@@ -221,7 +232,7 @@ npm run build
 npx wrangler login
 ```
 
-线上环境必须配置 `wrangler.jsonc` 中声明的 LLM 配置和上文四项账户配置，并先完成 D1 迁移与 Resend 发信域名验证：
+线上环境必须配置 `wrangler.jsonc` 中声明的 LLM 配置和上文六项账户配置，并先完成 D1 迁移与 Resend 发信域名验证：
 
 ```bash
 npx wrangler secret put liuyao_LLM_MODEL

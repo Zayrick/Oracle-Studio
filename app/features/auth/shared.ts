@@ -3,14 +3,13 @@ export const OTP_EXPIRES_IN = 300;
 export const OTP_RESEND_SECONDS = 60;
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 128;
+export const REGISTRATION_EXPIRES_IN = 600;
+export const REGISTRATION_TURNSTILE_ACTION = "register_email";
 
-export type AccountMode =
-  "login" | "register" | "verify-email" | "forgot-password";
+export type AccountMode = "login" | "register" | "forgot-password";
 
 export function isAccountMode(value: string | undefined): value is AccountMode {
-  return ["login", "register", "verify-email", "forgot-password"].includes(
-    value ?? "",
-  );
+  return ["login", "register", "forgot-password"].includes(value ?? "");
 }
 
 // Only allow local page paths, including when a URL parser normalizes backslashes.
@@ -59,6 +58,10 @@ const errorMessages: Record<string, string> = {
   PASSWORD_TOO_SHORT: "密码至少需要 8 个字符。",
   PASSWORD_TOO_LONG: "密码不能超过 128 个字符。",
   AUTH_UNAVAILABLE: "账户服务暂时不可用，请稍后重试。",
+  TURNSTILE_FAILED: "安全验证未通过，请重新验证后获取验证码。",
+  EMAIL_DELIVERY_FAILED: "验证码发送失败，请稍后重试。",
+  REGISTRATION_EXPIRED: "注册验证已失效，请重新验证邮箱。",
+  REGISTRATION_LOGIN_FAILED: "账户已创建，请前往登录。",
 };
 
 export function authErrorMessage(

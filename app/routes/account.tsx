@@ -3,23 +3,26 @@ import { useLocation } from "react-router";
 import { AuthForm } from "@/components/account/auth-form";
 import { AuthNotice } from "@/components/account/auth-notice";
 import { isAccountMode, safeRedirect } from "@/features/auth/shared";
+import { cloudflareContext } from "@/lib/cloudflare-context";
 import type { Route } from "./+types/account";
 
 const titles = {
   login: "登录",
   register: "注册",
-  "verify-email": "验证邮箱",
   "forgot-password": "找回密码",
 };
 
-export function loader({ request, params }: Route.LoaderArgs) {
+export function loader({ request, params, context }: Route.LoaderArgs) {
   if (!isAccountMode(params.mode))
     throw new Response("页面不存在", { status: 404 });
   const url = new URL(request.url);
+  const { env } = context.get(cloudflareContext);
   return {
     mode: params.mode,
     initialEmail: (url.searchParams.get("email") ?? "").slice(0, 254),
     redirectTo: safeRedirect(url.searchParams.get("redirectTo")),
+    turnstileSiteKey:
+      params.mode === "register" ? (env.TURNSTILE_SITE_KEY?.trim() ?? "") : "",
   };
 }
 
@@ -43,11 +46,7 @@ export default function Account({ loaderData }: Route.ComponentProps) {
           </AuthNotice>
         </div>
       ) : null}
-      <AuthForm
-        key={`${loaderData.mode}:${location.key}`}
-        {...loaderData}
-        verificationSent={Boolean(location.state?.verificationSent)}
-      />
+      <AuthForm key={`${loaderData.mode}:${location.key}`} {...loaderData} />
     </>
   );
 }

@@ -16,7 +16,7 @@ export async function sendAuthEmail(
   message: VerificationEmail,
 ) {
   const purpose = purposes[message.type];
-  // OTPs come from Better Auth, never from user-supplied HTML.
+  // OTPs are generated on the server, never from user-supplied HTML.
   if (!/^\d{6}$/.test(message.otp))
     throw new Error("Invalid authentication code format");
 

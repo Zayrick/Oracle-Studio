@@ -1,8 +1,8 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
-import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins/email-otp";
 
 import { sendAuthEmail } from "./email.server";
+import { registration } from "./registration.server";
 import {
   OTP_EXPIRES_IN,
   OTP_LENGTH,
@@ -17,9 +17,11 @@ export type AuthEnvironment = Pick<
   | "AUTH_EMAIL_FROM"
   | "BETTER_AUTH_SECRET"
   | "BETTER_AUTH_URL"
+  | "TURNSTILE_SITE_KEY"
+  | "TURNSTILE_SECRET_KEY"
 >;
 type AuthOptions = BetterAuthOptions & {
-  plugins: [ReturnType<typeof emailOTP>];
+  plugins: [ReturnType<typeof emailOTP>, ReturnType<typeof registration>];
 };
 type AuthInstance = ReturnType<typeof betterAuth<AuthOptions>>;
 
@@ -28,6 +30,8 @@ export function isAuthConfigured(env: AuthEnvironment) {
     !env.AUTH_DB ||
     !env.RESEND_API_KEY?.trim() ||
     !env.AUTH_EMAIL_FROM?.trim() ||
+    !env.TURNSTILE_SITE_KEY?.trim() ||
+    !env.TURNSTILE_SECRET_KEY?.trim() ||
     (env.BETTER_AUTH_SECRET?.length ?? 0) < 32
   )
     return false;
@@ -62,52 +66,22 @@ export function createAuth(
     secret: env.BETTER_AUTH_SECRET,
     database: env.AUTH_DB,
     trustedOrigins: [new URL(env.BETTER_AUTH_URL).origin],
-    disabledPaths: ["/sign-in/email-otp"],
+    disabledPaths: [
+      "/sign-up/email",
+      "/sign-in/email-otp",
+      "/email-otp/send-verification-otp",
+      "/email-otp/verify-email",
+      "/send-verification-email",
+      "/verify-email",
+    ],
     emailAndPassword: {
       enabled: true,
+      disableSignUp: true,
       requireEmailVerification: true,
       autoSignIn: false,
       minPasswordLength: PASSWORD_MIN_LENGTH,
       maxPasswordLength: PASSWORD_MAX_LENGTH,
       revokeSessionsOnPasswordReset: true,
-    },
-    emailVerification: {
-      sendOnSignUp: true,
-      sendOnSignIn: false,
-      autoSignInAfterVerification: true,
-      beforeEmailVerification: async (user) => {
-        // Registration verification must not become a passwordless login for existing users.
-        if (user.emailVerified) {
-          throw new APIError("BAD_REQUEST", {
-            code: "EMAIL_ALREADY_VERIFIED",
-            message: "邮箱已验证，请使用邮箱和密码登录。",
-          });
-        }
-      },
-    },
-    hooks: {
-      before: createAuthMiddleware(async (context) => {
-        if (context.path !== "/email-otp/send-verification-otp") return;
-        if (
-          context.body?.type !== "email-verification" &&
-          context.body?.type !== "forget-password"
-        ) {
-          throw new APIError("BAD_REQUEST", {
-            code: "OTP_TYPE_NOT_ALLOWED",
-            message: "邮箱验证码仅用于注册验证和找回密码。",
-          });
-        }
-        if (
-          context.body.type === "email-verification" &&
-          typeof context.body.email === "string"
-        ) {
-          const account = await context.context.internalAdapter.findUserByEmail(
-            context.body.email.toLowerCase(),
-          );
-          // Match the generic response for unknown addresses without sending another registration code.
-          if (account?.user.emailVerified) return context.json({ success: true });
-        }
-      }),
     },
     session: {
       expiresIn: 60 * 60 * 24 * 7,
@@ -121,8 +95,9 @@ export function createAuth(
       max: 60,
       customRules: {
         "/sign-in/email": { window: 60, max: 5 },
-        "/sign-up/email": { window: 60, max: 3 },
-        "/send-verification-email": { window: 60, max: 3 },
+        "/registration/send-code": { window: 60, max: 3 },
+        "/registration/verify-email": { window: 60, max: 5 },
+        "/registration/complete": { window: 60, max: 3 },
       },
     },
     advanced: {
@@ -150,14 +125,14 @@ export function createAuth(
         allowedAttempts: 3,
         storeOTP: "hashed",
         disableSignUp: true,
-        overrideDefaultEmailVerification: true,
         sendVerificationOTP: async ({ type, ...message }) => {
-          if (type !== "email-verification" && type !== "forget-password") {
+          if (type !== "forget-password") {
             throw new Error("Unsupported authentication email purpose");
           }
           await sendAuthEmail(env, { ...message, type });
         },
       }),
+      registration(env),
     ],
   });
 }

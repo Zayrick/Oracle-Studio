@@ -27,6 +27,8 @@ try {
     AUTH_EMAIL_FROM: "noreply@example.com",
     BETTER_AUTH_URL: "https://example.com",
     BETTER_AUTH_SECRET: randomBytes(32).toString("hex"),
+    TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
+    TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
   });
   const migration = await getMigrations(auth.options);
   const sql = await migration.compileMigrations();

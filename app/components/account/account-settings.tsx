@@ -83,9 +83,7 @@ export function AccountSettings() {
                   {user.email}
                 </p>
               </div>
-              <Badge variant={user.emailVerified ? "secondary" : "outline"}>
-                {user.emailVerified ? "邮箱已验证" : "待验证"}
-              </Badge>
+              <Badge variant="secondary">邮箱已验证</Badge>
             </div>
           ) : null}
         </CardContent>
@@ -103,18 +101,6 @@ export function AccountSettings() {
           >
             重置密码
           </Button>
-          {!user.emailVerified ? (
-            <Button
-              nativeButton={false}
-              render={
-                <Link
-                  to={accountHref("verify-email", { email: user.email })}
-                />
-              }
-            >
-              验证邮箱
-            </Button>
-          ) : null}
           <Button
             variant="ghost"
             disabled={pending}

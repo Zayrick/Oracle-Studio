@@ -26,6 +26,19 @@ test("production Worker renders account pages and persists a real login session"
       d1Databases: ["AUTH_DB"],
       // Intercept every outbound request; the production bundle cannot send real mail.
       outboundService: async (request) => {
+        if (
+          request.url ===
+          "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+        ) {
+          const body = new URLSearchParams(await request.text());
+          assert.equal(body.get("secret"), "worker-test-turnstile-secret");
+          return Response.json({
+            success: body.get("response") === "valid-worker-challenge",
+            action: "register_email",
+            hostname: "example.com",
+          });
+        }
+        assert.equal(request.url, "https://api.resend.com/emails");
         sentEmail.resolve({
           url: request.url,
           method: request.method,
@@ -39,6 +52,8 @@ test("production Worker renders account pages and persists a real login session"
         BETTER_AUTH_URL: "https://example.com",
         RESEND_API_KEY: "re_worker_test_placeholder",
         AUTH_EMAIL_FROM: "noreply@example.com",
+        TURNSTILE_SITE_KEY: "worker-test-sitekey",
+        TURNSTILE_SECRET_KEY: "worker-test-turnstile-secret",
       },
     }),
   );
@@ -59,7 +74,6 @@ test("production Worker renders account pages and persists a real login session"
     for (const [path, title] of [
       ["/account/login", "登陆帐户"],
       ["/account/register", "创建账户"],
-      ["/account/verify-email", "验证邮箱"],
       ["/account/forgot-password", "找回密码"],
       ["/settings", "账户"],
     ]) {
@@ -78,9 +92,20 @@ test("production Worker renders account pages and persists a real login session"
         assert.ok(!html.includes('name="otp"'));
         assert.ok(!html.includes('role="tablist"'));
       }
-      if (["/account/verify-email", "/account/forgot-password"].includes(path)) {
+      if (["/account/register", "/account/forgot-password"].includes(path)) {
         assert.ok(html.includes('name="otp"'), path);
       }
+      if (path === "/account/register") {
+        assert.ok(html.includes('name="name"'));
+        assert.ok(html.includes('name="email"'));
+        assert.ok(!html.includes('name="password"'));
+        assert.ok(!html.includes('name="confirmPassword"'));
+        assert.ok(!html.includes("第 1 步，共 2 步"));
+        assert.ok(!html.includes("正在自动进行安全验证"));
+        assert.ok(!html.includes('aria-label="Cloudflare 安全验证"'));
+        assert.ok(html.includes("worker-test-sitekey"));
+      }
+      assert.ok(!html.includes("worker-test-turnstile-secret"));
     }
 
     const email = "worker-test@example.com";
@@ -95,12 +120,23 @@ test("production Worker renders account pages and persists a real login session"
         },
         body: JSON.stringify(body),
       });
-    const registration = await post("/sign-up/email", {
+    const blockedSend = await post("/registration/send-code", {
       email,
-      password,
       name: "Worker 测试",
+      turnstileToken: "invalid-challenge",
+    });
+    assert.equal(blockedSend.status, 403);
+    const registration = await post("/registration/send-code", {
+      email,
+      name: "Worker 测试",
+      turnstileToken: "valid-worker-challenge",
     });
     assert.equal(registration.status, 200, await registration.text());
+    assert.equal(registration.headers.getSetCookie().length, 0);
+    assert.equal(
+      (await db.prepare('SELECT COUNT(*) AS count FROM "user"').first()).count,
+      0,
+    );
     const delivery = await Promise.race([
       sentEmail.promise,
       delay(5_000, undefined, { ref: false }).then(() => {
@@ -114,19 +150,39 @@ test("production Worker renders account pages and persists a real login session"
     assert.equal(delivery.authorization, "Bearer re_worker_test_placeholder");
     assert.equal(delivery.body.from, "云占 <noreply@example.com>");
     assert.deepEqual(delivery.body.to, [email]);
-    const blockedSend = await post("/email-otp/send-verification-otp", {
+    const blockedOtpSend = await post("/email-otp/send-verification-otp", {
       email,
       type: "sign-in",
     });
-    assert.equal(blockedSend.status, 400);
-    assert.equal((await blockedSend.json()).code, "OTP_TYPE_NOT_ALLOWED");
+    assert.equal(blockedOtpSend.status, 404);
     const otp = delivery.body.text.match(/验证码：(\d{6})/u)?.[1];
     assert.ok(otp, "verification email must contain a usable code");
     const blockedLogin = await post("/sign-in/email-otp", { email, otp });
     assert.equal(blockedLogin.status, 404);
     assert.equal(blockedLogin.headers.getSetCookie().length, 0);
-    const verification = await post("/email-otp/verify-email", { email, otp });
-    assert.equal(verification.status, 200, await verification.text());
+    const verification = await post("/registration/verify-email", {
+      email,
+      otp,
+      name: "Worker 测试",
+    });
+    assert.equal(verification.status, 200, await verification.clone().text());
+    assert.equal(verification.headers.getSetCookie().length, 0);
+    const { token } = await verification.json();
+    assert.equal(
+      (await db.prepare('SELECT COUNT(*) AS count FROM "user"').first()).count,
+      0,
+    );
+    assert.equal(
+      (await post("/sign-in/email", { email, password })).status,
+      401,
+    );
+    const completed = await post("/registration/complete", {
+      email,
+      password,
+      token,
+    });
+    assert.equal(completed.status, 200, await completed.text());
+    assert.ok(completed.headers.getSetCookie().length > 0);
     const login = await post("/sign-in/email", { email, password });
     assert.equal(login.status, 200, await login.clone().text());
     assert.match(login.headers.get("cache-control"), /no-store/);
