@@ -7,6 +7,7 @@ import {
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PageShell } from "@/components/page-shell";
+import { AccountSettings } from "@/components/account/account-settings";
 import {
   Field,
   FieldContent,
@@ -34,6 +35,8 @@ export default function Settings() {
           <h1 className="text-2xl font-semibold tracking-tight">设置</h1>
           <p className="text-sm text-muted-foreground">偏好会保存在当前浏览器。</p>
         </header>
+
+        <AccountSettings />
 
         <FieldGroup>
           <Field className="rounded-md border bg-card p-4 text-card-foreground">

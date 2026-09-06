@@ -4,3 +4,11 @@ liuyao_LLM_KEY=
 bazi_LLM_MODEL=
 bazi_LLM_BASE=
 bazi_LLM_KEY=
+
+# 生成独立的随机密钥（至少 32 字符）；不要在不同环境间复用。
+BETTER_AUTH_SECRET=
+BETTER_AUTH_URL=http://localhost:5173
+# Resend 的 Sending access API Key；本地填写后会通过 Resend 发送邮件。
+RESEND_API_KEY=
+# 仅填写邮箱地址，域名必须已在 Resend 验证。
+AUTH_EMAIL_FROM=

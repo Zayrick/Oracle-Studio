@@ -9,8 +9,11 @@ import { NavLink } from "react-router";
 import { SidebarHistorySection } from "@/components/sidebar-history-section";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { useAccount } from "@/features/auth/use-account";
+import { accountHref } from "@/features/auth/shared";
 
 export function SidebarNav() {
+  const { user } = useAccount();
   return (
     <aside className="fixed inset-y-0 left-0 hidden w-[224px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex">
       <div className="flex h-full min-h-0 flex-col px-3 py-4">
@@ -30,7 +33,11 @@ export function SidebarNav() {
           <div className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground [&_svg]:size-5 [&_svg]:shrink-0">
             <CircleUserRoundIcon aria-hidden="true" />
           </div>
-          <div className="min-w-0 flex-1 truncate text-sm font-medium">开发中</div>
+          <NavLink
+            to={user ? "/settings" : accountHref("login")}
+            className="min-w-0 flex-1 truncate text-sm font-medium hover:underline"
+            title={user?.email}
+          >{user?.name ?? "登录 / 注册"}</NavLink>
           <NavLink
             to="/settings"
             prefetch="intent"

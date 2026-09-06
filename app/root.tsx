@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import {
+  data,
   isRouteErrorResponse,
   Links,
   Meta,
@@ -19,6 +20,8 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import { getAccountState } from "@/features/auth/auth.server";
+import { cloudflareContext } from "@/lib/cloudflare-context";
 import "./app.css";
 import "streamdown/styles.css";
 import {
@@ -31,6 +34,20 @@ import { cn } from "./lib/utils";
 
 const useIsomorphicLayoutEffect =
   typeof document === "undefined" ? useEffect : useLayoutEffect;
+
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const { env, ctx } = context.get(cloudflareContext);
+  const headers = new Headers();
+  const account = await getAccountState(request, env, ctx, headers);
+  return data({ account }, { headers });
+}
+
+export const headers: Route.HeadersFunction = ({ loaderHeaders }) => {
+  const headers = new Headers(loaderHeaders);
+  headers.set("Cache-Control", "private, no-store");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  return headers;
+};
 
 const LazySidebarNav = lazy(() =>
   import("./components/sidebar-nav").then(({ SidebarNav }) => ({

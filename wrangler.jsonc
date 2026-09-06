@@ -7,8 +7,19 @@
 	"name": "oracle-studio",
 	"compatibility_date": "2026-08-14",
 	"main": "./workers/app.ts",
+	"d1_databases": [
+		{
+			"binding": "AUTH_DB",
+			"database_name": "oracle-studio-auth",
+			"migrations_dir": "migrations"
+		}
+	],
 	"secrets": {
 		"required": [
+			"BETTER_AUTH_SECRET",
+			"BETTER_AUTH_URL",
+			"RESEND_API_KEY",
+			"AUTH_EMAIL_FROM",
 			"liuyao_LLM_MODEL",
 			"liuyao_LLM_BASE",
 			"liuyao_LLM_KEY",
