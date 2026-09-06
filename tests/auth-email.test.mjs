@@ -23,10 +23,8 @@ test("Resend receives authenticated requests with Chinese text and HTML for each
   });
 
   for (const [type, purpose] of [
-    ["sign-in", "登录云占"],
     ["email-verification", "验证邮箱"],
     ["forget-password", "重置密码"],
-    ["change-email", "更换邮箱"],
   ]) {
     await sendAuthEmail(env, { ...message, type });
     const { request, body } = requests.at(-1);
@@ -48,7 +46,7 @@ test("Resend receives authenticated requests with Chinese text and HTML for each
     assert.ok(body.html.includes("5 分钟"));
     assert.ok(!JSON.stringify(body).includes(env.RESEND_API_KEY));
   }
-  assert.equal(requests.length, 4);
+  assert.equal(requests.length, 2);
 });
 
 test("Resend redirects, authentication, quota, and service errors fail without exposing response details", async (t) => {

@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { authClient } from "@/features/auth/auth-client";
 import {
   accountHref,
@@ -34,16 +33,14 @@ import {
   type AccountMode,
 } from "@/features/auth/shared";
 import { useAccount } from "@/features/auth/use-account";
+import { cn } from "@/lib/utils";
 
 const copy = {
-  login: { title: "欢迎回到云占", description: "使用邮箱登录你的账户。" },
-  register: {
-    title: "创建账户",
-    description: "填写邮箱与密码，验证邮箱后即可使用。",
-  },
+  login: { title: "登陆帐户" },
+  register: { title: "创建账户" },
   "verify-email": {
     title: "验证邮箱",
-    description: "输入邮件中的 6 位验证码，完成邮箱验证。",
+    description: "输入邮件中的 6 位验证码，完成账户注册。",
   },
   "forgot-password": {
     title: "找回密码",
@@ -64,6 +61,7 @@ export function AuthForm({
   redirectTo: string;
   verificationSent: boolean;
 }) {
+  const isAccountEntry = mode === "login" || mode === "register";
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const { available } = useAccount();
@@ -72,7 +70,6 @@ export function AuthForm({
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [otp, setOtp] = useState("");
-  const [method, setMethod] = useState("password");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(
     verificationSent ? "验证码已发送，请检查收件箱或垃圾邮件。" : "",
@@ -126,6 +123,7 @@ export function AuthForm({
   }
 
   async function sendCode() {
+    if (mode !== "verify-email" && mode !== "forgot-password") return;
     if (remaining > 0 || !emailInput.current?.reportValidity()) return;
     await run(async () => {
       const result =
@@ -135,7 +133,7 @@ export function AuthForm({
             })
           : await authClient.emailOtp.sendVerificationOtp({
               email: normalizedEmail,
-              type: mode === "verify-email" ? "email-verification" : "sign-in",
+              type: "email-verification",
             });
       if (succeeded(result)) {
         setOtp("");
@@ -198,13 +196,6 @@ export function AuthForm({
             state: { passwordReset: true },
           });
         }
-      } else if (method === "otp") {
-        if (
-          succeeded(
-            await authClient.signIn.emailOtp({ email: normalizedEmail, otp }),
-          )
-        )
-          finishSignIn();
       } else {
         const result = await authClient.signIn.email({
           email: normalizedEmail,
@@ -212,9 +203,7 @@ export function AuthForm({
         });
         if (result.error?.code === "EMAIL_NOT_VERIFIED") {
           setPassword("");
-          await navigate(href("verify-email"), {
-            state: { verificationSent: true },
-          });
+          await navigate(href("verify-email"));
         } else if (succeeded(result)) {
           finishSignIn();
         }
@@ -333,14 +322,18 @@ export function AuthForm({
           返回设置
         </Button>
         <Card>
-          <CardHeader>
-            <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
-              <MailIcon className="size-5" aria-hidden="true" />
-            </div>
+          <CardHeader className={cn(isAccountEntry && "text-center")}>
+            {!isAccountEntry ? (
+              <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <MailIcon className="size-5" aria-hidden="true" />
+              </div>
+            ) : null}
             <CardTitle>
               <h1>{copy[mode].title}</h1>
             </CardTitle>
-            <CardDescription>{copy[mode].description}</CardDescription>
+            {!isAccountEntry ? (
+              <CardDescription>{copy[mode].description}</CardDescription>
+            ) : null}
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
             {!available ? (
@@ -391,56 +384,22 @@ export function AuthForm({
                     />
                   </Field>
                   {mode === "login" ? (
-                    <Tabs
-                      value={method}
-                      onValueChange={(value) => {
-                        setMethod(String(value));
-                        setPassword("");
-                        setOtp("");
-                        setError("");
-                        setNotice("");
-                      }}
-                    >
-                      <TabsList className="mb-4 w-full" aria-label="登录方式">
-                        <TabsTrigger value="password" disabled={pending}>
-                          密码登录
-                        </TabsTrigger>
-                        <TabsTrigger value="otp" disabled={pending}>
-                          验证码登录
-                        </TabsTrigger>
-                      </TabsList>
-                      <TabsContent value="password">
-                        <FieldGroup>
-                          {passwordField(false)}
-                          {submitButton("登录")}
-                          <Button
-                            variant="link"
-                            nativeButton={false}
-                            render={<Link to={href("forgot-password")} />}
-                          >
-                            忘记密码？
-                          </Button>
-                        </FieldGroup>
-                      </TabsContent>
-                      <TabsContent value="otp">
-                        <FieldGroup>
-                          {codeField}
-                          {submitButton("验证并登录")}
-                        </FieldGroup>
-                      </TabsContent>
-                    </Tabs>
+                    <>
+                      {passwordField(false)}
+                      {submitButton("登录")}
+                    </>
                   ) : null}
                   {mode === "register" ? (
                     <>
                       {passwordField(true)}
                       {confirmationField}
-                      {submitButton("注册并验证邮箱")}
+                      {submitButton("注册")}
                     </>
                   ) : null}
                   {mode === "verify-email" ? (
                     <>
                       {codeField}
-                      {submitButton("验证并登录")}
+                      {submitButton("完成注册")}
                     </>
                   ) : null}
                   {mode === "forgot-password" ? (
@@ -455,16 +414,34 @@ export function AuthForm({
               </fieldset>
             </form>
           </CardContent>
-          <CardFooter className="justify-center">
-            <Button
-              variant="link"
-              nativeButton={false}
-              render={
-                <Link to={href(mode === "login" ? "register" : "login")} />
-              }
-            >
-              {mode === "login" ? "还没有账户？创建账户" : "已有账户？返回登录"}
-            </Button>
+          <CardFooter className="justify-between gap-2">
+            {mode === "login" ? (
+              <>
+                <Button
+                  variant="link"
+                  nativeButton={false}
+                  render={<Link to={href("forgot-password")} />}
+                >
+                  忘记密码？
+                </Button>
+                <Button
+                  variant="link"
+                  nativeButton={false}
+                  render={<Link to={href("register")} />}
+                >
+                  还没有账户？创建账户
+                </Button>
+              </>
+            ) : (
+              <Button
+                className="mx-auto"
+                variant="link"
+                nativeButton={false}
+                render={<Link to={href("login")} />}
+              >
+                已有账户？返回登录
+              </Button>
+            )}
           </CardFooter>
         </Card>
       </div>

@@ -98,7 +98,14 @@ async function request(
   );
   while (background.length) await Promise.all(background.splice(0));
   const text = await response.text();
-  return { response, data: text ? JSON.parse(text) : null };
+  return {
+    response,
+    data: text
+      ? response.headers.get("content-type")?.includes("application/json")
+        ? JSON.parse(text)
+        : text
+      : null,
+  };
 }
 
 function latestCode() {
@@ -164,6 +171,7 @@ test("registration requires verification, hashes credentials, and issues a secur
   const rejected = await request("/sign-in/email", { email, password });
   assert.equal(rejected.response.status, 403);
   assert.equal(rejected.data.code, "EMAIL_NOT_VERIFIED");
+  assert.equal(messages.length, 1, "password login must not send a code");
   const otp = latestCode();
   const verified = await request("/email-otp/verify-email", { email, otp });
   assert.equal(verified.response.status, 200);
@@ -182,6 +190,7 @@ test("registration requires verification, hashes credentials, and issues a secur
 
   const login = await request("/sign-in/email", { email, password });
   assert.equal(login.response.status, 200);
+  assert.equal(messages.length, 1, "password login must not send a code");
   const loginCookie = cookieFrom(login.response);
   assert.equal(
     (await request("/sign-out", {}, { cookie: loginCookie })).response.status,
@@ -193,21 +202,84 @@ test("registration requires verification, hashes credentials, and issues a secur
   );
 });
 
-test("OTP login works for registered accounts and consumes the code atomically", async () => {
+test("OTP login is disabled even for previously issued codes and never sends login mail", async () => {
   await verifiedAccount();
+  for (const address of [email, "unknown@example.com"]) {
+    const sent = await request("/email-otp/send-verification-otp", {
+      email: address,
+      type: "sign-in",
+    });
+    assert.equal(sent.response.status, 400);
+    assert.equal(sent.data.code, "OTP_TYPE_NOT_ALLOWED");
+  }
+  assert.equal(messages.length, 1);
   assert.equal(
-    (
-      await request("/email-otp/send-verification-otp", {
-        email,
-        type: "sign-in",
-      })
-    ).response.status,
-    200,
+    (await env.AUTH_DB.prepare('SELECT COUNT(*) AS count FROM "verification"').first())
+      .count,
+    0,
   );
+
+  // Simulate an unexpired code issued before passwordless login was removed.
+  const otp = await createAuth(env).api.createVerificationOTP({
+    body: { email, type: "sign-in" },
+  });
+  for (const path of ["/sign-in/email-otp", "/sign-in/email-otp/"]) {
+    const result = await request(path, { email, otp });
+    assert.equal(result.response.status, 404);
+    assert.equal(cookieFrom(result.response), "");
+  }
+  assert.equal(
+    (await env.AUTH_DB.prepare('SELECT COUNT(*) AS count FROM "session"').first())
+      .count,
+    1,
+  );
+  assert.equal(
+    (await env.AUTH_DB.prepare('SELECT COUNT(*) AS count FROM "user"').first())
+      .count,
+    1,
+  );
+});
+
+test("verified accounts cannot request registration mail or use verification as passwordless login", async () => {
+  await verifiedAccount();
+  const sent = await request("/email-otp/send-verification-otp", {
+    email: email.toUpperCase(),
+    type: "email-verification",
+  });
+  const unknown = await request("/email-otp/send-verification-otp", {
+    email: "unknown@example.com",
+    type: "email-verification",
+  });
+  assert.equal(sent.response.status, 200);
+  assert.deepEqual(sent.data, unknown.data);
+  assert.equal(messages.length, 1);
+  assert.equal(
+    (await env.AUTH_DB.prepare('SELECT COUNT(*) AS count FROM "verification"').first())
+      .count,
+    0,
+  );
+
+  // Previously issued registration codes must not create sessions for verified users.
+  const otp = await createAuth(env).api.createVerificationOTP({
+    body: { email, type: "email-verification" },
+  });
+  const result = await request("/email-otp/verify-email", { email, otp });
+  assert.equal(result.response.status, 400);
+  assert.equal(result.data.code, "EMAIL_ALREADY_VERIFIED");
+  assert.equal(cookieFrom(result.response), "");
+  assert.equal(
+    (await env.AUTH_DB.prepare('SELECT COUNT(*) AS count FROM "session"').first())
+      .count,
+    1,
+  );
+});
+
+test("registration verification consumes the code atomically", async () => {
+  await register();
   const otp = latestCode();
   const results = await Promise.all([
-    request("/sign-in/email-otp", { email, otp }),
-    request("/sign-in/email-otp", { email, otp }),
+    request("/email-otp/verify-email", { email, otp }),
+    request("/email-otp/verify-email", { email, otp }),
   ]);
   assert.deepEqual(
     results.map((result) => result.response.status).sort(),
@@ -279,7 +351,7 @@ test("unknown email requests use generic responses, do not send mail or auto-reg
   const unknown = "unknown@example.com";
   const sent = await request("/email-otp/send-verification-otp", {
     email: unknown,
-    type: "sign-in",
+    type: "email-verification",
   });
   assert.equal(sent.response.status, 200);
   const reset = await request("/email-otp/request-password-reset", {
@@ -297,50 +369,54 @@ test("unknown email requests use generic responses, do not send mail or auto-reg
   assert.deepEqual(reset.data, known.data);
 });
 
-test("expired codes and codes that exceed the attempt limit cannot log in", async () => {
-  await verifiedAccount();
-  await request("/email-otp/send-verification-otp", { email, type: "sign-in" });
+test("expired codes and codes that exceed the attempt limit cannot complete registration", async () => {
+  await register();
   const expiredCode = latestCode();
   await env.AUTH_DB.prepare('UPDATE "verification" SET "expiresAt" = ?')
     .bind(new Date(Date.now() - 60_000).toISOString())
     .run();
   assert.equal(
-    (await request("/sign-in/email-otp", { email, otp: expiredCode })).response
+    (await request("/email-otp/verify-email", { email, otp: expiredCode })).response
       .status,
     400,
   );
 
-  await request("/email-otp/send-verification-otp", { email, type: "sign-in" });
+  await request("/email-otp/send-verification-otp", {
+    email,
+    type: "email-verification",
+  });
   const otp = latestCode();
   const wrong = otp === "000000" ? "111111" : "000000";
   for (let attempt = 0; attempt < 3; attempt++) {
     assert.equal(
-      (await request("/sign-in/email-otp", { email, otp: wrong })).response
+      (await request("/email-otp/verify-email", { email, otp: wrong })).response
         .status,
       400,
     );
   }
   assert.equal(
-    (await request("/sign-in/email-otp", { email, otp })).response.status,
+    (await request("/email-otp/verify-email", { email, otp })).response.status,
     403,
   );
 });
 
-test("resending replaces the previous code", async () => {
-  await verifiedAccount();
-  await request("/email-otp/send-verification-otp", { email, type: "sign-in" });
+test("resending registration mail replaces the previous code", async () => {
+  await register();
   const previous = latestCode();
-  await request("/email-otp/send-verification-otp", { email, type: "sign-in" });
+  await request("/email-otp/send-verification-otp", {
+    email,
+    type: "email-verification",
+  });
   const current = latestCode();
   // A fresh random code can coincidentally match; do not make the test probabilistic.
   if (previous !== current)
     assert.equal(
-      (await request("/sign-in/email-otp", { email, otp: previous })).response
+      (await request("/email-otp/verify-email", { email, otp: previous })).response
         .status,
       400,
     );
   assert.equal(
-    (await request("/sign-in/email-otp", { email, otp: current })).response
+    (await request("/email-otp/verify-email", { email, otp: current })).response
       .status,
     200,
   );

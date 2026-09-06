@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -40,82 +41,14 @@ export function AccountSettings() {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="items-center">
         <CardTitle>
           <h2>账户</h2>
         </CardTitle>
-        <CardDescription>
-          {user ? "管理你的登录与账户安全。" : "通过邮箱注册或登录云占。"}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {error ? <AuthNotice error>{error}</AuthNotice> : null}
-        {!available ? (
-          <AuthNotice>账户服务暂时不可用，请稍后重试。</AuthNotice>
-        ) : null}
         {user ? (
-          <div className="flex items-center gap-3">
-            <CircleUserRoundIcon
-              className="size-10 shrink-0 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <p className="truncate font-medium">{user.name}</p>
-              <p className="break-all text-sm text-muted-foreground">
-                {user.email}
-              </p>
-            </div>
-            <Badge variant={user.emailVerified ? "secondary" : "outline"}>
-              {user.emailVerified ? "邮箱已验证" : "待验证"}
-            </Badge>
-          </div>
+          <CardDescription>管理你的登录与账户安全。</CardDescription>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            支持密码登录，也可以使用邮箱验证码登录。
-          </p>
-        )}
-      </CardContent>
-      <CardFooter className="flex-wrap gap-2">
-        {user ? (
-          <>
-            <Button
-              variant="outline"
-              nativeButton={false}
-              render={
-                <Link
-                  to={accountHref("forgot-password", { email: user.email })}
-                />
-              }
-            >
-              重置密码
-            </Button>
-            {!user.emailVerified ? (
-              <Button
-                nativeButton={false}
-                render={
-                  <Link
-                    to={accountHref("verify-email", { email: user.email })}
-                  />
-                }
-              >
-                验证邮箱
-              </Button>
-            ) : null}
-            <Button
-              variant="ghost"
-              disabled={pending}
-              onClick={() => void signOut()}
-            >
-              {pending ? (
-                <Spinner data-icon="inline-start" aria-label="正在退出" />
-              ) : (
-                <LogOutIcon data-icon="inline-start" />
-              )}
-              退出登录
-            </Button>
-          </>
-        ) : (
-          <>
+          <CardAction className="row-span-1 flex items-center gap-2 self-center">
             <Button
               nativeButton={false}
               render={<Link to={accountHref("login")} />}
@@ -129,9 +62,73 @@ export function AccountSettings() {
             >
               创建账户
             </Button>
-          </>
+          </CardAction>
         )}
-      </CardFooter>
+      </CardHeader>
+      {user || error || !available ? (
+        <CardContent className="flex flex-col gap-4">
+          {error ? <AuthNotice error>{error}</AuthNotice> : null}
+          {!available ? (
+            <AuthNotice>账户服务暂时不可用，请稍后重试。</AuthNotice>
+          ) : null}
+          {user ? (
+            <div className="flex items-center gap-3">
+              <CircleUserRoundIcon
+                className="size-10 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <p className="truncate font-medium">{user.name}</p>
+                <p className="break-all text-sm text-muted-foreground">
+                  {user.email}
+                </p>
+              </div>
+              <Badge variant={user.emailVerified ? "secondary" : "outline"}>
+                {user.emailVerified ? "邮箱已验证" : "待验证"}
+              </Badge>
+            </div>
+          ) : null}
+        </CardContent>
+      ) : null}
+      {user ? (
+        <CardFooter className="flex-wrap gap-2">
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={
+              <Link
+                to={accountHref("forgot-password", { email: user.email })}
+              />
+            }
+          >
+            重置密码
+          </Button>
+          {!user.emailVerified ? (
+            <Button
+              nativeButton={false}
+              render={
+                <Link
+                  to={accountHref("verify-email", { email: user.email })}
+                />
+              }
+            >
+              验证邮箱
+            </Button>
+          ) : null}
+          <Button
+            variant="ghost"
+            disabled={pending}
+            onClick={() => void signOut()}
+          >
+            {pending ? (
+              <Spinner data-icon="inline-start" aria-label="正在退出" />
+            ) : (
+              <LogOutIcon data-icon="inline-start" />
+            )}
+            退出登录
+          </Button>
+        </CardFooter>
+      ) : null}
     </Card>
   );
 }

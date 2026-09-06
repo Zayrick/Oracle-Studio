@@ -1,4 +1,5 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins/email-otp";
 
 import { sendAuthEmail } from "./email.server";
@@ -61,6 +62,7 @@ export function createAuth(
     secret: env.BETTER_AUTH_SECRET,
     database: env.AUTH_DB,
     trustedOrigins: [new URL(env.BETTER_AUTH_URL).origin],
+    disabledPaths: ["/sign-in/email-otp"],
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: true,
@@ -71,8 +73,41 @@ export function createAuth(
     },
     emailVerification: {
       sendOnSignUp: true,
-      sendOnSignIn: true,
+      sendOnSignIn: false,
       autoSignInAfterVerification: true,
+      beforeEmailVerification: async (user) => {
+        // Registration verification must not become a passwordless login for existing users.
+        if (user.emailVerified) {
+          throw new APIError("BAD_REQUEST", {
+            code: "EMAIL_ALREADY_VERIFIED",
+            message: "邮箱已验证，请使用邮箱和密码登录。",
+          });
+        }
+      },
+    },
+    hooks: {
+      before: createAuthMiddleware(async (context) => {
+        if (context.path !== "/email-otp/send-verification-otp") return;
+        if (
+          context.body?.type !== "email-verification" &&
+          context.body?.type !== "forget-password"
+        ) {
+          throw new APIError("BAD_REQUEST", {
+            code: "OTP_TYPE_NOT_ALLOWED",
+            message: "邮箱验证码仅用于注册验证和找回密码。",
+          });
+        }
+        if (
+          context.body.type === "email-verification" &&
+          typeof context.body.email === "string"
+        ) {
+          const account = await context.context.internalAdapter.findUserByEmail(
+            context.body.email.toLowerCase(),
+          );
+          // Match the generic response for unknown addresses without sending another registration code.
+          if (account?.user.emailVerified) return context.json({ success: true });
+        }
+      }),
     },
     session: {
       expiresIn: 60 * 60 * 24 * 7,
@@ -116,7 +151,12 @@ export function createAuth(
         storeOTP: "hashed",
         disableSignUp: true,
         overrideDefaultEmailVerification: true,
-        sendVerificationOTP: (message) => sendAuthEmail(env, message),
+        sendVerificationOTP: async ({ type, ...message }) => {
+          if (type !== "email-verification" && type !== "forget-password") {
+            throw new Error("Unsupported authentication email purpose");
+          }
+          await sendAuthEmail(env, { ...message, type });
+        },
       }),
     ],
   });

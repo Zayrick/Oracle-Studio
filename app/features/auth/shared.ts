@@ -49,6 +49,7 @@ const errorMessages: Record<string, string> = {
   INVALID_EMAIL: "请输入有效的邮箱地址。",
   INVALID_EMAIL_OR_PASSWORD: "邮箱或密码不正确，请重新输入。",
   EMAIL_NOT_VERIFIED: "请先验证邮箱，再使用密码登录。",
+  EMAIL_ALREADY_VERIFIED: "邮箱已验证，请使用邮箱和密码登录。",
   USER_ALREADY_EXISTS: "此邮箱已注册，请直接登录或找回密码。",
   USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: "此邮箱已注册，请直接登录或找回密码。",
   USER_NOT_FOUND: "无法完成验证，请检查邮箱和验证码。",

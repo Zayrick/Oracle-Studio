@@ -57,7 +57,7 @@ test("production Worker renders account pages and persists a real login session"
     await db.batch(statements.map((statement) => db.prepare(statement)));
 
     for (const [path, title] of [
-      ["/account/login", "欢迎回到云占"],
+      ["/account/login", "登陆帐户"],
       ["/account/register", "创建账户"],
       ["/account/verify-email", "验证邮箱"],
       ["/account/forgot-password", "找回密码"],
@@ -71,6 +71,16 @@ test("production Worker renders account pages and persists a real login session"
       const html = await response.text();
       assert.ok(html.includes(title), path);
       assert.ok(!html.includes("账户服务暂时不可用"), path);
+      assert.ok(!html.includes("验证码登录"), path);
+      if (path === "/account/login") {
+        assert.ok(html.includes('name="password"'));
+        assert.ok(html.includes("忘记密码？"));
+        assert.ok(!html.includes('name="otp"'));
+        assert.ok(!html.includes('role="tablist"'));
+      }
+      if (["/account/verify-email", "/account/forgot-password"].includes(path)) {
+        assert.ok(html.includes('name="otp"'), path);
+      }
     }
 
     const email = "worker-test@example.com";
@@ -104,8 +114,17 @@ test("production Worker renders account pages and persists a real login session"
     assert.equal(delivery.authorization, "Bearer re_worker_test_placeholder");
     assert.equal(delivery.body.from, "云占 <noreply@example.com>");
     assert.deepEqual(delivery.body.to, [email]);
+    const blockedSend = await post("/email-otp/send-verification-otp", {
+      email,
+      type: "sign-in",
+    });
+    assert.equal(blockedSend.status, 400);
+    assert.equal((await blockedSend.json()).code, "OTP_TYPE_NOT_ALLOWED");
     const otp = delivery.body.text.match(/验证码：(\d{6})/u)?.[1];
     assert.ok(otp, "verification email must contain a usable code");
+    const blockedLogin = await post("/sign-in/email-otp", { email, otp });
+    assert.equal(blockedLogin.status, 404);
+    assert.equal(blockedLogin.headers.getSetCookie().length, 0);
     const verification = await post("/email-otp/verify-email", { email, otp });
     assert.equal(verification.status, 200, await verification.text());
     const login = await post("/sign-in/email", { email, password });
