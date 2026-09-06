@@ -3,7 +3,6 @@ import { Link } from "react-router";
 import { LogOutIcon, CircleUserRoundIcon } from "lucide-react";
 
 import { AuthNotice } from "@/components/account/auth-notice";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -83,7 +82,18 @@ export function AccountSettings() {
                   {user.email}
                 </p>
               </div>
-              <Badge variant="secondary">邮箱已验证</Badge>
+              <Button
+                variant="ghost"
+                disabled={pending}
+                onClick={() => void signOut()}
+              >
+                {pending ? (
+                  <Spinner data-icon="inline-start" aria-label="正在退出" />
+                ) : (
+                  <LogOutIcon data-icon="inline-start" />
+                )}
+                退出登录
+              </Button>
             </div>
           ) : null}
         </CardContent>
@@ -100,18 +110,6 @@ export function AccountSettings() {
             }
           >
             重置密码
-          </Button>
-          <Button
-            variant="ghost"
-            disabled={pending}
-            onClick={() => void signOut()}
-          >
-            {pending ? (
-              <Spinner data-icon="inline-start" aria-label="正在退出" />
-            ) : (
-              <LogOutIcon data-icon="inline-start" />
-            )}
-            退出登录
           </Button>
         </CardFooter>
       ) : null}
