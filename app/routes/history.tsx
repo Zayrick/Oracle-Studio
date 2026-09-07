@@ -1,5 +1,6 @@
 import { HistoryRecordList } from "@/components/history-record-list";
 import { PageShell } from "@/components/page-shell";
+import { HistorySyncNotice } from "@/components/history-sync-notice";
 import type { Route } from "./+types/history";
 
 export function meta({}: Route.MetaArgs) {
@@ -18,6 +19,7 @@ export default function History() {
           <p className="text-sm text-muted-foreground">查看和管理过往占卜记录</p>
         </header>
 
+        <HistorySyncNotice showStatus />
         <HistoryRecordList variant="page" />
       </div>
     </PageShell>

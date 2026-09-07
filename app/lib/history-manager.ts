@@ -1,242 +1,233 @@
+import {
+  historyRecordSchema,
+  MAX_RECORD_BYTES,
+  type StoredUserRecord,
+} from "@/features/history/schema";
+import {
+  createPendingEntry,
+  DATA_STORAGE_PREFIX,
+  HISTORY_CHANGE_EVENT,
+  importLegacyHistory,
+  notifyHistoryChange,
+  readLocalEntries,
+  readLocalEntry,
+  writeLocalEntry,
+} from "@/features/history/storage";
+import { unixNow } from "@/lib/unix-time";
+
 export interface HistoryRecord<TContent = unknown> {
   id: string;
   source: string;
   title: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
   content: TContent;
 }
-
 export interface CreateHistoryRecordInput<TContent> {
   source: string;
   title: string;
   content: TContent;
 }
-
 export interface UpdateHistoryRecordInput<TContent> {
   title?: string;
   content?: TContent;
 }
-
 export interface UpdateHistoryRecordOptions {
   touch?: boolean;
 }
 
-const HISTORY_STORAGE_KEY = "oracle-studio.history.v2";
-const HISTORY_STORAGE_EVENT = "oracle-studio:history-change";
-const HISTORY_STORAGE_VERSION = 2;
-
-interface StoredHistoryState {
-  version: number;
-  records: Array<HistoryRecord<unknown>>;
+// Client-only scope; SSR neither reads nor mutates these variables.
+let activeAccount: string | null | undefined;
+let storageError = "";
+export function getHistoryAccount() {
+  return typeof window === "undefined" ? undefined : activeAccount;
 }
-
-export function listHistoryRecords<TContent = unknown>(source?: string) {
-  const records = readHistoryState().records;
-  const filtered = source
-    ? records.filter((record) => record.source === source)
-    : records;
-
-  return [...filtered].sort((left, right) =>
-    right.updatedAt.localeCompare(left.updatedAt)
-  ) as Array<HistoryRecord<TContent>>;
+export function getHistoryStorageError() {
+  return storageError;
 }
-
+export function setHistoryAccount(userId: string | null) {
+  if (typeof window === "undefined") return;
+  activeAccount = userId;
+  storageError = "";
+  try {
+    const invalid = importLegacyHistory();
+    if (invalid) storageError = `${invalid} 条旧记录无法转换，已保留原始数据。`;
+  } catch {
+    storageError = "无法读取本机记录，原始数据已保留。请检查浏览器存储权限。";
+  }
+  notifyHistoryChange();
+}
+export function reportHistoryStorageError(
+  message = "本机存储失败，修改尚未保存。请释放浏览器空间后重试。",
+) {
+  storageError = message;
+  if (typeof window !== "undefined") notifyHistoryChange();
+}
+export function listHistoryRecords<TContent = unknown>(
+  source?: string,
+): HistoryRecord<TContent>[] {
+  if (typeof window === "undefined" || activeAccount === undefined) return [];
+  try {
+    return readLocalEntries(activeAccount)
+      .flatMap(({ record, migrationOwner }) =>
+        record &&
+        "source" in record &&
+        !(activeAccount === null && migrationOwner) &&
+        (!source || record.source === source)
+          ? [record as HistoryRecord<TContent>]
+          : [],
+      )
+      .sort(
+        (left, right) =>
+          right.updatedAt - left.updatedAt || right.id.localeCompare(left.id),
+      );
+  } catch {
+    return [];
+  }
+}
 export function getHistoryRecord<TContent = unknown>(id: string) {
-  return readHistoryState().records.find((record) => record.id === id) as
-    | HistoryRecord<TContent>
-    | undefined;
+  if (typeof window === "undefined" || activeAccount === undefined)
+    return undefined;
+  try {
+    const entry = readLocalEntry(activeAccount, id);
+    return entry?.record &&
+      "source" in entry.record &&
+      !(activeAccount === null && entry.migrationOwner)
+      ? (entry.record as HistoryRecord<TContent>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
-
+function persistRecord(record: StoredUserRecord) {
+  if (activeAccount === undefined) return false;
+  try {
+    if (
+      new TextEncoder().encode(JSON.stringify(record)).byteLength >
+      MAX_RECORD_BYTES
+    ) {
+      reportHistoryStorageError(
+        "这条记录内容过大，最新修改尚未保存。请减少会话内容后重试。",
+      );
+      return false;
+    }
+    const previous = readLocalEntry(activeAccount, record.id);
+    if (previous?.deletedAt !== undefined && previous.deletedAt !== null)
+      return false;
+    writeLocalEntry(activeAccount, createPendingEntry(record, previous));
+    notifyHistoryChange(true);
+    return true;
+  } catch {
+    reportHistoryStorageError();
+    return false;
+  }
+}
 export function createHistoryRecord<TContent>({
   source,
   title,
   content,
 }: CreateHistoryRecordInput<TContent>) {
-  const state = readHistoryState();
-  const now = new Date().toISOString();
-  const record: HistoryRecord<TContent> = {
-    id: createHistoryRecordId(),
-    source: normalizeHistorySource(source),
-    title: normalizeHistoryTitle(title),
-    createdAt: now,
-    updatedAt: now,
+  const record = historyRecordSchema.parse({
+    id: `history-${crypto.randomUUID()}`,
+    source,
+    title: title.trim() || "未命名记录",
+    createdAt: unixNow(),
+    updatedAt: unixNow(),
     content,
-  };
-
-  const stored = writeHistoryState({
-    ...state,
-    records: [record as HistoryRecord<unknown>, ...state.records],
   });
-
-  return stored ? record : undefined;
+  return persistRecord(record)
+    ? (record as HistoryRecord<TContent>)
+    : undefined;
 }
-
 export function updateHistoryRecord<TContent>(
   id: string,
   updates: UpdateHistoryRecordInput<TContent>,
-  options: UpdateHistoryRecordOptions = {}
+  options: UpdateHistoryRecordOptions = {},
 ) {
-  const state = readHistoryState();
-  const touch = options.touch ?? true;
-  let nextRecord: HistoryRecord<unknown> | undefined;
-
-  const records = state.records.map((record) => {
-    if (record.id !== id) {
-      return record;
-    }
-
-    const updatedRecord: HistoryRecord<unknown> = {
-      ...record,
-      title:
-        updates.title === undefined
-          ? record.title
-          : normalizeHistoryTitle(updates.title),
-      content:
-        updates.content === undefined
-          ? record.content
-          : updates.content,
-      updatedAt: touch ? new Date().toISOString() : record.updatedAt,
-    };
-
-    nextRecord = updatedRecord;
-    return updatedRecord;
+  const current = getHistoryRecord<TContent>(id);
+  if (!current) return undefined;
+  const record = historyRecordSchema.parse({
+    ...current,
+    ...updates,
+    title:
+      updates.title === undefined
+        ? current.title
+        : updates.title.trim() || "未命名记录",
+    updatedAt: options.touch === false ? current.updatedAt : unixNow(),
   });
-
-  if (!nextRecord) {
-    return undefined;
-  }
-
-  return writeHistoryState({ ...state, records })
-    ? (nextRecord as HistoryRecord<TContent>)
+  return persistRecord(record)
+    ? (record as HistoryRecord<TContent>)
     : undefined;
 }
-
 export function deleteHistoryRecord(id: string) {
-  const state = readHistoryState();
-  const records = state.records.filter((record) => record.id !== id);
-
-  if (records.length === state.records.length) {
-    return false;
-  }
-
-  return writeHistoryState({ ...state, records });
-}
-
-export function subscribeHistoryRecords(listener: () => void) {
-  if (typeof window === "undefined") {
-    return () => undefined;
-  }
-
-  const handleStorage = (event: StorageEvent) => {
-    if (event.key === HISTORY_STORAGE_KEY) {
-      listener();
-    }
-  };
-
-  window.addEventListener("storage", handleStorage);
-  window.addEventListener(HISTORY_STORAGE_EVENT, listener);
-
-  return () => {
-    window.removeEventListener("storage", handleStorage);
-    window.removeEventListener(HISTORY_STORAGE_EVENT, listener);
-  };
-}
-
-function readHistoryState(): StoredHistoryState {
-  if (typeof window === "undefined") {
-    return createEmptyHistoryState();
-  }
-
+  if (activeAccount === undefined || !getHistoryRecord(id)) return false;
   try {
-    const rawValue = window.localStorage.getItem(HISTORY_STORAGE_KEY);
-
-    if (!rawValue) {
-      return createEmptyHistoryState();
+    const previous = readLocalEntry(activeAccount, id);
+    if (activeAccount === null) {
+      // A guest tombstone prevents repeated legacy conversion from resurrecting deletions.
+      writeLocalEntry(null, {
+        id,
+        revision: null,
+        deletedAt: unixNow(),
+        record: null,
+      });
+    } else {
+      writeLocalEntry(activeAccount, {
+        id,
+        revision: previous?.revision ?? null,
+        deletedAt: unixNow(),
+        record: null,
+        pending: {
+          id,
+          mutationId: crypto.randomUUID(),
+          baseRevision: previous?.revision ?? null,
+          kind: "delete",
+          record: null,
+        },
+      });
     }
-
-    const parsed = JSON.parse(rawValue);
-
-    if (!isStoredHistoryState(parsed)) {
-      return createEmptyHistoryState();
-    }
-
-    return {
-      version: HISTORY_STORAGE_VERSION,
-      records: parsed.records,
-    };
-  } catch {
-    return createEmptyHistoryState();
-  }
-}
-
-function writeHistoryState(state: StoredHistoryState) {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  try {
-    window.localStorage.setItem(
-      HISTORY_STORAGE_KEY,
-      JSON.stringify({
-        version: HISTORY_STORAGE_VERSION,
-        records: state.records,
-      } satisfies StoredHistoryState)
-    );
-    window.dispatchEvent(new Event(HISTORY_STORAGE_EVENT));
+    notifyHistoryChange(true);
     return true;
   } catch {
+    reportHistoryStorageError();
     return false;
   }
 }
-
-function createEmptyHistoryState(): StoredHistoryState {
-  return {
-    version: HISTORY_STORAGE_VERSION,
-    records: [],
+export function getAccountTheme(): "light" | "dark" | "system" | undefined {
+  if (typeof window === "undefined" || activeAccount === undefined)
+    return undefined;
+  try {
+    const record = readLocalEntry(activeAccount, "preferences")?.record;
+    return record && "theme" in record ? record.theme : undefined;
+  } catch {
+    return undefined;
+  }
+}
+export function saveAccountTheme(theme: "light" | "dark" | "system") {
+  if (activeAccount === undefined) return;
+  try {
+    const now = unixNow();
+    const previous = readLocalEntry(activeAccount, "preferences")?.record;
+    persistRecord({
+      id: "preferences",
+      theme,
+      createdAt: previous?.createdAt ?? now,
+      updatedAt: now,
+    });
+  } catch {
+    reportHistoryStorageError();
+  }
+}
+export function subscribeHistoryRecords(listener: () => void) {
+  if (typeof window === "undefined") return () => undefined;
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === null || event.key.startsWith(DATA_STORAGE_PREFIX))
+      listener();
   };
-}
-
-function isStoredHistoryState(value: unknown): value is StoredHistoryState {
-  if (
-    !isRecord(value) ||
-    value.version !== HISTORY_STORAGE_VERSION ||
-    !Array.isArray(value.records)
-  ) {
-    return false;
-  }
-
-  return value.records.every(isHistoryRecord);
-}
-
-function isHistoryRecord(value: unknown): value is HistoryRecord<unknown> {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    typeof value.source === "string" &&
-    typeof value.title === "string" &&
-    typeof value.createdAt === "string" &&
-    typeof value.updatedAt === "string" &&
-    "content" in value
-  );
-}
-
-function normalizeHistorySource(source: string) {
-  return source.trim() || "未知";
-}
-
-function normalizeHistoryTitle(title: string) {
-  return title.trim() || "未命名记录";
-}
-
-function createHistoryRecordId() {
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return `history-${globalThis.crypto.randomUUID()}`;
-  }
-
-  return `history-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener(HISTORY_CHANGE_EVENT, listener);
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener(HISTORY_CHANGE_EVENT, listener);
+  };
 }

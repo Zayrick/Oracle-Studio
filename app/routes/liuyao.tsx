@@ -55,6 +55,7 @@ import {
   type LiuyaoPaipan,
   type YaoType,
 } from "@/features/liuyao/paipan";
+import { useHistoryState } from "@/features/history/use-history";
 import { runDivinationViewTransition } from "@/lib/divination-view-transition";
 import { cn } from "@/lib/utils";
 
@@ -394,10 +395,13 @@ function getRandomInt(maxExclusive: number) {
 }
 
 export default function Liuyao() {
+  const historyState = useHistoryState();
+  const restoredRemoteVersion = useRef(-1);
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const historyId = searchParams.get("history");
+  const historyRemoteVersion = historyState.recordVersions[historyId ?? ""] ?? 0;
   const fromHistory = location.state?.returnTo === "/history";
   const [question, setQuestion] = useState("");
   const [date, setDate] = useState<Date>(() => new Date(2000, 0, 1, 12));
@@ -485,6 +489,7 @@ export default function Liuyao() {
   }, [aiHistory]);
 
   useIsomorphicLayoutEffect(() => {
+    if (!historyState.ready) return;
     if (!historyId) {
       if (activeHistoryId) {
         resetDivinationState();
@@ -492,19 +497,25 @@ export default function Liuyao() {
       return;
     }
 
-    if (historyId === activeHistoryId) {
-      return;
-    }
-
     const record = getLiuyaoHistoryRecord(historyId);
+    if (!record && historyState.loading) return;
 
     if (!record) {
-      resetDivinationState("历史记录不存在或已删除。");
+      resetDivinationState(
+        historyState.phase === "error"
+          ? "暂时无法加载云端记录，请恢复网络后重试同步。"
+          : "历史记录不存在或已删除。"
+      );
       return;
     }
 
+    if (
+      historyId === activeHistoryId &&
+      restoredRemoteVersion.current === historyRemoteVersion
+    ) return;
+    restoredRemoteVersion.current = historyRemoteVersion;
     handleRestoreHistoryRecord(record);
-  }, [historyId]);
+  }, [historyId, historyState.ready, historyState.loading, historyRemoteVersion]);
 
   const handleSetNow = () => {
     const now = new Date();
@@ -637,7 +648,6 @@ export default function Liuyao() {
           time,
           castingMethod,
           yaos: submittedYaos,
-          result: nextResult,
           ai: nextAiHistory,
         }) ?? null;
       } catch {
@@ -730,7 +740,9 @@ export default function Liuyao() {
       form={{
         title: "六爻排盘",
         description: "本卦、变卦、纳甲、六亲、六神与旬空",
-        content: (
+        content: historyId && historyState.loading && !result ? (
+          <p role="status" className="text-center text-sm text-muted-foreground">正在加载历史记录…</p>
+        ) : (
           <form
             onSubmit={handleSubmit}
             className="mobile-divination-form mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground lg:gap-6"

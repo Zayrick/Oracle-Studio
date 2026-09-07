@@ -41,6 +41,7 @@ import {
   type BaziHistoryRecord,
 } from "@/features/bazi/history";
 import type { BaziGender, BaziPaipan } from "@/features/bazi/paipan";
+import { useHistoryState } from "@/features/history/use-history";
 import { runDivinationViewTransition } from "@/lib/divination-view-transition";
 
 export function meta({}: Route.MetaArgs) {
@@ -59,10 +60,13 @@ const useIsomorphicLayoutEffect =
   typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 export default function Bazi() {
+  const historyState = useHistoryState();
+  const restoredRemoteVersion = useRef(-1);
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const historyId = searchParams.get("history");
+  const historyRemoteVersion = historyState.recordVersions[historyId ?? ""] ?? 0;
   const fromHistory = location.state?.returnTo === "/history";
   const [name, setName] = useState("");
   const [gender, setGender] = useState<BaziGender | "">("");
@@ -151,6 +155,7 @@ export default function Bazi() {
   };
 
   useIsomorphicLayoutEffect(() => {
+    if (!historyState.ready) return;
     if (!historyId) {
       if (activeHistoryId) {
         resetFormState();
@@ -162,23 +167,29 @@ export default function Bazi() {
       return;
     }
 
-    if (historyId === activeHistoryId) {
-      return;
-    }
-
     const record = getBaziHistoryRecord(historyId);
+    if (!record && historyState.loading) return;
     if (!record) {
       resetFormState();
       setPaipan(null);
       setActiveHistoryId(null);
       setAiHistory(createEmptyBaziAIHistoryState());
       setAiPanelOpen(false);
-      setCalculationError("历史记录不存在或已删除。");
+      setCalculationError(
+        historyState.phase === "error"
+          ? "暂时无法加载云端记录，请恢复网络后重试同步。"
+          : "历史记录不存在或已删除。"
+      );
       return;
     }
 
+    if (
+      historyId === activeHistoryId &&
+      restoredRemoteVersion.current === historyRemoteVersion
+    ) return;
+    restoredRemoteVersion.current = historyRemoteVersion;
     handleRestoreHistoryRecord(record);
-  }, [historyId]);
+  }, [historyId, historyState.ready, historyState.loading, historyRemoteVersion]);
 
   const handleSetNow = () => {
     const now = new Date();
@@ -225,7 +236,6 @@ export default function Bazi() {
         gender,
         date,
         time,
-        result: nextPaipan,
         ai: nextAiHistory,
       });
 
@@ -278,7 +288,9 @@ export default function Bazi() {
       form={{
         title: "八字排盘",
         description: "填写命主信息与出生时间",
-        content: (
+        content: historyId && historyState.loading && !paipan ? (
+          <p role="status" className="text-center text-sm text-muted-foreground">正在加载历史记录…</p>
+        ) : (
           <form
             onSubmit={handleSubmit}
             className="mobile-divination-form mx-auto flex w-full max-w-md flex-col gap-5 text-card-foreground lg:gap-6"

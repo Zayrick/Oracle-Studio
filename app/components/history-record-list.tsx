@@ -49,6 +49,7 @@ import {
   type HistoryRecord,
 } from "@/lib/history-manager";
 import { cn } from "@/lib/utils";
+import { useHistoryState } from "@/features/history/use-history";
 
 type HistoryRecordListVariant = "sidebar" | "page";
 const useIsomorphicLayoutEffect =
@@ -61,6 +62,7 @@ export function HistoryRecordList({
   className?: string;
   variant?: HistoryRecordListVariant;
 }) {
+  const historyState = useHistoryState();
   const [records, setRecords] = useState<Array<HistoryRecord>>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -73,9 +75,13 @@ export function HistoryRecordList({
   };
 
   useIsomorphicLayoutEffect(() => {
+    if (!historyState.ready) {
+      setRecords([]);
+      return;
+    }
     refreshRecords();
     return subscribeHistoryRecords(refreshRecords);
-  }, []);
+  }, [historyState.ready]);
 
   const startEditing = (record: HistoryRecord) => {
     setEditingId(record.id);
@@ -93,20 +99,27 @@ export function HistoryRecordList({
     const title = editingTitle.trim();
 
     if (title) {
-      updateHistoryRecord(record.id, { title });
+      if (!updateHistoryRecord(record.id, { title })) return;
     }
 
     cancelEditing();
   };
 
   const deleteRecord = (record: HistoryRecord) => {
-    deleteHistoryRecord(record.id);
+    if (!deleteHistoryRecord(record.id)) return;
 
     if (activeHistoryId === record.id) {
       navigate(getHistoryRecordBaseHref(record), { replace: true });
     }
   };
 
+  if (!historyState.ready || (historyState.loading && records.length === 0)) {
+    return (
+      <p role="status" className="p-2 text-sm text-muted-foreground">
+        正在加载历史记录…
+      </p>
+    );
+  }
   if (records.length === 0) {
     return <HistoryEmptyState className={className} variant={variant} />;
   }
@@ -349,8 +362,8 @@ function formatHistoryItemMeta(record: HistoryRecord) {
   return `${record.source} · ${formatHistoryDateTime(record.createdAt)}`;
 }
 
-function formatHistoryDateTime(value: string) {
-  const date = new Date(value);
+function formatHistoryDateTime(value: number) {
+  const date = new Date(value * 1000);
 
   if (Number.isNaN(date.getTime())) {
     return "时间未知";

@@ -22,6 +22,9 @@ import {
 import type { Route } from "./+types/root";
 import { getAccountState } from "@/features/auth/auth.server";
 import { AuthDialogProvider } from "@/components/account/auth-dialog";
+import { HistorySyncProvider } from "@/components/history-sync-provider";
+import { HistorySyncNotice } from "@/components/history-sync-notice";
+import { useAccount } from "@/features/auth/use-account";
 import { cloudflareContext } from "@/lib/cloudflare-context";
 import "./app.css";
 import "streamdown/styles.css";
@@ -99,6 +102,7 @@ export default function App() {
 }
 
 function AppShell({ children }: { children: React.ReactNode }) {
+  const { user } = useAccount();
   const location = useLocation();
   const showMobileNav = isMobileDockPathname(location.pathname);
 
@@ -106,18 +110,21 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthDialogProvider>
-      <div className="app-route-stage min-h-dvh bg-background">
-        <DesktopSidebarNav />
-        <main
-          className={cn(
-            "min-h-dvh md:pl-[224px]",
-            showMobileNav && "pb-[var(--mobile-dock-page-offset)] md:pb-0",
-          )}
-        >
-          {children}
-        </main>
-        {showMobileNav ? <MobileDockNav /> : null}
-      </div>
+      <HistorySyncProvider>
+        <div key={user?.id ?? "guest"} className="app-route-stage min-h-dvh bg-background">
+          <DesktopSidebarNav />
+          <main
+            className={cn(
+              "min-h-dvh md:pl-[224px]",
+              showMobileNav && "pb-[var(--mobile-dock-page-offset)] md:pb-0",
+            )}
+          >
+            <HistorySyncNotice />
+            {children}
+          </main>
+          {showMobileNav ? <MobileDockNav /> : null}
+        </div>
+      </HistorySyncProvider>
     </AuthDialogProvider>
   );
 }

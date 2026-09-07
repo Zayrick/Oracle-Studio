@@ -8,6 +8,10 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  getAccountTheme, getHistoryAccount, saveAccountTheme, subscribeHistoryRecords,
+} from "@/lib/history-manager";
+import { getHistorySyncStatus } from "@/features/history/sync";
 
 export type Theme = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
@@ -69,12 +73,30 @@ export function ThemeProvider({
     };
   }, [defaultTheme, storageKey]);
 
+  useIsomorphicLayoutEffect(() => {
+    const restorePreference = () => {
+      const account = getHistoryAccount();
+      const sync = getHistorySyncStatus();
+      const preference = getAccountTheme() ?? (
+        account && sync.userId === account && sync.loaded ? defaultTheme : undefined
+      );
+      if (!preference || preference === activeThemeRef.current) return;
+      activeThemeRef.current = preference;
+      writeStoredTheme(storageKey, preference);
+      setThemeState(preference);
+      setResolvedTheme(applyTheme(preference));
+    };
+    restorePreference();
+    return subscribeHistoryRecords(restorePreference);
+  }, [storageKey, defaultTheme]);
+
   const setTheme = useCallback(
     (nextTheme: Theme) => {
       writeStoredTheme(storageKey, nextTheme);
       activeThemeRef.current = nextTheme;
       setThemeState(nextTheme);
       setResolvedTheme(applyTheme(nextTheme));
+      saveAccountTheme(nextTheme);
     },
     [storageKey]
   );

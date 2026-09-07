@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 type DivinationAIChatSession<Message extends AIChatMessage = AIChatMessage> = {
   sessionId: string;
   title: string;
-  updatedAt: string;
+  updatedAt: number;
   messages: Message[];
 };
 
@@ -583,8 +583,8 @@ function formatAIMessageCount(messages: AIChatMessage[]) {
   return `${messages.length} 条消息`;
 }
 
-function formatHistoryDateTime(value: string) {
-  const date = new Date(value);
+function formatHistoryDateTime(value: number) {
+  const date = new Date(value * 1000);
 
   if (Number.isNaN(date.getTime())) {
     return "时间未知";

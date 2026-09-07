@@ -65,10 +65,9 @@ test("production Worker serves account dialog links and persists profile changes
 
   try {
     const db = await runtime.getD1Database("AUTH_DB");
-    const sql = await readFile(
-      new URL("../migrations/0001_auth.sql", import.meta.url),
-      "utf8",
-    );
+    const sql = (await Promise.all(["0001_auth.sql", "0002_user_data.sql"].map((name) =>
+      readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
+    ))).join("\n");
     const statements = sql
       .replace(/^--.*$/gm, "")
       .split(";")
@@ -200,6 +199,21 @@ test("production Worker serves account dialog links and persists profile changes
     );
     const sessionData = await session.json();
     assert.equal(sessionData.user.email, email);
+    const historyHeaders = { Cookie: cookie, "X-Account-Id": sessionData.user.id };
+    const initialHistory = await runtime.dispatchFetch("https://example.com/api/history", { headers: historyHeaders });
+    assert.equal(initialHistory.status, 200);
+    assert.deepEqual((await initialHistory.json()).entries, []);
+    const preferences = { id: "preferences", theme: "dark", createdAt: 1788265845, updatedAt: 1788265845 };
+    const savedPreferences = await runtime.dispatchFetch("https://example.com/api/history", {
+      method: "POST",
+      headers: { ...historyHeaders, Origin: "https://example.com", "Content-Type": "application/json" },
+      body: JSON.stringify({ changes: [{ id: "preferences", mutationId: "worker-test-mutation", baseRevision: null, kind: "upsert", record: preferences }] }),
+    });
+    assert.equal(savedPreferences.status, 200, await savedPreferences.clone().text());
+    assert.match(savedPreferences.headers.get("cache-control"), /no-store/);
+    const history = await runtime.dispatchFetch("https://example.com/api/history", { headers: historyHeaders });
+    assert.deepEqual((await history.json()).entries[0].record, preferences);
+    assert.equal((await runtime.dispatchFetch("https://example.com/api/history")).status, 401);
     await db
       .prepare('UPDATE "session" SET "expiresAt" = ?')
       .bind(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString())
