@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
 import { AccountSettings } from "@/components/account/account-settings";
+import { DivinationPageFrame } from "@/components/divination-page-frame";
 import {
   AuthDialogProvider,
   AuthDialogTrigger,
@@ -83,6 +84,28 @@ test("account settings expose separate profile, email and reset dialog buttons",
   assert.ok(signedOut.includes("创建账户"));
   assert.ok(!signedOut.includes('href="/account/login'));
   assert.ok(!signedOut.includes('href="/account/register'));
+});
+
+test("AI entry prompts guests to log in while signed-in users can open the chat", () => {
+  const content = (
+    <AuthDialogProvider>
+      <DivinationPageFrame
+        form={{ title: "排盘", content: <div>排盘</div> }}
+        result={{
+          ariaLabel: "排盘结果",
+          content: <div>命盘</div>,
+          ai: { open: false, onToggle: () => {}, panel: <div>AI 对话</div> },
+        }}
+      />
+    </AuthDialogProvider>
+  );
+  const guest = renderAccount(content, null);
+  assert.ok(guest.includes("询问AI"));
+  assert.ok(guest.includes('aria-haspopup="dialog"'));
+  const signedIn = renderAccount(content);
+  assert.ok(signedIn.includes("询问AI"));
+  assert.ok(signedIn.includes('aria-expanded="false"'));
+  assert.ok(!signedIn.includes('aria-haspopup="dialog"'));
 });
 
 for (const mode of ["login", "register", "forgot-password"] satisfies AuthDialogMode[]) {

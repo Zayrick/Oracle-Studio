@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 
 import { TransitionBackLink } from "@/components/route-transition-link";
+import { AuthDialogTrigger } from "@/components/account/auth-dialog";
+import { useAccount } from "@/features/auth/use-account";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -170,6 +172,7 @@ function DivinationResultActions({
   onRestart?: () => void;
 }) {
   const compact = layout === "mobile";
+  const { user, available } = useAccount();
   const showAI = Boolean(onAIToggle);
 
   return (
@@ -236,15 +239,26 @@ function DivinationResultActions({
           ) : null}
 
           {showAI ? (
-            <Button
-              type="button"
-              size={compact ? "sm" : "default"}
-              aria-expanded={aiOpen}
-              onClick={onAIToggle}
-            >
-              <SparklesIcon data-icon="inline-start" />
-              {aiOpen ? "收起AI" : "询问AI"}
-            </Button>
+            !user && !aiOpen ? (
+              <AuthDialogTrigger
+                mode="login"
+                size={compact ? "sm" : "default"}
+                disabled={!available}
+              >
+                <SparklesIcon data-icon="inline-start" />
+                询问AI
+              </AuthDialogTrigger>
+            ) : (
+              <Button
+                type="button"
+                size={compact ? "sm" : "default"}
+                aria-expanded={aiOpen}
+                onClick={onAIToggle}
+              >
+                <SparklesIcon data-icon="inline-start" />
+                {aiOpen ? "收起AI" : "询问AI"}
+              </Button>
+            )
           ) : null}
         </div>
       ) : null}

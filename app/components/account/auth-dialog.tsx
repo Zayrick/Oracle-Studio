@@ -177,7 +177,7 @@ export function AuthDialogTrigger({
 }: DialogRequest &
   Pick<
     ComponentProps<typeof Button>,
-    "children" | "variant" | "className" | "disabled"
+    "children" | "variant" | "size" | "className" | "disabled"
   >) {
   const context = useContext(AuthDialogContext);
   const id = useId();

@@ -78,6 +78,9 @@ const errorMessages: Record<string, string> = {
   EMAIL_DELIVERY_FAILED: "验证码发送失败，请稍后重试。",
   REGISTRATION_EXPIRED: "注册验证已失效，请重新验证邮箱。",
   REGISTRATION_LOGIN_FAILED: "账户已创建，请前往登录。",
+  REGISTRATION_IN_PROGRESS: "注册正在处理中，请稍后重试。",
+  AI_SETUP_FAILED: "账户初始化暂时失败，请稍后重试。",
+  AI_SETUP_IN_PROGRESS: "账户正在初始化，请稍后重试。",
 };
 
 export function authErrorMessage(

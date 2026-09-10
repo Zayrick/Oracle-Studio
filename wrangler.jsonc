@@ -7,6 +7,10 @@
 	"name": "oracle-studio",
 	"compatibility_date": "2026-08-14",
 	"main": "./workers/app.ts",
+	"vars": {
+		"OPENROUTER_BAZI_PRESET": "bazi",
+		"OPENROUTER_LIUYAO_PRESET": "liuyao"
+	},
 	"d1_databases": [
 		{
 			"binding": "AUTH_DB",
@@ -22,12 +26,9 @@
 			"AUTH_EMAIL_FROM",
 			"TURNSTILE_SITE_KEY",
 			"TURNSTILE_SECRET_KEY",
-			"liuyao_LLM_MODEL",
-			"liuyao_LLM_BASE",
-			"liuyao_LLM_KEY",
-			"bazi_LLM_MODEL",
-			"bazi_LLM_BASE",
-			"bazi_LLM_KEY"
+			"OPENROUTER_MANAGEMENT_KEY",
+			"OPENROUTER_WORKSPACE_ID",
+			"AI_KEY_ENCRYPTION_SECRET"
 		]
 	},
 	"observability": {

@@ -12,6 +12,13 @@ import {
 } from "better-auth/crypto";
 import { z } from "zod";
 
+import {
+  createAICredential,
+  discardUnboundAICredential,
+  insertAICredential,
+  type AICredential,
+} from "@/features/ai/credentials.server";
+
 import type { AuthEnvironment } from "./auth.server";
 import { sendAuthEmail } from "./email.server";
 import {
@@ -28,6 +35,7 @@ const emailSchema = z.string().trim().toLowerCase().max(254).email();
 const nameSchema = z.string().trim().min(1).max(50);
 const detailsSchema = z.object({ email: emailSchema, name: nameSchema });
 const MAX_ATTEMPTS = 3;
+const COMPLETION_LEASE_MS = 120_000;
 
 type PendingRegistration = {
   id: string;
@@ -73,6 +81,8 @@ export function registration(env: AuthEnvironment) {
           resendAfter: { type: "number", required: true },
           tokenHash: { type: "string", required: false },
           tokenExpiresAt: { type: "number", required: false },
+          completionId: { type: "string", required: false },
+          completionExpiresAt: { type: "number", required: false },
         },
       },
     },
@@ -95,7 +105,7 @@ export function registration(env: AuthEnvironment) {
           await db
             .prepare(
               `DELETE FROM "pendingRegistration"
-          WHERE MAX("otpExpiresAt", COALESCE("tokenExpiresAt", 0)) <= ?`,
+          WHERE MAX("otpExpiresAt", COALESCE("tokenExpiresAt", 0), COALESCE("completionExpiresAt", 0)) <= ?`,
             )
             .bind(now)
             .run();
@@ -114,8 +124,10 @@ export function registration(env: AuthEnvironment) {
           ON CONFLICT ("email") DO UPDATE SET
             "id" = excluded."id", "name" = excluded."name", "otpHash" = excluded."otpHash",
             "otpExpiresAt" = excluded."otpExpiresAt", "attempts" = 0,
-            "resendAfter" = excluded."resendAfter", "tokenHash" = NULL, "tokenExpiresAt" = NULL
-          WHERE "pendingRegistration"."resendAfter" <= ? RETURNING "id"`,
+            "resendAfter" = excluded."resendAfter", "tokenHash" = NULL, "tokenExpiresAt" = NULL,
+            "completionId" = NULL, "completionExpiresAt" = NULL
+          WHERE "pendingRegistration"."resendAfter" <= ?
+            AND COALESCE("pendingRegistration"."completionExpiresAt", 0) <= ? RETURNING "id"`,
             )
             .bind(
               id,
@@ -124,6 +136,7 @@ export function registration(env: AuthEnvironment) {
               hash,
               now + OTP_EXPIRES_IN * 1000,
               now + OTP_RESEND_SECONDS * 1000,
+              now,
               now,
             )
             .first();
@@ -223,39 +236,103 @@ export function registration(env: AuthEnvironment) {
           if (!pending) throw expiredRegistration();
           const hash = await ctx.context.password.hash(password);
           const userId = crypto.randomUUID();
+          const claimed = await db
+            .prepare(
+              `
+            UPDATE "pendingRegistration" SET "completionId" = ?, "completionExpiresAt" = ?
+            WHERE "email" = ? AND "tokenHash" = ? AND "tokenExpiresAt" > ?
+              AND COALESCE("completionExpiresAt", 0) <= ? RETURNING "id"
+          `,
+            )
+            .bind(
+              userId,
+              Date.now() + COMPLETION_LEASE_MS,
+              email,
+              proof,
+              Date.now(),
+              Date.now(),
+            )
+            .first();
+          if (!claimed) {
+            throw new APIError("CONFLICT", {
+              code: "REGISTRATION_IN_PROGRESS",
+              message: "注册正在处理中，请稍后重试。",
+            });
+          }
           const date = new Date().toISOString();
-          // D1 batch is a transaction: proof consumption, user, and password succeed together.
-          const result = await db.batch([
-            db
-              .prepare(
-                `INSERT INTO "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
+          let credential: AICredential | undefined;
+          try {
+            try {
+              credential = await createAICredential(env, userId);
+            } catch {
+              throw new APIError("SERVICE_UNAVAILABLE", {
+                code: "AI_SETUP_FAILED",
+                message: "账户初始化暂时失败，请稍后重试。",
+              });
+            }
+            // Bind the key in the same transaction as the user, password and proof consumption.
+            const result = await db.batch([
+              db
+                .prepare(
+                  `INSERT INTO "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
             SELECT ?, "name", "email", 1, ?, ? FROM "pendingRegistration"
-            WHERE "email" = ? AND "tokenHash" = ? AND "tokenExpiresAt" > ?`,
-              )
-              .bind(userId, date, date, email, proof, Date.now()),
-            db
-              .prepare(
-                `INSERT INTO "account" ("id", "accountId", "providerId", "userId", "password", "createdAt", "updatedAt")
+            WHERE "email" = ? AND "tokenHash" = ? AND "tokenExpiresAt" > ?
+              AND "completionId" = ?`,
+                )
+                .bind(userId, date, date, email, proof, Date.now(), userId),
+              db
+                .prepare(
+                  `INSERT INTO "account" ("id", "accountId", "providerId", "userId", "password", "createdAt", "updatedAt")
             SELECT ?, "id", 'credential', "id", ?, ?, ? FROM "user" WHERE "id" = ?`,
-              )
-              .bind(crypto.randomUUID(), hash, date, date, userId),
-            db
-              .prepare(
-                `DELETE FROM "pendingRegistration" WHERE "email" = ? AND "tokenHash" = ?
+                )
+                .bind(crypto.randomUUID(), hash, date, date, userId),
+              insertAICredential(db, userId, credential),
+              db
+                .prepare(
+                  `DELETE FROM "pendingRegistration" WHERE "email" = ? AND "tokenHash" = ?
             AND EXISTS (SELECT 1 FROM "user" WHERE "id" = ?)`,
+                )
+                .bind(email, proof, userId),
+            ]);
+            if (!result[0].meta.changes) throw expiredRegistration();
+          } catch (error) {
+            if (credential)
+              await discardUnboundAICredential(env, userId, credential.keyHash);
+            throw error;
+          } finally {
+            await db
+              .prepare(
+                `
+              UPDATE "pendingRegistration" SET "completionId" = NULL, "completionExpiresAt" = NULL
+              WHERE "email" = ? AND "completionId" = ?
+            `,
               )
-              .bind(email, proof, userId),
-          ]);
-          if (!result[0].meta.changes) throw expiredRegistration();
-          const user = await ctx.context.internalAdapter.findUserById(userId);
-          const session =
-            await ctx.context.internalAdapter.createSession(userId);
-          if (!user || !session)
+              .bind(email, userId)
+              .run()
+              .catch(() => {
+                console.error(
+                  JSON.stringify({
+                    event: "registration_claim_release_failed",
+                    userId,
+                  }),
+                );
+              });
+          }
+          try {
+            const user = await ctx.context.internalAdapter.findUserById(userId);
+            const session =
+              await ctx.context.internalAdapter.createSession(userId);
+            if (!user || !session) throw new Error("Session creation failed");
+            await setSessionCookie(ctx, { user, session });
+          } catch {
+            console.error(
+              JSON.stringify({ event: "registration_login_failed", userId }),
+            );
             throw new APIError("INTERNAL_SERVER_ERROR", {
               code: "REGISTRATION_LOGIN_FAILED",
               message: "账户已创建，请前往登录。",
             });
-          await setSessionCookie(ctx, { user, session });
+          }
           return ctx.json({ success: true });
         },
       ),

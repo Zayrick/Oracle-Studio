@@ -1,5 +1,12 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { APIError } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins/email-otp";
+
+import type { AIProvisioningEnvironment } from "@/features/ai/config.server";
+import {
+  AICredentialError,
+  bindExistingAccountAI,
+} from "@/features/ai/credentials.server";
 
 import { sendAuthEmail } from "./email.server";
 import { validateProfileUpdate } from "./profile.server";
@@ -20,7 +27,8 @@ export type AuthEnvironment = Pick<
   | "BETTER_AUTH_URL"
   | "TURNSTILE_SITE_KEY"
   | "TURNSTILE_SECRET_KEY"
->;
+> &
+  AIProvisioningEnvironment;
 type AuthOptions = BetterAuthOptions & {
   plugins: [ReturnType<typeof emailOTP>, ReturnType<typeof registration>];
 };
@@ -66,6 +74,31 @@ export function createAuth(
     basePath: "/api/auth",
     secret: env.BETTER_AUTH_SECRET,
     database: env.AUTH_DB,
+    databaseHooks: {
+      session: {
+        create: {
+          before: async (session) => {
+            try {
+              await bindExistingAccountAI(env, session.userId);
+            } catch (error) {
+              console.error(
+                JSON.stringify({
+                  event: "account_ai_binding_failed",
+                  userId: session.userId,
+                }),
+              );
+              throw new APIError("SERVICE_UNAVAILABLE", {
+                code:
+                  error instanceof AICredentialError
+                    ? error.code
+                    : "AI_SETUP_FAILED",
+                message: "账户初始化暂时失败，请稍后重试。",
+              });
+            }
+          },
+        },
+      },
+    },
     trustedOrigins: [new URL(env.BETTER_AUTH_URL).origin],
     hooks: { before: validateProfileUpdate },
     disabledPaths: [

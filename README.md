@@ -8,7 +8,7 @@ Oracle Studio 是一款面向中文用户的在线排盘应用，现已实现八
 
 - 八字排盘：根据姓名、性别和出生时间生成命盘，展示四柱、十神、藏干、纳音、神煞、大运与流年等信息。
 - 六爻排盘：支持手动指定、随机起卦、在线摇卦和时间起卦，展示本卦、变卦、纳甲、六亲、六神与旬空，并可复制排盘结果。
-- AI 解读：八字与六爻分别使用独立的模型配置；回答以 NDJSON 流式返回，支持多轮会话。八字解读还包含本地排盘工具调用。
+- AI 解读：登录后使用账户专属 OpenRouter Key，八字与六爻分别引用独立 Preset；回答以 NDJSON 流式返回，支持多轮会话。八字解读还包含本地排盘工具调用。
 - 历史记录：保存原始排盘输入及 AI 会话，打开时在浏览器重新排盘；支持恢复、重命名、删除及账户云同步。
 - 界面设置：支持浅色、深色和跟随系统三种外观模式。
 - 账户系统：邮箱注册、注册邮箱验证、密码登录、验证码找回密码与退出登录。身份数据由 Better Auth 管理并存储在 Cloudflare D1。
@@ -33,7 +33,7 @@ Oracle Studio 是一款面向中文用户的在线排盘应用，现已实现八
 - Node.js 22.22.0 或更高版本
 - npm
 - 部署时需要可用的 Cloudflare 账户
-- 启用 AI 解读时需要一个兼容 OpenAI Chat Completions 接口的模型服务
+- 完成注册及启用 AI 解读需要 OpenRouter Workspace、Management API Key，以及八字和六爻的 Presets
 
 ## 本地开发
 
@@ -52,13 +52,11 @@ cp .dev.vars.example .dev.vars
 填写 `.dev.vars`：
 
 ```dotenv
-liuyao_LLM_MODEL=your_model_name
-liuyao_LLM_BASE=https://api.example.com/v1
-liuyao_LLM_KEY=your_api_key
-
-bazi_LLM_MODEL=your_model_name
-bazi_LLM_BASE=https://api.example.com/v1
-bazi_LLM_KEY=your_api_key
+OPENROUTER_MANAGEMENT_KEY=your_openrouter_management_key
+OPENROUTER_WORKSPACE_ID=your_workspace_uuid
+AI_KEY_ENCRYPTION_SECRET=base64_encoded_random_32_bytes
+OPENROUTER_BAZI_PRESET=bazi
+OPENROUTER_LIUYAO_PRESET=liuyao
 
 BETTER_AUTH_SECRET=replace_with_a_random_secret_of_at_least_32_characters
 BETTER_AUTH_URL=http://localhost:5173
@@ -68,7 +66,7 @@ TURNSTILE_SITE_KEY=1x00000000000000000000AA
 TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 ```
 
-`*_LLM_BASE` 应填写 API 根地址。应用会在地址末尾补充 `/chat/completions`；如果配置值已经以该路径结尾，则不会重复追加。六爻接口要求上游支持流式响应，八字接口还要求模型支持工具调用。
+AI 请求固定发送至 OpenRouter，不再读取原有的 `*_LLM_KEY`、`*_LLM_BASE` 和 `*_LLM_MODEL`。先在目标 Workspace 创建 `bazi`、`liuyao` 两个 Preset，配置支持流式响应的模型；八字模型还需支持工具调用。
 
 账户系统的配置与邮件联调见下方「账户系统配置」。首次使用账户功能前，先初始化本地 D1：
 
@@ -94,7 +92,8 @@ npm run dev
 | `npm run preview` | 构建并在本地预览生产版本 |
 | `npm run cf-typegen` | 仅重新生成 Cloudflare Worker 类型 |
 | `npm run test:auth` | 在临时 D1 中测试账户流程及 Resend 发信和错误处理，拦截 HTTP 请求，不投递真实邮件 |
-| `npm run test:auth:worker` | 构建后在临时 Workers 运行时验证账户页面、登录及 SSR 会话数据 |
+| `npm run test:auth:worker` | 构建后在临时 Workers 运行时验证注册绑定、用户 Key 推理、账户页面及 SSR 会话数据 |
+| `npm run test:ai` | 在临时 D1 中测试用户 Key 隔离、旧账户补绑、Preset 路由、工具循环、错误脱敏和流式取消 |
 | `npm run test:history` | 在临时 D1 中验证旧记录迁移、云同步、账户隔离、离线重试及跨时区重算 |
 | `npm run db:migrate:local` | 应用本地 D1 迁移 |
 | `npm run db:migrate:remote` | 应用线上 D1 迁移，需先绑定真实数据库 |
@@ -135,20 +134,31 @@ npm run build
 
 同步失败会保留待同步操作，自动退避重试，并在恢复网络、回到页面或点击「重试同步」时继续。在线页面每分钟检查云端变化。同步通过版本标识处理同一秒内的连续编辑；多个设备并发修改同一条历史时保留「同步副本」，删除标记防止旧设备恢复已删除数据。接口校验登录账户、请求来源、数据结构和请求大小，并分批上传、分页下载。
 
-上线此版本前，先对现有 D1 执行 `npm run db:migrate:remote`，应用新增的 `0002_user_data.sql`，再发布应用。本地可用 `npm run db:migrate:local`；已有 `0001_auth.sql` 无需重建或修改。
+上线此版本前，先对现有 D1 执行 `npm run db:migrate:remote`，应用所有新增迁移（包括 `0002_user_data.sql` 和 `0003_user_ai_credentials.sql`），再发布应用。本地可用 `npm run db:migrate:local`；已有 `0001_auth.sql` 无需重建或修改。
 
-LLM 密钥不会写入客户端代码。浏览器只请求本项目的 `/api/*/ai` 路由，由 Cloudflare Worker 读取环境配置并向上游模型服务发起请求。`.dev.vars` 已被 Git 忽略，不应提交真实密钥。
+## OpenRouter 账户绑定与 AI 调用
 
-环境变量分为八字和六爻两组：
+浏览器只请求本应用的 `/api/bazi/ai` 和 `/api/liuyao/ai`。Worker 校验登录会话、邮箱验证状态、同源请求及 `X-Account-Id`，从 D1 读取该用户的 Key，再调用 OpenRouter。每次推理由服务端填写 `user`，并以 `用户 ID:会话 ID` 作为 `session_id`；客户端不能选择其他用户的 Key 或覆盖 Preset。八字工具调用的全部轮次复用相同用户 Key。
 
-| 变量 | 用途 |
+| 配置 | 用途 |
 | --- | --- |
-| `bazi_LLM_KEY` | 八字解读服务的 API 密钥 |
-| `bazi_LLM_BASE` | 八字解读服务的 API 根地址 |
-| `bazi_LLM_MODEL` | 八字解读使用的模型标识 |
-| `liuyao_LLM_KEY` | 六爻解读服务的 API 密钥 |
-| `liuyao_LLM_BASE` | 六爻解读服务的 API 根地址 |
-| `liuyao_LLM_MODEL` | 六爻解读使用的模型标识 |
+| `OPENROUTER_MANAGEMENT_KEY` | OpenRouter Management API Key，只用于创建和回收用户 Key，不用于推理 |
+| `OPENROUTER_WORKSPACE_ID` | 创建用户 Key 的目标 Workspace UUID |
+| `AI_KEY_ENCRYPTION_SECRET` | 32 字节随机密钥的 Base64 编码，用于 AES-256-GCM 加密用户 Key；独立于会话密钥 |
+| `OPENROUTER_BAZI_PRESET` | 八字 Preset slug，默认 `bazi`，调用时转换为 `@preset/bazi` |
+| `OPENROUTER_LIUYAO_PRESET` | 六爻 Preset slug，默认 `liuyao`，调用时转换为 `@preset/liuyao` |
+
+前三项通过 Worker secrets 配置；两个 Preset slug 在 `wrangler.jsonc` 的 `vars` 中配置，本地也可通过 `.dev.vars` 覆盖。`.dev.vars` 已被 Git 忽略，不应提交真实密钥。用户 Key 不写入 Worker 环境变量，也不会出现在页面、会话响应或浏览器缓存中。加密内容与用户 ID、Workspace ID 绑定，复制数据库密文到另一个账户无法解密。
+
+注册最后一步先取得 D1 的短期占用标识，随后**等待** OpenRouter 创建 Key；用户、密码、加密 Key 和验证码凭证消费在同一个 D1 事务内提交，成功后才创建登录会话。OpenRouter 失败时不创建用户，保留未过期的注册凭证供重试。D1 提交失败时尝试撤销尚未绑定的远端 Key，并释放占用标识。并发提交不会重复创建正常绑定，占用标识在 Worker 意外退出后可过期重试；注册期间重新发验证码也不会替换正在提交的凭证。
+
+已有账户在下一次成功的密码登录时补绑，然后才签发新会话。已有绑定的登录不会创建新 Key。AI 请求本身始终只读绑定；升级前已经登录但尚未绑定的账户，会收到重新登录提示。
+
+OpenRouter 与 D1 之间没有跨服务原子事务。若创建 Key 的响应丢失或 Worker 在保存前终止，远端仍可能留下未绑定 Key；应用不对创建请求做盲目自动重试。Key 名称使用 `oracle-studio/user/<userId>` 便于核对。回收失败记录 `ai_key_cleanup_failed`，提交结果不确定记录 `ai_key_commit_uncertain`，均仅包含行政标识、不包含密钥或提示词；可在 OpenRouter 对照 D1 绑定记录清理。不要直接更换 `AI_KEY_ENCRYPTION_SECRET` 或 Workspace：现有密文需先迁移或重新绑定，不能靠更换配置自动恢复。
+
+本阶段只实现身份绑定、加密保管、Preset 路由及流式调用，不设置每用户金额、次数、Token 或并发额度，也不实现积分或计费账本。所有用户 Key 仍由所属 OpenRouter 账户统一付费。模型选择、供应商路由和备用模型在 Preset 中调整；请求中显式传递的排盘上下文和工具参数按 OpenRouter 的规则覆盖或合并 Preset 对应字段。
+
+接口与配置依据：[Management API Keys](https://openrouter.ai/docs/guides/overview/auth/management-api-keys)、[创建 Key](https://openrouter.ai/docs/api/api-reference/api-keys/create-a-new-api-key)、[Presets](https://openrouter.ai/docs/guides/features/presets)、[Workers Secrets](https://developers.cloudflare.com/workers/configuration/secrets/)。
 
 ## 账户系统配置
 
@@ -230,7 +240,7 @@ npm run typecheck
 npm run build
 ```
 
-测试在临时 D1 中检查真实 Better Auth 请求处理、迁移兼容性、验证码并发消费、密码和会话失效、限流与来源校验。邮件通过模拟 Resend HTTP 响应捕获，同时验证鉴权失败、限流、服务错误和网络超时的脱敏处理。测试不会发送真实邮件，也不会修改本地或线上业务数据库。
+测试在临时 D1 中检查真实 Better Auth 请求处理、迁移兼容性、验证码并发消费、密码和会话失效、限流与来源校验。邮件通过模拟 Resend HTTP 响应捕获，同时验证鉴权失败、限流、服务错误和网络超时的脱敏处理。测试不会发送真实邮件、创建真实 OpenRouter Key 或消耗模型费用，也不会修改本地或线上业务数据库。
 
 `npm run test:auth:worker` 会额外验证生产构建在 Workers 中的运行情况，包括 Turnstile 校验、注册验证码发送、邮箱验证后仍不可登录、设置密码后完成注册、账户页面 SSR、Cookie 传递，以及页面数据不包含会话令牌或 Turnstile 服务端密钥。这个测试使用临时数据库，并拦截全部出站请求。
 
@@ -242,15 +252,12 @@ npm run build
 npx wrangler login
 ```
 
-线上环境必须配置 `wrangler.jsonc` 中声明的 LLM 配置和上文六项账户配置，并先完成 D1 迁移与 Resend 发信域名验证：
+线上环境必须配置上文账户 secrets 和以下三项 AI secrets，并先完成全部 D1 迁移、Resend 发信域名验证，以及目标 OpenRouter Workspace 的两个 Preset：
 
 ```bash
-npx wrangler secret put liuyao_LLM_MODEL
-npx wrangler secret put liuyao_LLM_BASE
-npx wrangler secret put liuyao_LLM_KEY
-npx wrangler secret put bazi_LLM_MODEL
-npx wrangler secret put bazi_LLM_BASE
-npx wrangler secret put bazi_LLM_KEY
+npx wrangler secret put OPENROUTER_MANAGEMENT_KEY
+npx wrangler secret put OPENROUTER_WORKSPACE_ID
+npx wrangler secret put AI_KEY_ENCRYPTION_SECRET
 ```
 
 构建并直接部署到生产环境：

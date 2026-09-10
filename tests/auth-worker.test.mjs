@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 
+import { migrateTestDatabase } from "./helpers/migrations.mjs";
+import { aiTestEnvironment, openRouterMock } from "./helpers/openrouter.mjs";
+
 // Exercise the production bundle inside workerd, without a dev/preview server.
 test("production Worker serves account dialog links and persists profile changes", async () => {
+  const aiEnv = aiTestEnvironment();
+  const openrouter = openRouterMock(aiEnv);
   const sentEmail = Promise.withResolvers();
   const emailChange = Promise.withResolvers();
   const chunks = (await readdir("build/server/assets")).filter((file) =>
@@ -27,6 +32,8 @@ test("production Worker serves account dialog links and persists profile changes
       d1Databases: ["AUTH_DB"],
       // Intercept every outbound request; the production bundle cannot send real mail.
       outboundService: async (request) => {
+        const aiResponse = await openrouter.fetch(request);
+        if (aiResponse) return aiResponse;
         if (
           request.url ===
           "https://challenges.cloudflare.com/turnstile/v0/siteverify"
@@ -53,6 +60,7 @@ test("production Worker serves account dialog links and persists profile changes
         return Response.json({ id: "worker-test-email" });
       },
       bindings: {
+        ...aiEnv,
         BETTER_AUTH_SECRET: randomBytes(32).toString("hex"),
         BETTER_AUTH_URL: "https://example.com",
         RESEND_API_KEY: "re_worker_test_placeholder",
@@ -65,15 +73,7 @@ test("production Worker serves account dialog links and persists profile changes
 
   try {
     const db = await runtime.getD1Database("AUTH_DB");
-    const sql = (await Promise.all(["0001_auth.sql", "0002_user_data.sql"].map((name) =>
-      readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
-    ))).join("\n");
-    const statements = sql
-      .replace(/^--.*$/gm, "")
-      .split(";")
-      .map((statement) => statement.trim())
-      .filter(Boolean);
-    await db.batch(statements.map((statement) => db.prepare(statement)));
+    await migrateTestDatabase(db);
 
     for (const [path, title] of [
       ["/settings", "账户"],
@@ -179,12 +179,18 @@ test("production Worker serves account dialog links and persists profile changes
       (await post("/sign-in/email", { email, password })).status,
       401,
     );
+    openrouter.createOverride = () => new Response(null, { status: 503 });
+    const unavailable = await post("/registration/complete", { email, password, token });
+    assert.equal(unavailable.status, 503);
+    assert.equal(unavailable.headers.getSetCookie().length, 0);
+    assert.equal((await db.prepare('SELECT COUNT(*) AS count FROM "user"').first()).count, 0);
+    openrouter.createOverride = null;
     const completed = await post("/registration/complete", {
       email,
       password,
       token,
     });
-    assert.equal(completed.status, 200, await completed.text());
+    assert.equal(completed.status, 200, JSON.stringify({ response: await completed.text(), createdKeys: openrouter.created.length, deletedKeys: openrouter.deleted.length }));
     assert.ok(completed.headers.getSetCookie().length > 0);
     const login = await post("/sign-in/email", { email, password });
     assert.equal(login.status, 200, await login.clone().text());
@@ -199,6 +205,30 @@ test("production Worker serves account dialog links and persists profile changes
     );
     const sessionData = await session.json();
     assert.equal(sessionData.user.email, email);
+    assert.equal(openrouter.created.length, 1, "registration binds a key and login reuses it");
+    const credential = await db.prepare("SELECT * FROM user_ai_credentials").first();
+    assert.equal(credential.user_id, sessionData.user.id);
+    assert.equal(credential.key_hash, openrouter.created[0].hash);
+    assert.ok(!JSON.stringify(credential).includes(openrouter.created[0].key));
+    assert.ok(!JSON.stringify(sessionData).includes(openrouter.created[0].key));
+    for (const feature of ["bazi", "liuyao"]) {
+      const aiUrl = `https://example.com/api/${feature}/ai`;
+      const aiPayload = {
+        systemPrompt: "测试排盘", sessionId: "worker-chat", messages: [{ role: "user", content: "请解读" }],
+        chart: { name: "测试", gender: "male", solarText: "2000-01-01", dayMaster: "甲", tymeEightChar: "测试",
+          pillars: Array.from({ length: 4 }, () => ({ label: "年", name: "甲子", stem: "甲", branch: "子", hiddenStems: [], shenSha: [] })),
+          auxiliaryPillars: [], fortune: { currentYear: 2026, context: {}, periods: [], dayuns: [] } },
+      };
+      const options = { method: "POST", headers: { Origin: "https://example.com", "Content-Type": "application/json" }, body: JSON.stringify(aiPayload) };
+      assert.equal((await runtime.dispatchFetch(aiUrl, options)).status, 401);
+      const ai = await runtime.dispatchFetch(aiUrl, { ...options, headers: { ...options.headers, Cookie: cookie, "X-Account-Id": sessionData.user.id } });
+      assert.equal(ai.status, 200);
+      const output = await ai.text();
+      assert.ok(output.includes("测试解读"));
+      assert.ok(!output.includes("sk-or-"));
+      assert.equal(openrouter.completions.at(-1).body.model, `@preset/${feature}`);
+      assert.equal(openrouter.completions.at(-1).body.user, sessionData.user.id);
+    }
     const historyHeaders = { Cookie: cookie, "X-Account-Id": sessionData.user.id };
     const initialHistory = await runtime.dispatchFetch("https://example.com/api/history", { headers: historyHeaders });
     assert.equal(initialHistory.status, 200);

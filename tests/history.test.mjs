@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { after, before, beforeEach, mock, test } from "node:test";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
@@ -34,6 +33,9 @@ import {
 import { restoreRawDateTime, toRawDateTime } from "../app/lib/unix-time.ts";
 import { restoreBaziHistoryRecord } from "../app/features/bazi/history.ts";
 import { restoreLiuyaoHistoryRecord } from "../app/features/liuyao/history.ts";
+
+import { migrateTestDatabase } from "./helpers/migrations.mjs";
+import { aiTestEnvironment, openRouterMock } from "./helpers/openrouter.mjs";
 
 class MemoryStorage {
   getItem(key) {
@@ -180,6 +182,7 @@ async function api(
 
 before(async () => {
   env = {
+    ...aiTestEnvironment(),
     AUTH_DB: await runtime.getD1Database("AUTH_DB"),
     RESEND_API_KEY: "test",
     AUTH_EMAIL_FROM: "noreply@example.com",
@@ -188,18 +191,13 @@ before(async () => {
     TURNSTILE_SITE_KEY: "test",
     TURNSTILE_SECRET_KEY: "test",
   };
-  for (const name of ["0001_auth.sql", "0002_user_data.sql"]) {
-    const sql = await readFile(
-      new URL(`../migrations/${name}`, import.meta.url),
-      "utf8",
-    );
-    const statements = sql
-      .replace(/^--.*$/gm, "")
-      .split(";")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    await env.AUTH_DB.batch(statements.map((sql) => env.AUTH_DB.prepare(sql)));
-  }
+  await migrateTestDatabase(env.AUTH_DB);
+  const openrouter = openRouterMock(env);
+  mock.method(globalThis, "fetch", async (input, init) => {
+    const response = await openrouter.fetch(new Request(input, init));
+    assert.ok(response, "unexpected external request during sign-in");
+    return response;
+  });
   const hash = await hashPassword(password);
   cookies = {};
   for (const user of ["user-a", "user-b"]) {

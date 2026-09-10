@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { after, before, beforeEach, mock, test } from "node:test";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { getMigrations } from "better-auth/db/migration";
@@ -10,6 +9,10 @@ import {
   isAuthConfigured,
 } from "../app/features/auth/auth.server.ts";
 import { safeRedirect } from "../app/features/auth/shared.ts";
+
+import { migrateTestDatabase } from "./helpers/migrations.mjs";
+import { aiTestEnvironment, openRouterMock } from "./helpers/openrouter.mjs";
+import { getUserAIKey } from "../app/features/ai/credentials.server.ts";
 
 const runtime = new Miniflare(
   convertV4MiniflareOptions({
@@ -27,6 +30,7 @@ const messages = [];
 const background = [];
 const ctx = { waitUntil: (promise) => background.push(promise) };
 let env;
+let openrouter;
 let requestNumber = 0;
 let turnstileOverride;
 let emailStatus = 200;
@@ -35,6 +39,7 @@ const challenges = [];
 
 before(async () => {
   env = {
+    ...aiTestEnvironment(),
     AUTH_DB: await runtime.getD1Database("AUTH_DB"),
     RESEND_API_KEY: "re_auth_test_placeholder",
     AUTH_EMAIL_FROM: "noreply@example.com",
@@ -43,20 +48,12 @@ before(async () => {
     TURNSTILE_SITE_KEY: "production-sitekey-placeholder",
     TURNSTILE_SECRET_KEY: "production-secret-placeholder",
   };
-  const sql = await readFile(
-    new URL("../migrations/0001_auth.sql", import.meta.url),
-    "utf8",
-  );
-  const statements = sql
-    .replace(/^--.*$/gm, "")
-    .split(";")
-    .map((statement) => statement.trim())
-    .filter(Boolean);
-  await env.AUTH_DB.batch(
-    statements.map((statement) => env.AUTH_DB.prepare(statement)),
-  );
+  await migrateTestDatabase(env.AUTH_DB);
+  openrouter = openRouterMock(env);
   mock.method(globalThis, "fetch", async (input, init) => {
     const request = new Request(input, init);
+    const aiResponse = await openrouter.fetch(request);
+    if (aiResponse) return aiResponse;
     if (
       request.url ===
       "https://challenges.cloudflare.com/turnstile/v0/siteverify"
@@ -100,6 +97,7 @@ beforeEach(async () => {
       "user",
     ].map((table) => env.AUTH_DB.prepare(`DELETE FROM "${table}"`)),
   );
+  openrouter.reset();
   messages.length = 0;
   challenges.length = 0;
   spentTokens.clear();
@@ -293,6 +291,14 @@ test("only the password step creates a verified account, hashes credentials and 
   assert.equal(await count("pendingRegistration"), 0);
   assert.equal(await count("user"), 1);
   assert.equal(await count("account"), 1);
+  assert.equal(openrouter.created.length, 1);
+  const user = await env.AUTH_DB.prepare('SELECT id FROM "user"').first();
+  const binding = await env.AUTH_DB.prepare('SELECT * FROM user_ai_credentials').first();
+  assert.equal(binding.user_id, user.id);
+  assert.equal(binding.key_hash, openrouter.created[0].hash);
+  assert.ok(!JSON.stringify(binding).includes(openrouter.created[0].key));
+  assert.equal(await getUserAIKey(env, user.id), openrouter.created[0].key);
+  assert.ok(!JSON.stringify(result.data).includes(openrouter.created[0].key));
   const stored = await env.AUTH_DB.prepare(
     'SELECT password FROM "account"',
   ).first();
@@ -355,7 +361,9 @@ test("a verified email proof is single-use under concurrent verification and com
   await noAccount();
   const token = verified.find((v) => v.response.status === 200).data.token;
   const completed = await Promise.all([complete(token), complete(token)]);
-  assert.deepEqual(completed.map((v) => v.response.status).sort(), [200, 400]);
+  assert.equal(completed.filter((v) => v.response.status === 200).length, 1);
+  assert.ok(completed.some((v) => [400, 409].includes(v.response.status)));
+  assert.equal(openrouter.created.length, 1, "concurrent completion must provision only one key");
   assert.equal(await count("user"), 1);
   assert.equal(await count("account"), 1);
   assert.equal(await count("session"), 1);
@@ -394,10 +402,87 @@ test("failed credential creation rolls back the user and preserves the proof for
     assert.equal((await complete(token)).response.status, 500);
     await noAccount();
     assert.equal(await count("pendingRegistration"), 1);
+    assert.equal(openrouter.keys.size, 0, "failed D1 commits must revoke the newly created key");
+    assert.equal(openrouter.deleted.length, 1);
   } finally {
     await env.AUTH_DB.prepare("DROP TRIGGER reject_test_credential").run();
   }
   assert.equal((await complete(token)).response.status, 200);
+});
+
+test("OpenRouter failure leaves no account or session and the same proof can retry", async () => {
+  const token = await startRegistration();
+  openrouter.createOverride = () => Response.json({ error: { message: env.OPENROUTER_MANAGEMENT_KEY } }, { status: 503 });
+  const failed = await complete(token);
+  assert.equal(failed.response.status, 503);
+  assert.equal(failed.data.code, "AI_SETUP_FAILED");
+  assert.ok(!JSON.stringify(failed.data).includes(env.OPENROUTER_MANAGEMENT_KEY));
+  assert.equal(cookieFrom(failed.response), "");
+  await noAccount();
+  assert.equal(await count("user_ai_credentials"), 0);
+  assert.equal((await env.AUTH_DB.prepare('SELECT "completionId" FROM "pendingRegistration"').first()).completionId, null);
+  openrouter.createOverride = null;
+  assert.equal((await complete(token)).response.status, 200);
+  assert.equal(openrouter.created.length, 1);
+});
+
+test("a session failure keeps the committed account key and allows a normal login", async () => {
+  const token = await startRegistration();
+  await env.AUTH_DB.prepare(`CREATE TRIGGER reject_test_session BEFORE INSERT ON "session"
+    BEGIN SELECT RAISE(ABORT, 'test session failure'); END`).run();
+  try {
+    const result = await complete(token);
+    assert.equal(result.response.status, 500);
+    assert.equal(result.data.code, "REGISTRATION_LOGIN_FAILED");
+    assert.equal(await count("user"), 1);
+    assert.equal(await count("user_ai_credentials"), 1);
+    assert.equal(openrouter.keys.size, 1);
+    assert.equal(openrouter.deleted.length, 0);
+  } finally {
+    await env.AUTH_DB.prepare("DROP TRIGGER reject_test_session").run();
+  }
+  assert.equal((await request("/sign-in/email", { email, password })).response.status, 200);
+  assert.equal(openrouter.created.length, 1);
+});
+
+test("invalid key encryption configuration stops registration before provisioning", async () => {
+  const token = await startRegistration();
+  const secret = env.AI_KEY_ENCRYPTION_SECRET;
+  env.AI_KEY_ENCRYPTION_SECRET = "too-short";
+  try {
+    assert.equal((await complete(token)).response.status, 503);
+    assert.equal(openrouter.created.length, 0);
+    await noAccount();
+  } finally {
+    env.AI_KEY_ENCRYPTION_SECRET = secret;
+  }
+  assert.equal((await complete(token)).response.status, 200);
+});
+
+test("registration awaits provisioning and concurrent resends cannot replace a claimed proof", async () => {
+  const token = await startRegistration();
+  const started = Promise.withResolvers();
+  const release = Promise.withResolvers();
+  openrouter.createOverride = async (upstream, body) => {
+    started.resolve();
+    await release.promise;
+    openrouter.createOverride = null;
+    return openrouter.fetch(new Request(upstream.url, { method: "POST", headers: upstream.headers, redirect: upstream.redirect, body: JSON.stringify(body) }));
+  };
+  const completing = complete(token);
+  try {
+    await started.promise;
+    await noAccount();
+    assert.equal((await complete(token)).response.status, 409);
+    await allowResend();
+    assert.equal((await sendCode()).response.status, 429);
+    assert.equal(messages.length, 1);
+  } finally {
+    release.resolve();
+  }
+  assert.equal((await completing).response.status, 200);
+  assert.equal(openrouter.created.length, 1);
+  assert.equal(await count("user_ai_credentials"), 1);
 });
 
 test("expired OTPs and codes exceeding the attempt limit cannot verify", async () => {

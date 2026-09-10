@@ -76,7 +76,7 @@ export function parseOpenRouterSseLine(line: string) {
   const upstreamError = chunk.error?.message;
 
   if (typeof upstreamError === "string" && upstreamError) {
-    throw new Error(upstreamError);
+    throw new Error("AI 服务返回错误，请稍后重试。");
   }
 
   return chunk;

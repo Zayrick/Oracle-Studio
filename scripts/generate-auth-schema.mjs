@@ -22,6 +22,9 @@ const runtime = new Miniflare(
 try {
   const auth = createAuth({
     AUTH_DB: await runtime.getD1Database("AUTH_DB"),
+    OPENROUTER_MANAGEMENT_KEY: "sk-or-schema-placeholder",
+    OPENROUTER_WORKSPACE_ID: "b6bf575e-a29c-4fdd-bfca-c6c29a8b2356",
+    AI_KEY_ENCRYPTION_SECRET: randomBytes(32).toString("base64"),
     // Schema inspection never invokes the email callback; no live credentials needed.
     RESEND_API_KEY: "re_schema_generation_placeholder",
     AUTH_EMAIL_FROM: "noreply@example.com",

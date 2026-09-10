@@ -25,6 +25,7 @@ import {
   readAIErrorMessage,
 } from "@/features/ai/chat";
 import { readAIStreamEvents } from "@/features/ai/timeline";
+import { useAccount } from "@/features/auth/use-account";
 import { formatBaziAISystemPrompt } from "@/features/bazi/ai-format";
 import {
   activateBaziAIHistorySession,
@@ -423,6 +424,7 @@ function BaziAIPanel({
     options?: { touch?: boolean }
   ) => void;
 }) {
+  const { user } = useAccount();
   const activeSession = getBaziAIHistorySession(
     aiHistory,
     aiHistory.activeSessionId
@@ -494,7 +496,7 @@ function BaziAIPanel({
 
     const content = message.trim();
 
-    if (!content || isSending) {
+    if (!content || isSending || !user) {
       return;
     }
 
@@ -531,6 +533,7 @@ function BaziAIPanel({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-Account-Id": user.id,
         },
         body: JSON.stringify({
           systemPrompt: formatBaziAISystemPrompt(paipan),

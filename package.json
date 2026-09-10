@@ -10,6 +10,7 @@
     "dev": "react-router dev",
     "typecheck": "wrangler types && react-router typegen && tsc -b",
     "test:auth": "node --import tsx --test tests/auth.test.mjs tests/auth-email.test.mjs",
+    "test:ai": "node --import tsx --test tests/ai.test.mjs",
     "test:account-ui": "tsx --tsconfig tsconfig.cloudflare.json --test tests/account-dialogs.test.tsx",
     "test:history": "node --import tsx --test tests/history.test.mjs",
     "test:auth:worker": "npm run build && node --test tests/auth-worker.test.mjs",

@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 
 import { AIMessageTimeline } from "@/components/ai-message-timeline";
+import { AuthDialogTrigger } from "@/components/account/auth-dialog";
+import { useAccount } from "@/features/auth/use-account";
 import {
   Empty,
   EmptyDescription,
@@ -411,6 +413,16 @@ function AIChatComposer({
   onStop: () => void;
   onSubmit: (event: FormEvent) => void;
 }) {
+  const { user, available } = useAccount();
+  if (!user) {
+    return (
+      <div className={cn("absolute inset-x-0 z-10 flex justify-center", className)}>
+        <AuthDialogTrigger mode="login" disabled={!available}>
+          {available ? "登录后使用 AI 解读" : "账户服务暂时不可用"}
+        </AuthDialogTrigger>
+      </div>
+    );
+  }
   const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (
       event.key !== "Enter" ||

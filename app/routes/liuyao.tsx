@@ -56,6 +56,7 @@ import {
   type YaoType,
 } from "@/features/liuyao/paipan";
 import { useHistoryState } from "@/features/history/use-history";
+import { useAccount } from "@/features/auth/use-account";
 import { runDivinationViewTransition } from "@/lib/divination-view-transition";
 import { cn } from "@/lib/utils";
 
@@ -1191,6 +1192,7 @@ function AIDivinationPanel({
     options?: { touch?: boolean }
   ) => void;
 }) {
+  const { user } = useAccount();
   const activeSession = getLiuyaoAIHistorySession(aiHistory, aiHistory.activeSessionId);
   const [message, setMessage] = useState("");
   const [messages, setMessagesState] = useState<AIDivinationMessage[]>(
@@ -1262,7 +1264,7 @@ function AIDivinationPanel({
 
     const content = message.trim();
 
-    if (!content || isSending) {
+    if (!content || isSending || !user) {
       return;
     }
 
@@ -1299,6 +1301,7 @@ function AIDivinationPanel({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-Account-Id": user.id,
         },
         body: JSON.stringify({
           systemPrompt: formatLiuyaoCopyMarkdown(result),

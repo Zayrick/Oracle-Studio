@@ -1,9 +1,12 @@
-liuyao_LLM_MODEL=
-liuyao_LLM_BASE=
-liuyao_LLM_KEY=
-bazi_LLM_MODEL=
-bazi_LLM_BASE=
-bazi_LLM_KEY=
+# OpenRouter Management Key，仅由服务端创建和回收账户专属 Key。
+OPENROUTER_MANAGEMENT_KEY=
+# 创建 Key 的目标 Workspace UUID。
+OPENROUTER_WORKSPACE_ID=
+# 独立生成的 32 字节随机值，Base64 编码；用于加密数据库内的用户 Key，配置后保持稳定。
+AI_KEY_ENCRYPTION_SECRET=
+# 对应工作空间中预先创建的 Preset slug；也可在 wrangler.jsonc 的 vars 中调整。
+OPENROUTER_BAZI_PRESET=bazi
+OPENROUTER_LIUYAO_PRESET=liuyao
 
 # 生成独立的随机密钥（至少 32 字符）；不要在不同环境间复用。
 BETTER_AUTH_SECRET=
