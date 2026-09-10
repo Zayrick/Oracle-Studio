@@ -2,7 +2,7 @@ import { getAccountState } from "@/features/auth/auth.server";
 import {
   AI_APP_TITLE,
   getAIPreset,
-  OPENROUTER_API_BASE,
+  getOpenRouterAPIBase,
   type AIFeature,
 } from "@/features/ai/config.server";
 import {
@@ -20,6 +20,7 @@ const traceSchema = z.object({
 });
 
 export type AIConnection = {
+  apiBase: string;
   apiKey: string;
   userId: string;
   model: string;
@@ -97,6 +98,7 @@ export async function handleAIRequest(
       throw new AIRequestError(400, "AI 请求参数不合法。");
     }
     const apiKey = await getUserAIKey(env, account.user.id);
+    const apiBase = getOpenRouterAPIBase(env);
     usage = new AIUsageRecorder(env.AUTH_DB, account.user.id, feature, {
       turnId: trace.turnId ?? crypto.randomUUID(), sessionId: trace.sessionId,
       historyRecordId: trace.historyRecordId ?? null, messageId: trace.messageId ?? null,
@@ -106,6 +108,7 @@ export async function handleAIRequest(
       throw new AIRequestError(409, "这条消息已提交，请等待回复或重新提问。");
     }
     const body = await handle(payload, {
+      apiBase,
       apiKey,
       userId: account.user.id,
       model: getAIPreset(env, feature),
@@ -153,7 +156,7 @@ export async function requestAICompletion(
   const call = await connection.usage.startCall(body, connection.model);
   let response: Response;
   try {
-    response = await fetch(`${OPENROUTER_API_BASE}/chat/completions`, {
+    response = await fetch(`${connection.apiBase}/chat/completions`, {
       method: "POST",
       redirect: "manual",
       headers: {

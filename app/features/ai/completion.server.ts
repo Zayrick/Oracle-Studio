@@ -32,6 +32,7 @@ export function createAIResponseStream(
           try {
             await connection.usage.finish(state);
             await recoverUsage({
+              apiBase: connection.apiBase,
               db: connection.usage.db, apiKey: connection.apiKey, userId: connection.userId,
               scope: { turnId: connection.usage.trace.turnId },
             });

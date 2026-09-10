@@ -1,3 +1,5 @@
+# 可选域名，不含协议、端口或路径；留空或未设置时使用 openrouter.ai。
+OPENROUTER_DOMAIN=
 # OpenRouter Management Key，仅由服务端创建和回收账户专属 Key。
 OPENROUTER_MANAGEMENT_KEY=
 # 创建 Key 的目标 Workspace UUID。

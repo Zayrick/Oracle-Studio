@@ -66,7 +66,7 @@ TURNSTILE_SITE_KEY=1x00000000000000000000AA
 TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 ```
 
-AI 请求固定发送至 OpenRouter，不再读取原有的 `*_LLM_KEY`、`*_LLM_BASE` 和 `*_LLM_MODEL`。先在目标 Workspace 创建 `bazi`、`liuyao` 两个 Preset，配置支持流式响应的模型；八字模型还需支持工具调用。
+AI 请求默认发送至 OpenRouter，可通过 `OPENROUTER_DOMAIN` 修改目标域名，不再读取原有的 `*_LLM_KEY`、`*_LLM_BASE` 和 `*_LLM_MODEL`。先在目标 Workspace 创建 `bazi`、`liuyao` 两个 Preset，配置支持流式响应的模型；八字模型还需支持工具调用。
 
 账户系统的配置与邮件联调见下方「账户系统配置」。首次使用账户功能前，先初始化本地 D1：
 
@@ -143,6 +143,7 @@ npm run build
 
 | 配置 | 用途 |
 | --- | --- |
+| `OPENROUTER_DOMAIN` | 可选请求域名，例如 `router.example.com`；未设置或留空默认 `openrouter.ai`，仅填写域名，不含协议、端口或路径 |
 | `OPENROUTER_MANAGEMENT_KEY` | OpenRouter Management API Key，只用于创建和回收用户 Key，不用于推理 |
 | `OPENROUTER_WORKSPACE_ID` | 创建用户 Key 的目标 Workspace UUID |
 | `AI_KEY_ENCRYPTION_SECRET` | 32 字节随机密钥的 Base64 编码，用于 AES-256-GCM 加密用户 Key；独立于会话密钥 |
@@ -156,6 +157,8 @@ npm run build
 已有账户在下一次成功的密码登录时补绑，然后才签发新会话。已有绑定的登录不会创建新 Key。AI 请求本身始终只读绑定；升级前已经登录但尚未绑定的账户，会收到重新登录提示。
 
 OpenRouter 与 D1 之间没有跨服务原子事务。若创建 Key 的响应丢失或 Worker 在保存前终止，远端仍可能留下未绑定 Key；应用不对创建请求做盲目自动重试。Key 名称使用 `oracle-studio/user/<userId>` 便于核对。回收失败记录 `ai_key_cleanup_failed`，提交结果不确定记录 `ai_key_commit_uncertain`，均仅包含行政标识、不包含密钥或提示词；可在 OpenRouter 对照 D1 绑定记录清理。不要直接更换 `AI_KEY_ENCRYPTION_SECRET` 或 Workspace：现有密文需先迁移或重新绑定，不能靠更换配置自动恢复。
+
+`OPENROUTER_DOMAIN` 本地可在 `.dev.vars` 设置，部署时在 `wrangler.jsonc` 的 `vars` 中设置。所有 Key 创建/回收、推理和费用补查统一使用 `https://<域名>/api/v1`，不自动跟随重定向。自定义域名需提供兼容的 OpenRouter API，并会接收对应请求的 Management Key 或用户 Key。
 
 所有用户 Key 仍由所属 OpenRouter 账户统一付费。模型选择、供应商路由和备用模型在 Preset 中调整；请求中显式传递的排盘上下文和工具参数按 OpenRouter 的规则覆盖或合并 Preset 对应字段。
 

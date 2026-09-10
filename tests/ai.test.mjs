@@ -5,9 +5,11 @@ import { hashPassword } from "better-auth/crypto";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 
 import { createAuth } from "../app/features/auth/auth.server.ts";
+import { getOpenRouterAPIBase } from "../app/features/ai/config.server.ts";
 import {
   bindExistingAccountAI,
   createAICredential,
+  discardAICredential,
   getUserAIKey,
 } from "../app/features/ai/credentials.server.ts";
 import { handleAIRequest } from "../app/features/ai/request.server.ts";
@@ -45,6 +47,7 @@ const chart = buildBaziPaipan({
 let env;
 let openrouter;
 let passwordHash;
+let expectedDomain = "openrouter.ai";
 
 before(async () => {
   env = {
@@ -62,7 +65,10 @@ before(async () => {
   openrouter = openRouterMock(env);
   mock.method(globalThis, "fetch", async (input, init) => {
     assert.equal(init.redirect, "manual", "credentials must never follow redirects");
-    const response = await openrouter.fetch(new Request(input, init));
+    const url = new URL(input);
+    assert.equal(url.hostname, expectedDomain);
+    url.hostname = "openrouter.ai";
+    const response = await openrouter.fetch(new Request(url, init));
     assert.ok(response, "unexpected external request");
     return response;
   });
@@ -75,6 +81,8 @@ beforeEach(async () => {
     ),
   );
   openrouter.reset();
+  expectedDomain = "openrouter.ai";
+  delete env.OPENROUTER_DOMAIN;
 });
 after(async () => {
   while (background.length) await Promise.all(background.splice(0));
@@ -195,6 +203,36 @@ test("AI endpoints reject anonymous, cross-origin and switched-account requests 
   }
   assert.equal(openrouter.completions.length, 0);
   assert.equal(openrouter.created.length, 1);
+});
+
+test("OpenRouter domain defaults and rejects URL components", () => {
+  for (const domain of [undefined, "", "   "]) {
+    assert.equal(getOpenRouterAPIBase({ OPENROUTER_DOMAIN: domain }), "https://openrouter.ai/api/v1");
+  }
+  for (const domain of ["https://router.example.com", "router.example.com/path", "router.example.com:443", "user@router.example.com", "router.example.com?x=1", "router.example.com#x", "bad..example.com"]) {
+    assert.throws(() => getOpenRouterAPIBase({ OPENROUTER_DOMAIN: domain }), /Invalid OpenRouter domain/);
+  }
+});
+
+test("custom OpenRouter domain covers key management, both features and both usage recovery paths", async () => {
+  expectedDomain = "router.example.com";
+  env.OPENROUTER_DOMAIN = " router.example.com ";
+  const identity = await account();
+  openrouter.completionOverride = () => sse([
+    { id: "gen-custom-domain", choices: [{ delta: { content: "OK" } }] },
+  ]);
+  for (const feature of ["bazi", "liuyao"]) {
+    const response = await request(feature, identity);
+    assert.equal(response.status, 200);
+    await response.text();
+  }
+  assert.equal(openrouter.created.length, 1);
+  assert.equal(openrouter.completions.length, 2);
+  assert.equal(openrouter.generations.length, 2);
+  assert.equal((await usageRequest(identity)).status, 200);
+  assert.equal(openrouter.generations.length, 3);
+  await discardAICredential(env, openrouter.created[0].hash);
+  assert.equal(openrouter.deleted.length, 1);
 });
 
 test("both features use the same account key, independent presets and trusted user attribution", async () => {

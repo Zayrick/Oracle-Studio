@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import {
-  OPENROUTER_API_BASE,
+  getOpenRouterAPIBase,
   type AIProvisioningEnvironment,
 } from "@/features/ai/config.server";
 
@@ -78,7 +78,7 @@ export async function createAICredential(
   const key = await encryptionKey(env);
   let keyHash: string | undefined;
   try {
-    const response = await fetch(`${OPENROUTER_API_BASE}/keys`, {
+    const response = await fetch(`${getOpenRouterAPIBase(env)}/keys`, {
       method: "POST",
       redirect: "manual",
       headers: {
@@ -143,7 +143,7 @@ export async function discardAICredential(
   try {
     const { managementKey } = getManagementConfig(env);
     const response = await fetch(
-      `${OPENROUTER_API_BASE}/keys/${encodeURIComponent(keyHash)}`,
+      `${getOpenRouterAPIBase(env)}/keys/${encodeURIComponent(keyHash)}`,
       {
         method: "DELETE",
         redirect: "manual",

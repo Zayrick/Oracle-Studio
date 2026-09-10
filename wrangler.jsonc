@@ -8,6 +8,7 @@
 	"compatibility_date": "2026-08-14",
 	"main": "./workers/app.ts",
 	"vars": {
+		"OPENROUTER_DOMAIN": "",
 		"OPENROUTER_BAZI_PRESET": "bazi",
 		"OPENROUTER_LIUYAO_PRESET": "liuyao"
 	},

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getAccountState } from "@/features/auth/auth.server";
-import { OPENROUTER_API_BASE } from "@/features/ai/config.server";
+import { getOpenRouterAPIBase, OPENROUTER_API_BASE } from "@/features/ai/config.server";
 import { getUserAIKey } from "@/features/ai/credentials.server";
 import { isRecord, normalizeGenerationUsage } from "@/features/ai/usage";
 import {
@@ -22,7 +22,8 @@ async function readGenerationSnapshot(response: Response, apiKey: string): Promi
   }
 }
 
-export async function recoverUsage({ db, apiKey, userId, scope }: {
+export async function recoverUsage({ db, apiKey, userId, scope, apiBase = OPENROUTER_API_BASE }: {
+  apiBase?: string;
   db: D1Database; apiKey: string; userId: string; scope: AIUsageScope;
 }) {
   const filter = usageScopeFilter(scope);
@@ -42,7 +43,7 @@ export async function recoverUsage({ db, apiKey, userId, scope }: {
       if (!call.generation_id) {
         errorCode = "missing_generation_id";
       } else {
-        const response = await fetch(`${OPENROUTER_API_BASE}/generation?id=${encodeURIComponent(call.generation_id)}`, {
+        const response = await fetch(`${apiBase}/generation?id=${encodeURIComponent(call.generation_id)}`, {
           headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
           redirect: "manual",
           signal: AbortSignal.timeout(5_000),
@@ -93,7 +94,7 @@ export async function handleAIUsageRequest(request: Request, env: Env, ctx: Exec
     let usages = await getUsageSummaries(env.AUTH_DB, userId, scope);
     if (usages.some((usage) => usage.status !== "complete")) {
       const apiKey = await getUserAIKey(env, userId);
-      const task = recoverUsage({ db: env.AUTH_DB, apiKey, userId, scope });
+      const task = recoverUsage({ db: env.AUTH_DB, apiKey, userId, scope, apiBase: getOpenRouterAPIBase(env) });
       ctx.waitUntil(task);
       await task;
       usages = await getUsageSummaries(env.AUTH_DB, userId, scope);
