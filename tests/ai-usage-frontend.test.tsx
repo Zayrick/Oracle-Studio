@@ -12,21 +12,25 @@ const usage: AIUsageSummary = {
   reasoningTokens: 120, cachedTokens: 400, cost: "0.00123456789",
 };
 
-test("footer reserves a blank line and displays cumulative usage with exact cost", () => {
+test("footer reserves a blank line and displays rounded-up yuan before tokens", () => {
   const empty = renderToStaticMarkup(<AIUsageFooter />);
   assert.match(empty, /h-5/);
   assert.doesNotMatch(empty, /tokens|credits|统计/);
   const complete = renderToStaticMarkup(<AIUsageFooter usage={usage} />);
-  assert.match(complete, /1,545 tokens · 0.00123456789 credits/);
+  assert.ok(complete.includes("¥0.01 · 1,545 tokens"));
   assert.match(complete, /输入 1,200；输出 345/);
   assert.match(complete, /模型调用 2（已结算 2）；工具调用 1/);
+  for (const [cost, amount] of [["0.011", "¥0.08"], ["0.0015", "¥0.02"], ["0.07", "¥0.49"]]) {
+    const html = renderToStaticMarkup(<AIUsageFooter usage={{ ...usage, cost }} />);
+    assert.ok(html.includes(`${amount} · 1,545 tokens`));
+  }
 });
 
 test("footer shows unavailable costs while preserving known amounts, including zero", () => {
   const missing = renderToStaticMarkup(<AIUsageFooter unavailable />);
   assert.match(missing, /无法获取费用/);
   const partial = renderToStaticMarkup(<AIUsageFooter usage={{ ...usage, status: "unavailable", resolvedCalls: 1 }} />);
-  assert.match(partial, /0.00123456789 credits · 部分费用无法获取/);
+  assert.ok(partial.includes("¥0.01 · 1,545 tokens · 部分费用无法获取"));
   const free = renderToStaticMarkup(<AIUsageFooter usage={{ ...usage, cost: "0" }} />);
-  assert.match(free, /0 credits/);
+  assert.ok(free.includes("¥0.00 · 1,545 tokens"));
 });

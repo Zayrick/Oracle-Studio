@@ -2,6 +2,13 @@ import type { AIUsageSummary } from "@/features/ai/usage";
 
 const formatTokens = new Intl.NumberFormat("en-US").format;
 
+function formatCostInYuan(credits: string) {
+  const [whole, fraction = ""] = credits.split(".");
+  const scale = 10n ** BigInt(fraction.length);
+  const cents = (BigInt(whole + fraction) * 700n + scale - 1n) / scale;
+  return `¥${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
+}
+
 export function AIUsageFooter({
   unavailable = false, usage,
 }: {
@@ -9,8 +16,8 @@ export function AIUsageFooter({
   usage?: AIUsageSummary;
 }) {
   const parts: string[] = [];
+  if (usage?.cost != null) parts.push(formatCostInYuan(usage.cost));
   if (usage?.totalTokens) parts.push(`${formatTokens(usage.totalTokens)} tokens`);
-  if (usage?.cost != null) parts.push(`${usage.cost} credits`);
   if (unavailable || usage?.status === "unavailable") {
     parts.push(usage?.cost != null ? "部分费用无法获取" : "无法获取费用");
   } else if (usage?.status === "pending" && parts.length) {
