@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Streamdown, type AnimateOptions } from "streamdown";
 
+import { TextPopIn } from "@/components/text-pop-in";
 import {
   getAIMessageTextFromParts,
   type AIMessagePart,
@@ -97,14 +98,18 @@ function ThinkingSection({
 }) {
   const [collapsed, setCollapsed] = useState(true);
   const wasActiveRef = useRef(segment.active);
-  const reasoningCount = segment.parts.filter((part) => part.type === "reasoning").length;
-  const toolCount = segment.parts.filter((part) => part.type === "tool").length;
-  const hasDetails = reasoningCount > 0 || toolCount > 0;
+  const hasDetails = segment.parts.length > 0;
+  const activeTool = segment.parts.find(
+    (part): part is Extract<AIMessagePart, { type: "tool" }> =>
+      part.type === "tool" && part.status === "running"
+  );
   const title = segment.active
-    ? hasDetails
-      ? "思考中"
-      : pendingLabel
-    : formatThinkingSummary(reasoningCount, toolCount);
+    ? activeTool
+      ? `使用工具：${activeTool.displayName || activeTool.name}`
+      : hasDetails
+        ? "思考中"
+        : pendingLabel
+    : "思考完成";
 
   useEffect(() => {
     if (!segment.active && wasActiveRef.current) {
@@ -114,7 +119,7 @@ function ThinkingSection({
     wasActiveRef.current = segment.active;
   }, [segment.active]);
 
-  if (!segment.active && reasoningCount === 0 && toolCount === 0) {
+  if (!segment.active && !hasDetails) {
     return null;
   }
 
@@ -137,15 +142,8 @@ function ThinkingSection({
             )}
           />
         ) : null}
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate",
-            hasDetails && segment.active && "divination-thinking-title-enter"
-          )}
-        >
-          <span className={cn("inline-block max-w-full", segment.active && "shimmer")}>
-            {title}
-          </span>
+        <span className="min-w-0 flex-1 truncate" title={title}>
+          <TextPopIn text={title} />
         </span>
         {segment.active ? (
           <span
@@ -337,20 +335,6 @@ function getTimelineSourceParts(message: AIMessageTimelineMessage) {
       text: message.content,
     } satisfies AIMessagePart,
   ];
-}
-
-function formatThinkingSummary(reasoningCount: number, toolCount: number) {
-  const parts = [];
-
-  if (reasoningCount > 0) {
-    parts.push(`${reasoningCount} 段思考`);
-  }
-
-  if (toolCount > 0) {
-    parts.push(`${toolCount} 次工具调用`);
-  }
-
-  return parts.join("，") || "思考过程";
 }
 
 function formatToolArguments(value: string) {

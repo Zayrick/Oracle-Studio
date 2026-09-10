@@ -1,3 +1,4 @@
+import { TextPopIn } from "@/components/text-pop-in";
 import type { AIUsageSummary } from "@/features/ai/usage";
 
 const formatTokens = new Intl.NumberFormat("en-US").format;
@@ -41,7 +42,7 @@ export function AIUsageFooter({
       className="h-5 min-w-0 truncate text-xs leading-5 text-muted-foreground"
       title={details}
     >
-      {text}
+      <TextPopIn text={text} className="tabular-nums" />
     </div>
   );
 }
