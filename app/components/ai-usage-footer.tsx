@@ -10,18 +10,20 @@ function formatCostInYuan(credits: string) {
 }
 
 export function AIUsageFooter({
-  unavailable = false, usage,
+  isStreaming = false, unavailable = false, usage,
 }: {
+  isStreaming?: boolean;
   unavailable?: boolean;
   usage?: AIUsageSummary;
 }) {
   const parts: string[] = [];
   if (usage?.cost != null) parts.push(formatCostInYuan(usage.cost));
   if (usage?.totalTokens) parts.push(`${formatTokens(usage.totalTokens)} tokens`);
-  if (unavailable || usage?.status === "unavailable") {
-    parts.push(usage?.cost != null ? "部分费用无法获取" : "无法获取费用");
-  } else if (usage?.status === "pending" && parts.length) {
+  if (isStreaming && parts.length) {
     parts.push("统计中");
+  }
+  if (!isStreaming && (unavailable || usage?.status === "unavailable")) {
+    parts.push(usage?.cost != null ? "部分费用无法获取" : "无法获取费用");
   }
 
   const text = parts.join(" · ");

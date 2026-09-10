@@ -12,12 +12,17 @@ const usage: AIUsageSummary = {
   reasoningTokens: 120, cachedTokens: 400, cost: "0.00123456789",
 };
 
-test("footer reserves a blank line and displays rounded-up yuan before tokens", () => {
-  const empty = renderToStaticMarkup(<AIUsageFooter />);
+test("footer displays usage and keeps calculating until streaming ends", () => {
+  const empty = renderToStaticMarkup(<AIUsageFooter isStreaming />);
   assert.match(empty, /h-5/);
   assert.doesNotMatch(empty, /tokens|credits|统计/);
+  const betweenCalls = renderToStaticMarkup(<AIUsageFooter isStreaming usage={usage} />);
+  assert.ok(betweenCalls.includes("¥0.01 · 1,545 tokens · 统计中"));
   const complete = renderToStaticMarkup(<AIUsageFooter usage={usage} />);
   assert.ok(complete.includes("¥0.01 · 1,545 tokens"));
+  assert.doesNotMatch(complete, /统计中/);
+  const stopped = renderToStaticMarkup(<AIUsageFooter usage={{ ...usage, status: "pending" }} />);
+  assert.doesNotMatch(stopped, /统计中/);
   assert.match(complete, /输入 1,200；输出 345/);
   assert.match(complete, /模型调用 2（已结算 2）；工具调用 1/);
   for (const [cost, amount] of [["0.011", "¥0.08"], ["0.0015", "¥0.02"], ["0.07", "¥0.49"]]) {

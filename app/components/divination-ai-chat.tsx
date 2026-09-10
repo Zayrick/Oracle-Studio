@@ -584,7 +584,11 @@ function AIChatMessageContent({
             pendingLabel={pendingLabel}
           />
         )}
-        <AIUsageFooter unavailable={usageUnavailable} usage={message.usage} />
+        <AIUsageFooter
+          isStreaming={message.status === "streaming"}
+          unavailable={usageUnavailable}
+          usage={message.usage}
+        />
       </div>
     );
   }
