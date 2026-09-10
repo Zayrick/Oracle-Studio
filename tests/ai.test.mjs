@@ -11,6 +11,8 @@ import {
   getUserAIKey,
 } from "../app/features/ai/credentials.server.ts";
 import { handleAIRequest } from "../app/features/ai/request.server.ts";
+import { handleAIUsageRequest, recoverUsage } from "../app/features/ai/usage-recovery.server.ts";
+import { AIUsageRecorder } from "../app/features/ai/usage-store.server.ts";
 import { handleBaziAI } from "../app/features/bazi/ai.server.ts";
 import { buildBaziPaipan } from "../app/features/bazi/paipan.ts";
 import { handleLiuyaoAI } from "../app/features/liuyao/ai.server.ts";
@@ -462,3 +464,174 @@ test(
     }
   },
 );
+
+test("usage accounting keeps the final chunk and persists full provider costs", async () => {
+  const identity = await account();
+  const usage = {
+    prompt_tokens: 5,
+    completion_tokens: 94,
+    total_tokens: 99,
+    cost: 0.0003526875,
+    is_byok: false,
+    cost_details: { upstream_inference_cost: 0.00035625, vendor_detail: 0.0001 },
+    completion_tokens_details: { reasoning_tokens: 93 },
+    prompt_tokens_details: { cached_tokens: 2, cache_write_tokens: 1 },
+  };
+  openrouter.completionOverride = () => sse([
+    { id: "gen-usage", model: "google/gemini-3.8-flash", provider: "Google", choices: [{ delta: { content: "OK" }, finish_reason: null }] },
+    { id: "gen-usage", choices: [{ delta: {}, finish_reason: "stop" }] },
+    { id: "gen-usage", choices: [], usage },
+  ]);
+  const response = await request("liuyao", identity, {
+    body: { turnId: "usage-turn", messageId: 2, historyRecordId: "chart-1" },
+  });
+  const events = (await response.text()).trim().split("\n").map(JSON.parse);
+  const summary = events.filter((event) => event.type === "usage").at(-1)?.usage;
+  assert.ok(summary, "the final usage chunk must reach the client");
+  assert.equal(summary.cost, "0.0003526875");
+  assert.equal(summary.totalTokens, 99);
+  assert.equal(summary.reasoningTokens, 93);
+  assert.equal(summary.status, "complete");
+  const call = await env.AUTH_DB.prepare("SELECT * FROM ai_model_calls WHERE user_id = ? AND turn_id = ?")
+    .bind(identity.userId, "usage-turn").first();
+  assert.equal(call.generation_id, "gen-usage");
+  assert.equal(call.model, "google/gemini-3.8-flash");
+  assert.equal(call.provider, "Google");
+  assert.equal(call.cost, "0.0003526875");
+  assert.deepEqual(JSON.parse(call.usage_json), usage);
+  assert.ok(!JSON.stringify(call).includes(openrouter.created[0].key));
+  const turn = await env.AUTH_DB.prepare("SELECT * FROM ai_usage_turns WHERE user_id = ? AND id = ?")
+    .bind(identity.userId, "usage-turn").first();
+  assert.equal(turn.history_record_id, "chart-1");
+  assert.equal(turn.message_id, 2);
+});
+
+function usageRequest(identity, overrides = {}) {
+  return handleAIUsageRequest(new Request("https://example.com/api/ai/usage", {
+    method: "POST",
+    headers: { Origin: "https://example.com", "Content-Type": "application/json",
+      Cookie: identity?.cookie ?? "", "X-Account-Id": identity?.userId ?? "" },
+    body: JSON.stringify({ feature: "liuyao", sessionId: "same-chat", ...overrides }),
+  }), env, ctx);
+}
+
+test("usage accounting accumulates agent rounds once and traces tool arguments and results", async () => {
+  const identity = await account();
+  const firstUsage = { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.00000001 };
+  openrouter.completionOverride = (_req, body) => body.messages.at(-1).role === "tool"
+    ? sse([
+      { id: "gen-second", model: "resolved-model", choices: [{ delta: { content: "最终回答" } }] },
+      { id: "gen-second", choices: [], usage: { prompt_tokens: 30, completion_tokens: 4, total_tokens: 34, cost: 0 } },
+    ])
+    : sse([
+      { id: "gen-first", choices: [{ delta: { tool_calls: [{ index: 0, id: "tool-1", type: "function",
+        function: { name: "bazi_shensha", arguments: "{}" } }] }, finish_reason: "tool_calls" }] },
+      { id: "gen-first", choices: [], usage: firstUsage },
+      { id: "gen-first", choices: [], usage: firstUsage },
+    ]);
+  const response = await request("bazi", identity, { body: { turnId: "agent-turn" } });
+  const events = (await response.text()).trim().split("\n").map(JSON.parse);
+  const summaries = events.filter((event) => event.type === "usage").map((event) => event.usage);
+  const final = summaries.at(-1);
+  assert.equal(final.modelCalls, 2);
+  assert.equal(final.resolvedCalls, 2, "a free model round is still accounted for");
+  assert.equal(final.toolCalls, 1);
+  assert.equal(final.totalTokens, 64);
+  assert.equal(final.cost, "0.00000001");
+  assert.equal(final.status, "complete");
+  assert.ok(summaries.some((s) => s.modelCalls === 1 && s.toolCalls === 1 && s.cost === "0.00000001"));
+  const { results: calls } = await env.AUTH_DB.prepare("SELECT * FROM ai_model_calls WHERE turn_id = ? ORDER BY sequence")
+    .bind("agent-turn").all();
+  assert.equal(calls[1].parent_call_id, calls[0].id);
+  assert.equal(JSON.parse(calls[1].request_json).messages.at(-1).tool_call_id, "tool-1");
+  const tool = await env.AUTH_DB.prepare("SELECT * FROM ai_tool_calls WHERE model_call_id = ?").bind(calls[0].id).first();
+  assert.equal(tool.name, "bazi_shensha");
+  assert.equal(tool.arguments, "{}");
+  assert.ok(tool.result.length > 0);
+  assert.equal(tool.state, "complete");
+});
+
+test("interrupted usage is recorded, then recovered when the owner reopens the session", async () => {
+  const alice = await account();
+  const bob = await account("user-b");
+  openrouter.completionOverride = (upstream) => new Response(new ReadableStream({
+    start(controller) {
+      upstream.signal.addEventListener("abort", () => {
+        controller.error(new DOMException("Aborted", "AbortError"));
+      }, { once: true });
+    },
+  }), { headers: { "X-Generation-Id": "gen-stopped" } });
+  const response = await request("liuyao", alice, { body: { turnId: "stopped-turn" } });
+  const reader = response.body.getReader();
+  await reader.read();
+  await reader.cancel();
+  while (background.length) await Promise.all(background.splice(0));
+  const call = await env.AUTH_DB.prepare("SELECT * FROM ai_model_calls WHERE turn_id = ?")
+    .bind("stopped-turn").first();
+  assert.equal(call.state, "stopped");
+  assert.equal(call.generation_id, "gen-stopped");
+  assert.equal(call.usage_status, "unavailable");
+  assert.equal(openrouter.generations.length, 1);
+  assert.equal((await usageRequest(null)).status, 401);
+  assert.deepEqual((await (await usageRequest(bob)).json()).usages, []);
+  assert.deepEqual((await (await usageRequest(alice, { sessionId: "other-session" })).json()).usages, []);
+  assert.equal(openrouter.generations.length, 1);
+
+  const metadata = { id: "gen-stopped", total_cost: 0.00000003, native_tokens_prompt: 5,
+    native_tokens_completion: 6, native_tokens_reasoning: 2, native_tokens_cached: 1,
+    model: "resolved", provider_name: "Google", cancelled: true, custom_provider_cost: { extra: 1 } };
+  openrouter.generationOverride = (lookup) => {
+    assert.equal(lookup.signal.aborted, false);
+    return Response.json({ data: metadata });
+  };
+  const result = await usageRequest(alice);
+  const usage = (await result.json()).usages[0];
+  assert.equal(usage.status, "complete");
+  assert.equal(usage.cost, "0.00000003");
+  assert.equal(usage.totalTokens, 11);
+  await usageRequest(alice);
+  assert.equal(openrouter.generations.length, 2);
+  const { results: observations } = await env.AUTH_DB.prepare(`SELECT * FROM ai_usage_observations
+    WHERE model_call_id = ? ORDER BY rowid`).bind(call.id).all();
+  assert.equal(observations[0].error_code, "http_404");
+  assert.deepEqual(JSON.parse(observations[0].payload_json), { error: { message: "Not found" } });
+  assert.deepEqual(JSON.parse(observations[1].payload_json), { data: metadata });
+});
+
+test("usage accounting preserves final stream costs against a delayed generation lookup", async () => {
+  const identity = await account();
+  for (const delayedCost of [0.001, null]) {
+    const turnId = `race-${delayedCost}`;
+    const recorder = new AIUsageRecorder(env.AUTH_DB, identity.userId, "liuyao", {
+      turnId, sessionId: "same-chat", historyRecordId: null, messageId: 1,
+    }, env.OPENROUTER_WORKSPACE_ID);
+    await recorder.initialize();
+    const call = await recorder.startCall({ model: "@preset/liuyao" }, "@preset/liuyao");
+    await recorder.response(call, new Response(null, { headers: { "X-Generation-Id": turnId } }));
+    const started = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    const delayedPayload = { data: { id: turnId, model: "stale-model", provider_name: "stale-provider",
+      total_cost: delayedCost, native_tokens_prompt: 1, native_tokens_completion: 5 } };
+    openrouter.generationOverride = async () => {
+      started.resolve();
+      await release.promise;
+      return Response.json(delayedPayload);
+    };
+    const recovery = recoverUsage({ db: env.AUTH_DB, userId: identity.userId,
+      apiKey: openrouter.created[0].key, scope: { turnId } });
+    await started.promise;
+    await recorder.chunk(call, { id: turnId, model: "final-model", provider: "final-provider",
+      choices: [], usage: { cost: 0.013, prompt_tokens: 10, completion_tokens: 100, total_tokens: 110 } });
+    release.resolve();
+    await recovery;
+    const stored = await env.AUTH_DB.prepare("SELECT * FROM ai_model_calls WHERE id = ?").bind(call.id).first();
+    assert.equal(stored.cost, "0.013");
+    assert.equal(JSON.parse(stored.normalized_json).totalTokens, 110);
+    assert.equal(stored.model, "final-model");
+    assert.equal(stored.provider, "final-provider");
+    assert.equal(stored.usage_status, "complete");
+    const observation = await env.AUTH_DB.prepare("SELECT payload_json FROM ai_usage_observations WHERE model_call_id = ? AND source = 'generation'")
+      .bind(call.id).first();
+    assert.deepEqual(JSON.parse(observation.payload_json), delayedPayload, "late observations remain available for audit");
+  }
+});

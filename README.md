@@ -123,6 +123,7 @@ npm run build
 | `/api/history` | 登录后的历史与外观设置同步：`GET` 分页读取、`POST` 提交修改 |
 | `/api/bazi/ai` | 八字 AI 解读接口，仅接受 `POST` |
 | `/api/liuyao/ai` | 六爻 AI 解读接口，仅接受 `POST` |
+| `/api/ai/usage` | 查询本账户回复的累计用量，并补查缺失费用，仅接受 `POST` |
 
 ## 数据与配置
 
@@ -134,7 +135,7 @@ npm run build
 
 同步失败会保留待同步操作，自动退避重试，并在恢复网络、回到页面或点击「重试同步」时继续。在线页面每分钟检查云端变化。同步通过版本标识处理同一秒内的连续编辑；多个设备并发修改同一条历史时保留「同步副本」，删除标记防止旧设备恢复已删除数据。接口校验登录账户、请求来源、数据结构和请求大小，并分批上传、分页下载。
 
-上线此版本前，先对现有 D1 执行 `npm run db:migrate:remote`，应用所有新增迁移（包括 `0002_user_data.sql` 和 `0003_user_ai_credentials.sql`），再发布应用。本地可用 `npm run db:migrate:local`；已有 `0001_auth.sql` 无需重建或修改。
+上线此版本前，先对现有 D1 执行 `npm run db:migrate:remote`，应用所有新增迁移（包括 `0002_user_data.sql`、`0003_user_ai_credentials.sql` 和 `0004_ai_usage.sql`），再发布应用。本地可用 `npm run db:migrate:local`；已有 `0001_auth.sql` 无需重建或修改。
 
 ## OpenRouter 账户绑定与 AI 调用
 
@@ -156,9 +157,28 @@ npm run build
 
 OpenRouter 与 D1 之间没有跨服务原子事务。若创建 Key 的响应丢失或 Worker 在保存前终止，远端仍可能留下未绑定 Key；应用不对创建请求做盲目自动重试。Key 名称使用 `oracle-studio/user/<userId>` 便于核对。回收失败记录 `ai_key_cleanup_failed`，提交结果不确定记录 `ai_key_commit_uncertain`，均仅包含行政标识、不包含密钥或提示词；可在 OpenRouter 对照 D1 绑定记录清理。不要直接更换 `AI_KEY_ENCRYPTION_SECRET` 或 Workspace：现有密文需先迁移或重新绑定，不能靠更换配置自动恢复。
 
-本阶段只实现身份绑定、加密保管、Preset 路由及流式调用，不设置每用户金额、次数、Token 或并发额度，也不实现积分或计费账本。所有用户 Key 仍由所属 OpenRouter 账户统一付费。模型选择、供应商路由和备用模型在 Preset 中调整；请求中显式传递的排盘上下文和工具参数按 OpenRouter 的规则覆盖或合并 Preset 对应字段。
+所有用户 Key 仍由所属 OpenRouter 账户统一付费。模型选择、供应商路由和备用模型在 Preset 中调整；请求中显式传递的排盘上下文和工具参数按 OpenRouter 的规则覆盖或合并 Preset 对应字段。
 
 接口与配置依据：[Management API Keys](https://openrouter.ai/docs/guides/overview/auth/management-api-keys)、[创建 Key](https://openrouter.ai/docs/api/api-reference/api-keys/create-a-new-api-key)、[Presets](https://openrouter.ai/docs/guides/features/presets)、[Workers Secrets](https://developers.cloudflare.com/workers/configuration/secrets/)。
+
+### 用量与费用
+
+每条 AI 回答底部显示累计 Token 和 credits，数据返回前预留一行空白。八字 Agent 的模型轮次逐次累计，工具调用结束后更新用量。完整的输入、输出、推理、缓存和调用次数可通过该行的提示查看。
+
+`0004_ai_usage.sql` 新增四张表：
+
+| 表 | 内容 |
+| --- | --- |
+| `ai_usage_turns` | 回复与账户、历史记录、会话、消息的关联 |
+| `ai_model_calls` | 每次模型请求、实际模型与供应商、generation ID、用量和费用 |
+| `ai_tool_calls` | 每次工具调用的参数、结果与执行状态 |
+| `ai_usage_observations` | 原始用量响应、费用补查结果和时间 |
+
+费用以十进制字符串存储和累计。历史消息保存回复 ID 与用量快照，对应明细保存在上述表中。
+
+输出结束或中断后，服务端通过 OpenRouter `/generation` 补查缺失费用。查询失败显示“无法获取费用”，保留已知金额；重新打开会话时通过 `POST /api/ai/usage` 再次查询。该接口按登录账户、占卜类型和会话读取数据。
+
+接口依据：[Usage Accounting](https://openrouter.ai/docs/cookbook/administration/usage-accounting)、[Generation metadata](https://openrouter.ai/docs/api/api-reference/generations/get-request-&-usage-metadata-for-a-generation)。
 
 ## 账户系统配置
 

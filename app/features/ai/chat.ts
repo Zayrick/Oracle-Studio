@@ -5,6 +5,7 @@ import {
   type AIMessageStatus,
   type AIStreamEvent,
 } from "@/features/ai/timeline";
+import type { AIUsageSummary } from "@/features/ai/usage";
 
 export type AIChatMessage = {
   id: number;
@@ -12,6 +13,8 @@ export type AIChatMessage = {
   content: string;
   parts?: AIMessagePart[];
   status?: AIMessageStatus;
+  turnId?: string;
+  usage?: AIUsageSummary;
 };
 
 export type AIChatRequestMessage = Pick<AIChatMessage, "role" | "content">;

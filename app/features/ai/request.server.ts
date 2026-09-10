@@ -9,6 +9,15 @@ import {
   AICredentialError,
   getUserAIKey,
 } from "@/features/ai/credentials.server";
+import { z } from "zod";
+import { AIUsageRecorder } from "@/features/ai/usage-store.server";
+
+const traceSchema = z.object({
+  turnId: z.string().min(1).max(200).optional(),
+  sessionId: z.string().min(1).max(200),
+  historyRecordId: z.string().min(1).max(200).nullable().optional(),
+  messageId: z.number().int().nonnegative().optional(),
+});
 
 export type AIConnection = {
   apiKey: string;
@@ -16,6 +25,8 @@ export type AIConnection = {
   model: string;
   origin: string;
   signal: AbortSignal;
+  ctx: ExecutionContext;
+  usage: AIUsageRecorder;
 };
 
 export class AIRequestError extends Error {
@@ -43,7 +54,7 @@ export async function handleAIRequest(
   ctx: ExecutionContext,
   feature: AIFeature,
   handle: (
-    request: Request,
+    payload: unknown,
     connection: AIConnection,
   ) => Promise<ReadableStream<Uint8Array>>,
 ) {
@@ -53,6 +64,7 @@ export async function handleAIRequest(
     "X-Content-Type-Options": "nosniff",
     Vary: "Cookie, X-Account-Id",
   });
+  let usage: AIUsageRecorder | undefined;
   try {
     const origin = new URL(request.url).origin;
     if (request.headers.get("origin") !== origin) {
@@ -76,16 +88,38 @@ export async function handleAIRequest(
     ) {
       throw new AIRequestError(415, "请使用 JSON 提交请求。");
     }
-    const body = await handle(request, {
-      apiKey: await getUserAIKey(env, account.user.id),
+    let payload: unknown;
+    let trace: z.infer<typeof traceSchema>;
+    try {
+      payload = await request.json();
+      trace = traceSchema.parse(payload);
+    } catch {
+      throw new AIRequestError(400, "AI 请求参数不合法。");
+    }
+    const apiKey = await getUserAIKey(env, account.user.id);
+    usage = new AIUsageRecorder(env.AUTH_DB, account.user.id, feature, {
+      turnId: trace.turnId ?? crypto.randomUUID(), sessionId: trace.sessionId,
+      historyRecordId: trace.historyRecordId ?? null, messageId: trace.messageId ?? null,
+    }, env.OPENROUTER_WORKSPACE_ID);
+    if (!await usage.initialize()) {
+      usage = undefined;
+      throw new AIRequestError(409, "这条消息已提交，请等待回复或重新提问。");
+    }
+    const body = await handle(payload, {
+      apiKey,
       userId: account.user.id,
       model: getAIPreset(env, feature),
       origin,
       signal: request.signal,
+      usage,
+      ctx,
     });
     headers.set("Content-Type", "application/x-ndjson; charset=utf-8");
     return new Response(body, { headers });
   } catch (error) {
+    if (usage) await usage.finish(request.signal.aborted ? "stopped" : "error").catch(() => {
+      console.error(JSON.stringify({ event: "ai_usage_finalize_failed" }));
+    });
     let status = 503;
     let message = "AI 服务暂时不可用，请稍后重试。";
     if (error instanceof AIRequestError) {
@@ -103,13 +137,20 @@ export async function handleAIRequest(
   }
 }
 
-/** Shared inference transport. Management credentials are never used here. */
 export async function requestAICompletion(
   connection: AIConnection,
-  sessionId: string,
   payload: Record<string, unknown>,
-  signal: AbortSignal = connection.signal,
+  signal: AbortSignal,
 ) {
+  signal.throwIfAborted();
+  const body = {
+    ...payload,
+    model: connection.model,
+    user: connection.userId,
+    session_id: `${connection.userId}:${connection.usage.trace.sessionId}`,
+    stream: true,
+  };
+  const call = await connection.usage.startCall(body, connection.model);
   let response: Response;
   try {
     response = await fetch(`${OPENROUTER_API_BASE}/chat/completions`, {
@@ -122,18 +163,13 @@ export async function requestAICompletion(
         "HTTP-Referer": connection.origin,
         "X-OpenRouter-Title": AI_APP_TITLE,
       },
-      body: JSON.stringify({
-        ...payload,
-        model: connection.model,
-        user: connection.userId,
-        session_id: `${connection.userId}:${sessionId}`,
-        stream: true,
-      }),
-      signal: AbortSignal.any([connection.signal, signal]),
+      body: JSON.stringify(body),
+      signal,
     });
   } catch {
     throw new AIRequestError(502, "AI 服务连接失败，请稍后重试。");
   }
+  await connection.usage.response(call, response);
   if (!response.ok) {
     await response.body?.cancel();
     console.error(
@@ -149,5 +185,5 @@ export async function requestAICompletion(
   }
   if (!response.body)
     throw new AIRequestError(502, "AI 服务未返回内容，请稍后重试。");
-  return response.body;
+  return { body: response.body, call };
 }

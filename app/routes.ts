@@ -4,6 +4,7 @@ export default [
   index("routes/home.tsx"),
   route("/api/auth/*", "routes/auth-api.ts"),
   route("/api/history", "routes/history-api.ts"),
+  route("/api/ai/usage", "routes/ai-usage.ts"),
   route("/account/:mode", "routes/account.tsx"),
   route("/api/liuyao/ai", "routes/liuyao-ai.ts"),
   route("/api/bazi/ai", "routes/bazi-ai.ts"),

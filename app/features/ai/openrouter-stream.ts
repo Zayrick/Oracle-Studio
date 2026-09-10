@@ -1,4 +1,4 @@
-import { serializeAIStreamEvent, type AIStreamEvent } from "./timeline";
+import type { AIStreamEvent } from "@/features/ai/timeline";
 
 export type OpenRouterReasoningDetail = Record<string, unknown> & {
   text?: unknown;
@@ -21,7 +21,7 @@ export type OpenRouterToolCallDelta = {
   argumentsFragment: string;
 };
 
-type OpenRouterStreamChunk = {
+export type OpenRouterStreamChunk = Record<string, unknown> & {
   choices?: Array<{
     delta?: {
       content?: unknown;
@@ -44,14 +44,6 @@ export type OpenRouterParsedDelta = {
   toolCallDeltas: OpenRouterToolCallDelta[];
 };
 
-export function enqueueAIStreamEvent(
-  controller: ReadableStreamDefaultController<Uint8Array>,
-  encoder: TextEncoder,
-  event: AIStreamEvent
-) {
-  controller.enqueue(encoder.encode(serializeAIStreamEvent(event)));
-}
-
 export function parseOpenRouterSseLine(line: string) {
   const trimmed = line.trim();
 
@@ -71,12 +63,6 @@ export function parseOpenRouterSseLine(line: string) {
     chunk = JSON.parse(data) as OpenRouterStreamChunk;
   } catch {
     throw new Error("OpenRouter 流式响应解析失败。");
-  }
-
-  const upstreamError = chunk.error?.message;
-
-  if (typeof upstreamError === "string" && upstreamError) {
-    throw new Error("AI 服务返回错误，请稍后重试。");
   }
 
   return chunk;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { aiUsageSummarySchema } from "@/features/ai/usage";
 
 export const unixTimestampSchema = z
   .number()
@@ -27,6 +28,8 @@ export const aiMessageSchema = z.object({
   content: z.string(),
   parts: z.array(messagePartSchema).optional(),
   status: z.enum(["streaming", "complete", "stopped", "error"]).optional(),
+  turnId: identifier.optional(),
+  usage: aiUsageSummarySchema.optional(),
 });
 
 export const aiHistorySchema = z.object({

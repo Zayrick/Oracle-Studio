@@ -17,8 +17,10 @@ export function openRouterMock(env) {
     created: [],
     deleted: [],
     completions: [],
+    generations: [],
     createOverride: null,
     completionOverride: null,
+    generationOverride: null,
     deleteOverride: null,
     async fetch(request) {
       if (!request.url.startsWith("https://openrouter.ai/api/v1/"))
@@ -62,6 +64,17 @@ export function openRouterMock(env) {
         state.keys.delete(hash);
         return Response.json({ deleted: true });
       }
+      if (new URL(request.url).pathname === "/api/v1/generation") {
+        assert.equal(request.method, "GET");
+        const credential = [...state.keys.values()].find(
+          (value) => request.headers.get("authorization") === `Bearer ${value.key}`,
+        );
+        assert.ok(credential, "recovery must use the owning user's inference key");
+        state.generations.push({ id: new URL(request.url).searchParams.get("id"), credentialHash: credential.hash });
+        return state.generationOverride
+          ? state.generationOverride(request, credential)
+          : Response.json({ error: { message: "Not found" } }, { status: 404 });
+      }
       assert.equal(
         request.url,
         "https://openrouter.ai/api/v1/chat/completions",
@@ -84,9 +97,11 @@ export function openRouterMock(env) {
       state.created.length =
         state.deleted.length =
         state.completions.length =
+        state.generations.length =
           0;
       state.createOverride =
         state.completionOverride =
+        state.generationOverride =
         state.deleteOverride =
           null;
     },

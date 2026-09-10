@@ -25,6 +25,10 @@ import {
   readAIErrorMessage,
 } from "@/features/ai/chat";
 import { readAIStreamEvents } from "@/features/ai/timeline";
+import {
+  mergeRecoveredAIUsage,
+  useUsageRecovery,
+} from "@/features/ai/use-usage-recovery";
 import { useAccount } from "@/features/auth/use-account";
 import { formatBaziAISystemPrompt } from "@/features/bazi/ai-format";
 import {
@@ -476,6 +480,26 @@ function BaziAIPanel({
     );
   };
 
+  const usageRecoveryFinished = useUsageRecovery({
+    enabled: open,
+    isStreaming: isSending,
+    accountId: user?.id,
+    feature: "bazi",
+    historyRecordId,
+    sessionId,
+    messages,
+    onRecovered: (usages) => {
+      const recoveredMessages = mergeRecoveredAIUsage(messagesRef.current, usages);
+
+      if (recoveredMessages === messagesRef.current) {
+        return;
+      }
+
+      setMessages(recoveredMessages);
+      persistSession(recoveredMessages, { touch: false });
+    },
+  });
+
   useEffect(() => {
     const nextSessionId = aiHistory.activeSessionId || createBaziAISessionId();
     const nextSession = getBaziAIHistorySession(aiHistory, nextSessionId);
@@ -502,6 +526,8 @@ function BaziAIPanel({
 
     const userMessageId = nextMessageIdRef.current++;
     const assistantMessageId = nextMessageIdRef.current++;
+    const turnId = crypto.randomUUID();
+    const requestSessionId = sessionIdRef.current;
     const requestMessages = buildAIChatRequestMessages(messagesRef.current, content);
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
@@ -518,6 +544,7 @@ function BaziAIPanel({
         role: "assistant",
         content: "",
         status: "streaming",
+        turnId,
       },
     ]);
     persistSession(nextMessages);
@@ -531,6 +558,7 @@ function BaziAIPanel({
     try {
       const response = await fetch(BAZI_AI_ENDPOINT, {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
           "X-Account-Id": user.id,
@@ -538,7 +566,10 @@ function BaziAIPanel({
         body: JSON.stringify({
           systemPrompt: formatBaziAISystemPrompt(paipan),
           chart: paipan,
-          sessionId,
+          sessionId: requestSessionId,
+          turnId,
+          messageId: assistantMessageId,
+          historyRecordId,
           messages: requestMessages,
         }),
         signal: abortController.signal,
@@ -558,7 +589,13 @@ function BaziAIPanel({
         }
 
         if (isActiveRequest()) {
-          setMessages((prev) => appendAIChatEventToMessage(prev, assistantMessageId, event));
+          const updatedMessages = setMessages((prev) =>
+            appendAIChatEventToMessage(prev, assistantMessageId, event)
+          );
+
+          if (event.type === "usage") {
+            persistSession(updatedMessages, { touch: false });
+          }
         }
       });
 
@@ -709,6 +746,7 @@ function BaziAIPanel({
       inputValue={message}
       messages={messages}
       isSending={isSending}
+      usageRecoveryFinished={usageRecoveryFinished}
       history={{
         sessions: aiHistory.sessions,
         activeSessionId: sessionId,

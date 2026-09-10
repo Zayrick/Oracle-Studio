@@ -1,3 +1,5 @@
+import { aiUsageSummarySchema, type AIUsageSummary } from "@/features/ai/usage";
+
 export type AIMessageStatus = "streaming" | "complete" | "stopped" | "error";
 
 export type AIMessagePart =
@@ -23,6 +25,7 @@ export type AIMessagePart =
     };
 
 export type AIStreamEvent =
+  | { type: "usage"; usage: AIUsageSummary }
   | {
       type: "reasoning";
       text: string;
@@ -54,6 +57,8 @@ export type AIStreamEvent =
 export type AIMessageWithParts = {
   content: string;
   parts?: AIMessagePart[];
+  turnId?: string;
+  usage?: AIUsageSummary;
 };
 
 export function serializeAIStreamEvent(event: AIStreamEvent) {
@@ -80,6 +85,10 @@ export function parseAIStreamEventLine(line: string): AIStreamEvent | null {
   }
 
   switch (value.type) {
+    case "usage": {
+      const parsed = aiUsageSummarySchema.safeParse(value.usage);
+      return parsed.success ? { type: "usage", usage: parsed.data } : null;
+    }
     case "reasoning":
       return typeof value.text === "string" && value.text
         ? { type: "reasoning", text: value.text }
@@ -132,6 +141,11 @@ export function appendAIStreamEventToMessage<T extends AIMessageWithParts>(
 ): T {
   if (event.type === "error") {
     return message;
+  }
+  if (event.type === "usage") {
+    if (message.turnId && message.turnId !== event.usage.turnId) return message;
+    if (message.usage && message.usage.revision > event.usage.revision) return message;
+    return { ...message, turnId: event.usage.turnId, usage: event.usage };
   }
 
   const parts = message.parts ? [...message.parts] : [];

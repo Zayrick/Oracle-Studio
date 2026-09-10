@@ -1,20 +1,10 @@
-import {
-  OpenRouterToolCallAccumulator,
-  enqueueAIStreamEvent,
-  parseOpenRouterChunkDeltas,
-  parseOpenRouterSseLine,
-  type OpenRouterToolCall,
-} from "@/features/ai/openrouter-stream";
-import {
-  AIRequestError,
-  requestAICompletion,
-  type AIConnection,
-} from "@/features/ai/request.server";
+import type { OpenRouterToolCall } from "@/features/ai/openrouter-stream";
+import { AIRequestError, type AIConnection } from "@/features/ai/request.server";
+import { createAIResponseStream, streamAICompletion, type AIEventSink } from "@/features/ai/completion.server";
 import type { BaziPaipan } from "@/features/bazi/paipan";
 
 type BaziAIPayload = {
   systemPrompt: string;
-  sessionId: string;
   messages: BaziAIMessage[];
   chart: BaziPaipan;
 };
@@ -33,304 +23,62 @@ type LLMMessage =
     }
   | { role: "tool"; tool_call_id: string; content: string };
 
-type LLMToolDefinition = {
-  type: "function";
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
-};
-
-type LLMChatCompletionRequest = {
-  messages: LLMMessage[];
-  tools?: readonly LLMToolDefinition[];
-  tool_choice?: "auto" | "none";
-  parallel_tool_calls?: boolean;
-};
-
-export async function handleBaziAI(request: Request, connection: AIConnection) {
-  const clientPayload = await readClientPayload(request);
+export async function handleBaziAI(payload: unknown, connection: AIConnection) {
+  const clientPayload = readClientPayload(payload);
   if (!clientPayload.ok) throw new AIRequestError(400, clientPayload.error);
+  return createAIResponseStream(connection, (emit, signal) =>
+    runBaziAgent(connection, clientPayload.value, emit, signal)
+  );
+}
+
+async function runBaziAgent(
+  connection: AIConnection,
+  payload: BaziAIPayload,
+  emit: AIEventSink,
+  signal: AbortSignal,
+) {
   const { BAZI_AI_TOOL_DEFINITIONS, executeBaziAITool } =
     await import("@/features/bazi/ai-tools");
-  return streamBaziAgent({
-    connection,
-    payload: clientPayload.value,
-    toolDefinitions: BAZI_AI_TOOL_DEFINITIONS,
-    executeTool: executeBaziAITool,
-  });
-}
-
-function streamBaziAgent(args: {
-  connection: AIConnection;
-  payload: BaziAIPayload;
-  toolDefinitions: readonly LLMToolDefinition[];
-  executeTool: (
-    name: string,
-    args: Record<string, unknown>,
-    chart: BaziPaipan,
-  ) => string;
-}) {
-  const encoder = new TextEncoder();
-  const abortController = new AbortController();
-
-  return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      try {
-        await runBaziAgent({
-          ...args,
-          controller,
-          encoder,
-          signal: abortController.signal,
-        });
-      } catch (error) {
-        if (!abortController.signal.aborted) {
-          enqueueAIStreamEvent(controller, encoder, {
-            type: "error",
-            message:
-              error instanceof AIRequestError
-                ? error.message
-                : "AI 解盘失败，请稍后再试。",
-          });
-        }
-      } finally {
-        if (!abortController.signal.aborted) {
-          controller.close();
-        }
-      }
-    },
-    cancel() {
-      abortController.abort();
-    },
-  });
-}
-
-async function runBaziAgent({
-  connection,
-  payload,
-  toolDefinitions,
-  executeTool,
-  controller,
-  encoder,
-  signal,
-}: {
-  connection: AIConnection;
-  payload: BaziAIPayload;
-  toolDefinitions: readonly LLMToolDefinition[];
-  executeTool: (
-    name: string,
-    args: Record<string, unknown>,
-    chart: BaziPaipan,
-  ) => string;
-  controller: ReadableStreamDefaultController<Uint8Array>;
-  encoder: TextEncoder;
-  signal: AbortSignal;
-}) {
   const messages: LLMMessage[] = [
-    { role: "system", content: payload.systemPrompt },
-    ...payload.messages,
+    { role: "system", content: payload.systemPrompt }, ...payload.messages,
   ];
-
   while (true) {
-    const body = await requestAICompletion(
-      connection,
-      payload.sessionId,
-      buildLlmRequestBody(messages, toolDefinitions),
-      signal,
+    const assistant = await streamAICompletion(
+      connection, {
+        messages,
+        tools: BAZI_AI_TOOL_DEFINITIONS,
+        tool_choice: "auto",
+        parallel_tool_calls: false,
+      }, emit, signal,
     );
-
-    const assistantMessage = await streamLlmAssistantMessage(
-      body,
-      controller,
-      encoder,
-    );
-    const toolCalls = assistantMessage.toolCalls;
-
-    if (toolCalls.length === 0) {
-      if (!assistantMessage.content && !assistantMessage.reasoning) {
-        enqueueAIStreamEvent(controller, encoder, {
-          type: "text",
-          text: "AI 未返回内容。",
-        });
-      }
-
+    if (!assistant.toolCalls.length) {
+      if (!assistant.content && !assistant.reasoning) emit({ type: "text", text: "AI 未返回内容。" });
       return;
     }
-
-    messages.push({
-      role: "assistant",
-      content: assistantMessage.content || null,
-      tool_calls: toolCalls,
-    });
-
-    for (const toolCall of toolCalls) {
-      const displayName = formatBaziAIToolDisplayName(toolCall.function.name);
-      enqueueAIStreamEvent(controller, encoder, {
-        type: "tool_call",
-        callId: toolCall.id,
-        name: toolCall.function.name,
-        displayName,
-        arguments: toolCall.function.arguments,
-      });
-      const toolResult = executeTool(
-        toolCall.function.name,
-        parseToolArguments(toolCall.function.arguments),
-        payload.chart,
+    messages.push({ role: "assistant", content: assistant.content || null, tool_calls: assistant.toolCalls });
+    for (const tool of assistant.toolCalls) {
+      signal.throwIfAborted();
+      const displayName = formatBaziAIToolDisplayName(tool.function.name);
+      const toolId = await connection.usage.startTool(assistant.call, tool);
+      emit({ type: "tool_call", callId: tool.id, name: tool.function.name, displayName, arguments: tool.function.arguments });
+      const result = executeBaziAITool(
+        tool.function.name, parseToolArguments(tool.function.arguments), payload.chart,
       );
-
-      enqueueAIStreamEvent(controller, encoder, {
-        type: "tool_result",
-        callId: toolCall.id,
-        name: toolCall.function.name,
-        displayName,
-        result: toolResult,
-        error: toolResult.startsWith("工具错误:") ? toolResult : undefined,
-      });
-      messages.push({
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: toolResult,
-      });
+      const failed = result.startsWith("工具错误:");
+      await connection.usage.finishTool(toolId, result, failed);
+      emit({ type: "tool_result", callId: tool.id, name: tool.function.name, displayName, result, error: failed ? result : undefined });
+      messages.push({ role: "tool", tool_call_id: tool.id, content: result });
     }
   }
 }
 
-async function streamLlmAssistantMessage(
-  body: ReadableStream<Uint8Array>,
-  controller: ReadableStreamDefaultController<Uint8Array>,
-  encoder: TextEncoder,
-) {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  const toolCallAccumulator = new OpenRouterToolCallAccumulator();
-  let buffer = "";
-  let content = "";
-  let reasoning = "";
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-
-      if (done) {
-        break;
-      }
-
-      buffer += decoder.decode(value, { stream: true });
-      buffer = handleCompleteLlmSseLines(
-        buffer,
-        controller,
-        encoder,
-        toolCallAccumulator,
-        (deltaContent, deltaReasoning) => {
-          content += deltaContent;
-          reasoning += deltaReasoning;
-        },
-      );
-    }
-
-    buffer += decoder.decode();
-
-    if (buffer.trim()) {
-      handleLlmSseLine(
-        buffer,
-        controller,
-        encoder,
-        toolCallAccumulator,
-        (deltaContent, deltaReasoning) => {
-          content += deltaContent;
-          reasoning += deltaReasoning;
-        },
-      );
-    }
-  } catch (error) {
-    await reader.cancel().catch(() => undefined);
-    throw error;
-  } finally {
-    reader.releaseLock();
-  }
-
-  return {
-    content,
-    reasoning,
-    toolCalls: toolCallAccumulator.toToolCalls(),
-  };
-}
-
-function handleCompleteLlmSseLines(
-  buffer: string,
-  controller: ReadableStreamDefaultController<Uint8Array>,
-  encoder: TextEncoder,
-  toolCallAccumulator: OpenRouterToolCallAccumulator,
-  appendText: (content: string, reasoning: string) => void,
-) {
-  const lines = buffer.split(/\r?\n/);
-  const rest = lines.pop() ?? "";
-
-  for (const line of lines) {
-    handleLlmSseLine(
-      line,
-      controller,
-      encoder,
-      toolCallAccumulator,
-      appendText,
-    );
-  }
-
-  return rest;
-}
-
-function handleLlmSseLine(
-  line: string,
-  controller: ReadableStreamDefaultController<Uint8Array>,
-  encoder: TextEncoder,
-  toolCallAccumulator: OpenRouterToolCallAccumulator,
-  appendText: (content: string, reasoning: string) => void,
-) {
-  const chunk = parseOpenRouterSseLine(line);
-
-  if (!chunk) {
-    return;
-  }
-
-  for (const delta of parseOpenRouterChunkDeltas(chunk)) {
-    appendText(delta.content, delta.reasoning);
-    toolCallAccumulator.append(delta.toolCallDeltas);
-
-    for (const event of delta.events) {
-      enqueueAIStreamEvent(controller, encoder, event);
-    }
-  }
-}
-
-function buildLlmRequestBody(
-  messages: LLMMessage[],
-  toolDefinitions: readonly LLMToolDefinition[],
-) {
-  return {
-    messages,
-    tools: toolDefinitions,
-    tool_choice: "auto",
-    parallel_tool_calls: false,
-  } satisfies LLMChatCompletionRequest;
-}
-
-async function readClientPayload(request: Request) {
-  let body: unknown;
-
-  try {
-    body = await request.json();
-  } catch {
-    return { ok: false, error: "请求体不是有效 JSON。" } as const;
-  }
-
+function readClientPayload(body: unknown) {
   if (!isRecord(body)) {
     return { ok: false, error: "请求体内容不合法。" } as const;
   }
 
   const systemPrompt =
     typeof body.systemPrompt === "string" ? body.systemPrompt : "";
-  const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
   const messages = Array.isArray(body.messages)
     ? normalizeBaziAIMessages(body.messages)
     : [];
@@ -338,7 +86,6 @@ async function readClientPayload(request: Request) {
 
   if (
     !systemPrompt ||
-    !sessionId ||
     messages.length === 0 ||
     !isBaziPaipanPayload(chart)
   ) {
@@ -351,7 +98,7 @@ async function readClientPayload(request: Request) {
 
   return {
     ok: true,
-    value: { systemPrompt, sessionId, messages, chart } satisfies BaziAIPayload,
+    value: { systemPrompt, messages, chart } satisfies BaziAIPayload,
   } as const;
 }
 

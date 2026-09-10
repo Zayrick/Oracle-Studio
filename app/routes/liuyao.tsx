@@ -46,6 +46,10 @@ import {
   readAIStreamEvents,
 } from "@/features/ai/timeline";
 import {
+  mergeRecoveredAIUsage,
+  useUsageRecovery,
+} from "@/features/ai/use-usage-recovery";
+import {
   buildLiuyaoPaipan,
   createLiuyaoRandomYaos,
   createLiuyaoTimeCastingYaos,
@@ -1244,6 +1248,26 @@ function AIDivinationPanel({
     );
   };
 
+  const usageRecoveryFinished = useUsageRecovery({
+    enabled: open,
+    isStreaming: isSending,
+    accountId: user?.id,
+    feature: "liuyao",
+    historyRecordId,
+    sessionId,
+    messages,
+    onRecovered: (usages) => {
+      const recoveredMessages = mergeRecoveredAIUsage(messagesRef.current, usages);
+
+      if (recoveredMessages === messagesRef.current) {
+        return;
+      }
+
+      setMessages(recoveredMessages);
+      persistSession(recoveredMessages, { touch: false });
+    },
+  });
+
   useEffect(() => {
     const nextSessionId = aiHistory.activeSessionId || createLiuyaoAISessionId();
     const nextSession = getLiuyaoAIHistorySession(aiHistory, nextSessionId);
@@ -1270,6 +1294,8 @@ function AIDivinationPanel({
 
     const userMessageId = nextMessageIdRef.current++;
     const assistantMessageId = nextMessageIdRef.current++;
+    const turnId = crypto.randomUUID();
+    const requestSessionId = sessionIdRef.current;
     const requestMessages = buildAIChatRequestMessages(messagesRef.current, content);
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
@@ -1286,6 +1312,7 @@ function AIDivinationPanel({
         role: "assistant",
         content: "",
         status: "streaming",
+        turnId,
       },
     ]);
     persistSession(nextMessages);
@@ -1299,13 +1326,17 @@ function AIDivinationPanel({
     try {
       const response = await fetch(LIUYAO_AI_ENDPOINT, {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
           "X-Account-Id": user.id,
         },
         body: JSON.stringify({
           systemPrompt: formatLiuyaoCopyMarkdown(result),
-          sessionId,
+          sessionId: requestSessionId,
+          turnId,
+          messageId: assistantMessageId,
+          historyRecordId,
           messages: requestMessages,
         }),
         signal: abortController.signal,
@@ -1325,7 +1356,13 @@ function AIDivinationPanel({
         }
 
         if (isActiveRequest()) {
-          setMessages((prev) => appendAIChatEventToMessage(prev, assistantMessageId, event));
+          const updatedMessages = setMessages((prev) =>
+            appendAIChatEventToMessage(prev, assistantMessageId, event)
+          );
+
+          if (event.type === "usage") {
+            persistSession(updatedMessages, { touch: false });
+          }
         }
       });
 
@@ -1476,6 +1513,7 @@ function AIDivinationPanel({
       inputValue={message}
       messages={messages}
       isSending={isSending}
+      usageRecoveryFinished={usageRecoveryFinished}
       history={{
         sessions: aiHistory.sessions,
         activeSessionId: sessionId,

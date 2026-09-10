@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { AIMessageTimeline } from "@/components/ai-message-timeline";
+import { AIUsageFooter } from "@/components/ai-usage-footer";
 import { AuthDialogTrigger } from "@/components/account/auth-dialog";
 import { useAccount } from "@/features/auth/use-account";
 import {
@@ -67,6 +68,7 @@ type DivinationAIChatPanelProps<Message extends AIChatMessage = AIChatMessage> =
   inputValue: string;
   messages: Message[];
   isSending: boolean;
+  usageRecoveryFinished?: boolean;
   history?: DivinationAIChatHistory<Message>;
   onInputChange: (value: string) => void;
   onNewSession: () => void;
@@ -139,6 +141,7 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
   inputValue,
   isSending,
   messages,
+  usageRecoveryFinished,
   onInputChange,
   onNewSession,
   onStop,
@@ -226,6 +229,7 @@ function DivinationAIChatContent<Message extends AIChatMessage>({
         pendingLabel={pendingLabel}
         scrollContainerRef={scrollContainerRef}
         scrollContentClassName={AI_CHAT_LAYOUT.scrollContent}
+        usageRecoveryFinished={usageRecoveryFinished}
       />
 
       <AIChatComposer
@@ -364,11 +368,13 @@ function AIChatMessages<Message extends AIChatMessage>({
   pendingLabel,
   scrollContainerRef,
   scrollContentClassName,
+  usageRecoveryFinished,
 }: {
   messages: Message[];
   pendingLabel: string;
   scrollContainerRef: Ref<HTMLDivElement>;
   scrollContentClassName: string;
+  usageRecoveryFinished?: boolean;
 }) {
   return (
     <div
@@ -386,6 +392,10 @@ function AIChatMessages<Message extends AIChatMessage>({
                 <AIChatMessageContent
                   message={item}
                   pendingLabel={pendingLabel}
+                  usageUnavailable={Boolean(
+                    item.turnId && usageRecoveryFinished &&
+                    item.status !== "streaming" && item.usage?.status !== "complete"
+                  )}
                 />
               </div>
             </div>
@@ -557,16 +567,25 @@ function DivinationAIHistoryPopover<Message extends AIChatMessage>({
 function AIChatMessageContent({
   message,
   pendingLabel,
+  usageUnavailable,
 }: {
   message: AIChatMessage;
   pendingLabel: string;
+  usageUnavailable: boolean;
 }) {
-  if (message.role === "assistant" && message.status !== "error") {
+  if (message.role === "assistant") {
     return (
-      <AIMessageTimeline
-        message={message}
-        pendingLabel={pendingLabel}
-      />
+      <div className="flex flex-col gap-1">
+        {message.status === "error" ? (
+          message.content
+        ) : (
+          <AIMessageTimeline
+            message={message}
+            pendingLabel={pendingLabel}
+          />
+        )}
+        <AIUsageFooter unavailable={usageUnavailable} usage={message.usage} />
+      </div>
     );
   }
 
