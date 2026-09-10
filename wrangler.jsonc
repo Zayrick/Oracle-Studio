@@ -15,7 +15,8 @@
 		{
 			"binding": "AUTH_DB",
 			"database_name": "oracle-studio-auth",
-			"migrations_dir": "migrations"
+			"migrations_dir": "migrations",
+			"database_id": "37d2a890-3b83-4a3d-afce-3d9e90f73425"
 		}
 	],
 	"secrets": {
